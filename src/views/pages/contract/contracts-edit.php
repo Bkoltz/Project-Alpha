@@ -9,7 +9,7 @@ require_once __DIR__ . '/../../../utils/project_selection.php';
 require_once __DIR__ . '/../../components/tax_lookup_control.php';
 $id = (int)($_GET['id'] ?? 0);
 require_record_ownership($pdo, 'contracts', $id);
-$co = $pdo->prepare('SELECT co.*, c.name AS client_name FROM contracts co LEFT JOIN clients c ON c.id = co.client_id WHERE co.id=?');
+$co = $pdo->prepare('SELECT co.*, c.name AS client_name, c.organization_id AS client_organization_id, o.name AS client_organization_name FROM contracts co LEFT JOIN clients c ON c.id = co.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE co.id=?');
 $co->execute([$id]);
 $contract = $co->fetch(PDO::FETCH_ASSOC);
 if (!$contract) {
@@ -78,15 +78,21 @@ try {
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$contract['id']; ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
-      <label>
+      <div data-document-recipient-picker>
+      <label style="display:block">
         <div>Client</div>
         <div style="position:relative">
-          <input type="hidden" name="client_id" id="contractEditClientId" value="<?php echo (int)($contract['client_id'] ?? 0); ?>">
-          <input type="text" id="contractEditClientSearch" value="<?php echo htmlspecialchars($contract['client_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" placeholder="Type a client name or email..." autocomplete="off" required style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <input type="hidden" data-document-client-id name="client_id" id="contractEditClientId" value="<?php echo (int)($contract['client_id'] ?? 0); ?>" data-organization-id="<?php echo (int)($contract['client_organization_id'] ?? 0) ?: ''; ?>" data-organization-name="<?php echo htmlspecialchars((string)($contract['client_organization_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>">
+          <input type="text" data-document-client-search id="contractEditClientSearch" value="<?php echo htmlspecialchars($contract['client_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" placeholder="Type a client name or email..." autocomplete="off" required style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <div id="contractEditClientSuggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:40;max-height:220px;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 12px 24px rgba(15,23,42,.12)"></div>
         </div>
         <small style="display:block;margin-top:6px;color:var(--muted)">Start typing, then choose the matching client.</small>
       </label>
+      <label data-document-contact-option hidden style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:13px">
+        <input data-document-contact-checkbox type="checkbox" name="show_contact_on_document" value="1" <?php echo !empty($contract['show_contact_on_document']) ? 'checked' : ''; ?>>
+        <span>Include contact on document <small data-document-organization-name style="display:block;color:var(--muted)"></small></span>
+      </label>
+      </div>
       <div>
         <?php echo render_tax_lookup_control('taxPercentCo', 'tax_percent', (float)($contract['tax_percent'] ?? 0)); ?>
       </div>
@@ -403,4 +409,5 @@ try {
 </div>
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/contracts-edit-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/document-recipient-presentation.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

@@ -42,12 +42,18 @@ if ($selectedProjectId > 0) {
       </label>
     </div>
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
-      <label style="position:relative">
+      <div data-document-recipient-picker>
+      <label style="position:relative;display:block">
         <div>Client</div>
-        <input id="clientInputInv" type="text" placeholder="Type client name..." autocomplete="off" value="<?php echo htmlspecialchars((string)($selectedProject['client_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        <input id="clientIdInv" type="hidden" name="client_id" value="<?php echo (int)($selectedProject['client_id'] ?? 0) ?: ''; ?>">
+        <input id="clientInputInv" data-document-client-search type="text" placeholder="Type client name..." autocomplete="off" value="<?php echo htmlspecialchars((string)($selectedProject['client_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientIdInv" data-document-client-id type="hidden" name="client_id" value="<?php echo (int)($selectedProject['client_id'] ?? 0) ?: ''; ?>" data-organization-id="<?php echo (int)($selectedProject['organization_id'] ?? 0) ?: ''; ?>" data-organization-name="<?php echo htmlspecialchars((string)($selectedProject['organization_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>">
         <div id="clientSuggestInv" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
+      <label data-document-contact-option hidden style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:13px">
+        <input data-document-contact-checkbox type="checkbox" name="show_contact_on_document" value="1">
+        <span>Include contact on document <small data-document-organization-name style="display:block;color:var(--muted)"></small></span>
+      </label>
+      </div>
       <label>
         <div>Due Date</div>
         <input type="date" name="due_date" value="<?php echo htmlspecialchars($defaultDue); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -202,6 +208,7 @@ if ($selectedProjectId > 0) {
 </div>
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/invoices-create-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/document-recipient-presentation.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {

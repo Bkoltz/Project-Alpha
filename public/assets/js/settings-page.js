@@ -47,6 +47,30 @@
     var cards = Array.prototype.slice.call(shell.querySelectorAll('[data-settings-card]'));
     var emptyState = shell.querySelector('[data-settings-empty]');
     var searchStatus = shell.querySelector('[data-settings-search-status]');
+    var sidebar = shell.querySelector('.settings-sidebar');
+    var sidebarScrollKey = 'project-alpha:settings-sidebar-scroll';
+
+    function saveSidebarScroll() {
+      if (!sidebar) return;
+      try {
+        window.sessionStorage.setItem(sidebarScrollKey, String(sidebar.scrollTop));
+      } catch (error) {
+        // Storage may be unavailable in hardened/private browser contexts.
+      }
+    }
+
+    if (sidebar) {
+      try {
+        var savedSidebarScroll = parseInt(window.sessionStorage.getItem(sidebarScrollKey) || '0', 10);
+        if (savedSidebarScroll > 0) {
+          sidebar.scrollTop = savedSidebarScroll;
+        }
+      } catch (error) {
+        // The sidebar still works normally when session storage is unavailable.
+      }
+      sidebar.addEventListener('scroll', saveSidebarScroll, { passive: true });
+      cleanupCallbacks.push(function () { sidebar.removeEventListener('scroll', saveSidebarScroll); });
+    }
 
     // Normalize visual hierarchy without changing any legacy handler or form.
     shell.querySelectorAll('button').forEach(function (button) {

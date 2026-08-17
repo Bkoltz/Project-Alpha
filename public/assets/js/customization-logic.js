@@ -68,7 +68,9 @@ document.getElementById('fieldModal')?.addEventListener('click', function (e) {
 });
 
 // Drag and drop reordering
-let draggedElement = null;
+// This classic script can be loaded again after a settings soft navigation.
+// Use var so the shared browser shell does not throw a redeclaration error.
+var draggedElement = null;
 
 document.querySelectorAll('.field-item').forEach(item => {
     item.draggable = true;

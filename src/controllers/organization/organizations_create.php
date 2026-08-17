@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/organization_schema.php';
 require_once __DIR__ . '/../../utils/address_book.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 $name = trim($_POST['name'] ?? '');
 $notes = trim($_POST['notes'] ?? '');
@@ -23,6 +24,7 @@ if ($name === '') {
 
 // Handle optional file upload (from full-page create)
 $tax_filename = null;
+$targetPath = null;
 if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_file']['tmp_name'])) {
     $allowed = [
         'application/pdf' => 'pdf',
@@ -82,15 +84,29 @@ $placeholders[] = '?';
 $params[] = $tax_filename;
 $columns[] = 'tax_exempt_uploaded_at';
 $placeholders[] = $tax_filename ? 'NOW()' : 'NULL';
+$columns[] = 'source_version';
+$placeholders[] = '?';
+$params[] = portal_projection_source_version();
 
-$stmt = $pdo->prepare('INSERT INTO organizations (' . implode(', ', $columns) . ') VALUES (' . implode(', ', $placeholders) . ')');
-$stmt->execute($params);
-
-$id = (int)$pdo->lastInsertId();
-address_book_save($pdo, $addressValues + [
-    'label'=>'Billing address','google_place_id'=>trim((string)($_POST['google_place_id']??'')),
-    'source'=>trim((string)($_POST['google_place_id']??''))!==''?'google':'manual',
-], 'organization', $id, 'billing', true, (int)($_SESSION['user']['id']??0));
+try {
+    $pdo->beginTransaction();
+    $stmt = $pdo->prepare('INSERT INTO organizations (' . implode(', ', $columns) . ') VALUES (' . implode(', ', $placeholders) . ')');
+    $stmt->execute($params);
+    $id = (int)$pdo->lastInsertId();
+    address_book_save($pdo, $addressValues + [
+        'label'=>'Billing address','google_place_id'=>trim((string)($_POST['google_place_id']??'')),
+        'source'=>trim((string)($_POST['google_place_id']??''))!==''?'google':'manual',
+    ], 'organization', $id, 'billing', true, (int)($_SESSION['user']['id']??0));
+    $projection=new App\Services\PortalProjectionMutationService();
+    $projection->afterMutation($pdo,$projection->organizationScopes($pdo,$id));
+    $pdo->commit();
+} catch (Throwable $error) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    if (is_string($targetPath) && is_file($targetPath)) @unlink($targetPath);
+    error_log('[organization_create] failed code='.substr(hash('sha256',get_class($error).':'.$error->getMessage()),0,12));
+    header('Location: /?page=organization/organizations-create&error=Create%20failed');
+    exit;
+}
 if ($return_to === 'clients-create') {
     // redirect back to client create with the new org info
     $q = http_build_query([

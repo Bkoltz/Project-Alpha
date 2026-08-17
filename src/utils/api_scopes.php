@@ -38,6 +38,21 @@ function api_scope_catalog(): array
             'description' => 'Read the least-privilege workforce, client, Project, and service-location snapshot used by a configured external operations application.',
             'endpoints' => ['api-ops-snapshot', 'api-ops-snapshot-v2'],
         ],
+        'portal.catalog.publish' => [
+            'label' => 'Portal catalog publisher',
+            'description' => 'Dedicated producer capability for signed Service Library projection delivery. It grants no browser or broad API access.',
+            'endpoints' => [],
+        ],
+        'portal.pricing.preview' => [
+            'label' => 'Portal pricing preview',
+            'description' => 'Request non-binding aggregate pricing guidance for an authorized project and active portal services. Dedicated keys only.',
+            'endpoints' => ['api-integration-pricing-hints'],
+        ],
+        'portal.quote-draft.create' => [
+            'label' => 'Portal draft quote creation',
+            'description' => 'Create private draft quotes through the strict signed idempotent integration contract. Dedicated keys only.',
+            'endpoints' => ['api-integration-draft-quotes'],
+        ],
         'notifications.enqueue' => [
             'label' => 'Internal notification relay',
             'description' => 'Enqueue allowlisted transactional notifications. Requires an IP-restricted dedicated key; full-access keys do not inherit this scope.',

@@ -1,0 +1,165 @@
+{
+  "contract": "ltds-project-alpha-portal-relations-v3",
+  "endpoint": "/api/internal/project-alpha/portal-v2",
+  "schemaVersion": 3,
+  "requiredFeatureFlag": "CLIENT_PORTAL_HIERARCHY_RELATIONS_ENABLED",
+  "applicationKey": "field_operations_portal",
+  "valid": {
+    "snapshotPage": {
+      "schemaVersion": 3,
+      "applicationKey": "field_operations_portal",
+      "deliveryId": "relations-page",
+      "occurredAt": "2026-08-13T18:00:00.000Z",
+      "sourceGeneration": "relations-generation",
+      "sourceSequence": 10,
+      "workspaceId": "pa-workspace-relations",
+      "kind": "snapshot.page",
+      "snapshotHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "pageNumber": 1,
+      "pageCount": 1,
+      "recordCount": 14,
+      "workspace": { "publicId": "pa-workspace-relations", "rootType": "organization", "rootPublicId": "pa-org-relations", "displayName": "Relations Inc", "sourceVersion": "workspace-v1", "active": true },
+      "entities": [
+        { "type": "organization", "publicId": "pa-org-relations", "parentPublicId": null, "displayName": "Relations Inc", "sourceVersion": "org-v1", "active": true, "primaryContact": false },
+        { "type": "department", "publicId": "pa-dept-field", "parentPublicId": "pa-org-relations", "displayName": "Field", "sourceVersion": "dept-v1", "active": true, "primaryContact": false },
+        { "type": "client", "publicId": "pa-client-owner", "parentPublicId": "pa-org-relations", "displayName": "Owner", "sourceVersion": "client-v1", "active": true, "primaryContact": false },
+        { "type": "project", "publicId": "pa-project-north", "parentPublicId": "pa-dept-field", "displayName": "North", "sourceVersion": "project-v1", "active": true, "primaryContact": false },
+        { "type": "contact", "publicId": "pa-contact-manager", "parentPublicId": "pa-dept-field", "displayName": "Manager", "sourceVersion": "contact-v1", "active": true, "primaryContact": true }
+      ],
+      "principals": [
+        { "publicId": "pa-principal-manager", "emailHint": "manager@example.test", "displayName": "Manager", "sourceVersion": "principal-v1", "active": true }
+      ],
+      "entitlements": [
+        { "publicId": "entitlement-workspace", "principalPublicId": "pa-principal-manager", "capability": "workspace.view", "effect": "allow", "scopeType": "workspace", "scopePublicId": "pa-workspace-relations", "sourceVersion": "grant-v1", "active": true, "validFrom": "2026-08-01T00:00:00.000Z", "expiresAt": null },
+        { "publicId": "entitlement-department", "principalPublicId": "pa-principal-manager", "capability": "directory.read", "effect": "allow", "scopeType": "department", "scopePublicId": "pa-dept-field", "sourceVersion": "grant-v1", "active": true, "validFrom": "2026-08-01T00:00:00.000Z", "expiresAt": null }
+      ],
+      "relations": [
+        { "publicId": "relation-org-dept", "relationType": "contains", "from": { "type": "organization", "publicId": "pa-org-relations" }, "to": { "type": "department", "publicId": "pa-dept-field" }, "sourceVersion": "r-v1", "active": true },
+        { "publicId": "relation-org-client", "relationType": "contains", "from": { "type": "organization", "publicId": "pa-org-relations" }, "to": { "type": "client", "publicId": "pa-client-owner" }, "sourceVersion": "r-v1", "active": true },
+        { "publicId": "relation-dept-project", "relationType": "contains", "from": { "type": "department", "publicId": "pa-dept-field" }, "to": { "type": "project", "publicId": "pa-project-north" }, "sourceVersion": "r-v1", "active": true },
+        { "publicId": "relation-client-project", "relationType": "contains", "from": { "type": "client", "publicId": "pa-client-owner" }, "to": { "type": "project", "publicId": "pa-project-north" }, "sourceVersion": "r-v1", "active": true },
+        { "publicId": "relation-dept-contact", "relationType": "contact_assignment", "from": { "type": "department", "publicId": "pa-dept-field" }, "to": { "type": "contact", "publicId": "pa-contact-manager" }, "sourceVersion": "r-v1", "active": true }
+      ],
+      "projectLifecycles": [
+        { "projectPublicId": "pa-project-north", "status": "active", "completedAt": null, "sourceVersion": "project-v1" }
+      ]
+    },
+    "snapshotActivate": {
+      "schemaVersion": 3,
+      "applicationKey": "field_operations_portal",
+      "deliveryId": "relations-activate",
+      "occurredAt": "2026-08-13T18:00:00.000Z",
+      "sourceGeneration": "relations-generation",
+      "sourceSequence": 10,
+      "workspaceId": "pa-workspace-relations",
+      "kind": "snapshot.activate",
+      "snapshotHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "pageCount": 1,
+      "recordCount": 14
+    },
+    "lifecycleEvent": {
+      "schemaVersion": 3,
+      "applicationKey": "field_operations_portal",
+      "deliveryId": "relations-completed",
+      "occurredAt": "2026-08-13T18:00:00.000Z",
+      "sourceGeneration": "relations-generation",
+      "sourceSequence": 11,
+      "workspaceId": "pa-workspace-relations",
+      "kind": "event",
+      "event": { "resource": "project_lifecycle", "action": "upsert", "projectLifecycle": { "projectPublicId": "pa-project-north", "status": "completed", "completedAt": "2026-07-01T18:00:00.000Z", "sourceVersion": "project-v2" } }
+    },
+    "relationTombstoneEvent": {
+      "schemaVersion": 3,
+      "applicationKey": "field_operations_portal",
+      "deliveryId": "relations-tombstone",
+      "occurredAt": "2026-08-13T18:00:00.000Z",
+      "sourceGeneration": "relations-generation",
+      "sourceSequence": 13,
+      "workspaceId": "pa-workspace-relations",
+      "kind": "event",
+      "event": { "resource": "relation", "action": "tombstone", "publicId": "relation-dept-project", "sourceVersion": "r-v2" }
+    },
+    "projectTombstoneEvent": {
+      "schemaVersion": 3,
+      "applicationKey": "field_operations_portal",
+      "deliveryId": "relations-project-tombstone",
+      "occurredAt": "2026-08-13T18:00:00.000Z",
+      "sourceGeneration": "relations-generation",
+      "sourceSequence": 14,
+      "workspaceId": "pa-workspace-relations",
+      "kind": "event",
+      "event": { "resource": "entity", "action": "tombstone", "publicId": "pa-project-north", "sourceVersion": "project-v4" }
+    },
+    "workspaceTombstoneEvent": {
+      "schemaVersion": 3,
+      "applicationKey": "field_operations_portal",
+      "deliveryId": "relations-workspace-tombstone",
+      "occurredAt": "2026-08-13T18:00:00.000Z",
+      "sourceGeneration": "relations-generation",
+      "sourceSequence": 15,
+      "workspaceId": "pa-workspace-relations",
+      "kind": "event",
+      "event": { "resource": "workspace", "action": "tombstone", "publicId": "pa-workspace-relations", "sourceVersion": "workspace-v2" }
+    }
+  },
+  "invalid": [
+    {
+      "name": "missing-project-lifecycles-array",
+      "expectedError": "portal-snapshot-page-invalid",
+      "delivery": {
+        "schemaVersion": 3, "applicationKey": "field_operations_portal", "deliveryId": "relations-invalid-missing", "occurredAt": "2026-08-13T18:00:00.000Z", "sourceGeneration": "relations-invalid", "sourceSequence": 20, "workspaceId": "pa-workspace-relations", "kind": "snapshot.page", "snapshotHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "pageNumber": 1, "pageCount": 1, "recordCount": 0,
+        "workspace": { "publicId": "pa-workspace-relations", "rootType": "organization", "rootPublicId": "pa-org-relations", "displayName": "Relations Inc", "sourceVersion": "workspace-v1", "active": true },
+        "entities": [], "principals": [], "entitlements": [], "relations": []
+      }
+    },
+    {
+      "name": "extra-relation-field",
+      "expectedError": "portal-relation-fields-invalid",
+      "delivery": {
+        "schemaVersion": 3, "applicationKey": "field_operations_portal", "deliveryId": "relations-invalid-extra", "occurredAt": "2026-08-13T18:00:00.000Z", "sourceGeneration": "relations-invalid", "sourceSequence": 20, "workspaceId": "pa-workspace-relations", "kind": "snapshot.page", "snapshotHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "pageNumber": 1, "pageCount": 1, "recordCount": 1,
+        "workspace": { "publicId": "pa-workspace-relations", "rootType": "organization", "rootPublicId": "pa-org-relations", "displayName": "Relations Inc", "sourceVersion": "workspace-v1", "active": true },
+        "entities": [], "principals": [], "entitlements": [],
+        "relations": [{ "publicId": "relation-invalid", "relationType": "contains", "from": { "type": "organization", "publicId": "pa-org-relations" }, "to": { "type": "department", "publicId": "pa-dept-field" }, "sourceVersion": "r-v1", "active": true, "legacyParentId": 42 }],
+        "projectLifecycles": []
+      }
+    },
+    {
+      "name": "active-lifecycle-with-completed-at",
+      "expectedError": "portal-project-lifecycle-invalid",
+      "delivery": {
+        "schemaVersion": 3, "applicationKey": "field_operations_portal", "deliveryId": "relations-invalid-lifecycle", "occurredAt": "2026-08-13T18:00:00.000Z", "sourceGeneration": "relations-invalid", "sourceSequence": 20, "workspaceId": "pa-workspace-relations", "kind": "snapshot.page", "snapshotHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "pageNumber": 1, "pageCount": 1, "recordCount": 1,
+        "workspace": { "publicId": "pa-workspace-relations", "rootType": "organization", "rootPublicId": "pa-org-relations", "displayName": "Relations Inc", "sourceVersion": "workspace-v1", "active": true },
+        "entities": [], "principals": [], "entitlements": [], "relations": [],
+        "projectLifecycles": [{ "projectPublicId": "pa-project-north", "status": "active", "completedAt": "2026-08-13T18:00:00.000Z", "sourceVersion": "project-v1" }]
+      }
+    },
+    {
+      "name": "reversed-contains-direction",
+      "expectedError": "portal-relation-shape-invalid",
+      "delivery": {
+        "schemaVersion": 3, "applicationKey": "field_operations_portal", "deliveryId": "relations-invalid-direction", "occurredAt": "2026-08-13T18:00:00.000Z", "sourceGeneration": "relations-invalid", "sourceSequence": 20, "workspaceId": "pa-workspace-relations", "kind": "snapshot.page", "snapshotHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "pageNumber": 1, "pageCount": 1, "recordCount": 1,
+        "workspace": { "publicId": "pa-workspace-relations", "rootType": "organization", "rootPublicId": "pa-org-relations", "displayName": "Relations Inc", "sourceVersion": "workspace-v1", "active": true },
+        "entities": [], "principals": [], "entitlements": [],
+        "relations": [{ "publicId": "relation-reversed", "relationType": "contains", "from": { "type": "project", "publicId": "pa-project-north" }, "to": { "type": "department", "publicId": "pa-dept-field" }, "sourceVersion": "r-v1", "active": true }],
+        "projectLifecycles": []
+      }
+    },
+    {
+      "name": "lifecycle-tombstone-not-supported",
+      "expectedError": "portal-event-fields-invalid",
+      "delivery": {
+        "schemaVersion": 3, "applicationKey": "field_operations_portal", "deliveryId": "relations-invalid-lifecycle-tombstone", "occurredAt": "2026-08-13T18:00:00.000Z", "sourceGeneration": "relations-generation", "sourceSequence": 14, "workspaceId": "pa-workspace-relations", "kind": "event",
+        "event": { "resource": "project_lifecycle", "action": "tombstone", "publicId": "pa-project-north", "sourceVersion": "project-v4" }
+      }
+    }
+  ],
+  "activationRules": {
+    "recordCountIncludes": ["entities", "principals", "entitlements", "relations", "projectLifecycles"],
+    "completeLifecycleRequiredForEveryActiveProject": true,
+    "allActiveRelationEndpointsMustExistInTheSameGeneration": true,
+    "allowedContainsDirections": ["organization->department", "organization->client", "organization->project", "standalone_client->project", "department->project", "client->project"],
+    "allowedContactAssignmentSources": ["organization", "standalone_client", "department", "client", "project"],
+    "entityAndWorkspaceTombstonesCloseDependentAuthorizationAtomically": true,
+    "sameSnapshotHashAndCountsRequired": true
+  }
+}

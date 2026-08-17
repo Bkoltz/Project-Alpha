@@ -77,7 +77,11 @@ final class SettingsRedesignTest extends TestCase
         self::assertStringContainsString("registerPage('settings'", $script);
         self::assertStringContainsString("beforeunload", $script);
         self::assertStringContainsString('You have unsaved changes.', $script);
-        self::assertStringContainsString('position: sticky', $styles);
+        self::assertMatchesRegularExpression('/\.settings-sidebar\s*\{[^}]*max-height:\s*calc\(100vh - 40px\);[^}]*overflow:\s*auto;[^}]*position:\s*sticky;[^}]*top:\s*18px;/s', $styles);
+        self::assertStringContainsString('.settings-sidebar { margin-bottom: 20px; max-height: none; padding: 10px; position: static; }', $styles);
+        self::assertStringContainsString("'project-alpha:settings-sidebar-scroll'", $script);
+        self::assertStringContainsString("sidebar.addEventListener('scroll', saveSidebarScroll", $script);
+        self::assertStringContainsString("sidebar.removeEventListener('scroll', saveSidebarScroll", $script);
         self::assertStringContainsString('.settings-category-grid', $styles);
     }
 

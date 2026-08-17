@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../utils/acl_middleware.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
+require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
@@ -45,11 +46,13 @@ $discount_amount=0.0; if($discount_type==='percent'){$discount_amount=max(0,min(
 // Extract custom field values from POST
 $customFieldValues = extractCustomFieldValues($_POST);
 $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues) : null;
+$organizationId = resolve_client_context_org_id($pdo, $client_id, !empty($existingQuote['project_id']) ? (int)$existingQuote['project_id'] : null, request_client_org_id() ?: null);
+$showContactOnDocument = $organizationId && !empty($_POST['show_contact_on_document']) ? 1 : 0;
 
 $pdo->beginTransaction();
 try{
   $serviceLocationId = document_resolve_service_location($pdo,$client_id,!empty($existingQuote['project_id'])?(int)$existingQuote['project_id']:null,!empty($existingQuote['job_id'])?(int)$existingQuote['job_id']:null,$requestedServiceLocationId);
-  $pdo->prepare('UPDATE quotes SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, deposit_type=?, deposit_amount=?, fulfillment_date=?, scope=?, custom_fields=?, service_location_id=? WHERE id=?')->execute([$client_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$deposit_type,$deposit_value,$fulfillment_date,$scope,$customFieldsJson,$serviceLocationId,$id]);
+  $pdo->prepare('UPDATE quotes SET client_id=?, organization_id=?, show_contact_on_document=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, deposit_type=?, deposit_amount=?, fulfillment_date=?, scope=?, custom_fields=?, service_location_id=? WHERE id=?')->execute([$client_id,$organizationId,$showContactOnDocument,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$deposit_type,$deposit_value,$fulfillment_date,$scope,$customFieldsJson,$serviceLocationId,$id]);
   // Upsert project notes if provided and project_code is known
   $row = $pdo->prepare('SELECT project_code FROM quotes WHERE id=?');
   $row->execute([$id]);

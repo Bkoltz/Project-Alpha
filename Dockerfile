@@ -115,6 +115,7 @@ COPY --from=vendor-dev /app/vendor /var/www/vendor
 COPY --from=vendor /usr/local/bin/composer /usr/local/bin/composer
 COPY composer.json composer.lock /var/www/
 COPY ./tests/ /var/www/tests/
+COPY ./tools/ /var/www/tools/
 COPY ./docs/ /var/www/docs/
 COPY ./phpunit.xml /var/www/phpunit.xml
 COPY ./database/ /var/www/database/
@@ -128,7 +129,7 @@ COPY ./.github/ /var/www/.github/
 COPY ./SECURITY.md /var/www/SECURITY.md
 RUN mkdir -p /var/www/config
 COPY ./config/.env.example /var/www/config/.env.example
-RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/docs /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/docker-compose.yml /var/www/Dockerfile /var/www/php.ini /var/www/.github /var/www/config /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock /var/www/SECURITY.md
+RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/tools /var/www/docs /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/docker-compose.yml /var/www/Dockerfile /var/www/php.ini /var/www/.github /var/www/config /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock /var/www/SECURITY.md
 
 # ---------- Stage 3: Encrypted MySQL runtime ----------
 FROM mysql:8.4 AS db

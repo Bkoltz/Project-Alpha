@@ -36,7 +36,6 @@ if (!$user) {
 
 $externalOpsConfig = pa_external_ops_delivery_config($pdo);
 $externalOpsAvailable = !empty($externalOpsConfig['enabled']);
-$externalOpsLabel = trim((string)($externalOpsConfig['label'] ?? 'External operations')) ?: 'External operations';
 $externalOpsEntitlementExists = false;
 $externalOpsEntitlementEnabled = false;
 $externalOpsManualEnabled = false;
@@ -443,35 +442,28 @@ try {
       include __DIR__ . '/../account/permissions_overrides.php';
       unset($permissionsEmbedInParentForm);
     ?>
-    </form>
-
     <?php if ($externalOpsAvailable):
       $externalOpsTerminated = in_array($externalOpsWorkerStatus, ['terminated'], true) || in_array($externalOpsEmploymentStatus, ['terminated'], true);
       $externalOpsInactive = !empty($user['is_disabled']) || $externalOpsWorkerStatus === 'inactive' || $externalOpsEmploymentStatus === 'inactive';
+      $externalOpsSelected = $externalOpsEntitlementEnabled && $externalOpsManualEnabled;
       $externalOpsEffective = $externalOpsEntitlementEnabled && $externalOpsManualEnabled && !$externalOpsInactive && !$externalOpsTerminated && empty($user['deleted_at']);
       $externalOpsRoleLabel = $user['role'] === 'admin' ? 'Global external administrator' : 'Assigned-work operator';
       $deliveryLabel = !$externalOpsDeliveryStatus ? 'No access event has been queued' : (!empty($externalOpsDeliveryStatus['delivered_at']) ? 'Delivered ' . $externalOpsDeliveryStatus['delivered_at'] : (!empty($externalOpsDeliveryStatus['last_error']) ? 'Retrying after a delivery error' : 'Queued for delivery'));
-      $grantExternalOpsLabel = 'Grant ' . $externalOpsLabel . ' access';
-      $revokeExternalOpsLabel = 'Revoke ' . $externalOpsLabel . ' access';
+      $externalOpsCannotGrant = !$externalOpsSelected && ($externalOpsTerminated || !empty($user['deleted_at']));
     ?>
-    <div class="pa-edit-card" style="margin:16px 0;">
-      <h3 style="margin:0 0 8px;font-size:16px;"><?php echo e($externalOpsLabel); ?> access</h3>
-      <p style="margin:0 0 6px"><strong><?php echo $externalOpsEffective ? 'Access granted' : (!empty($user['deleted_at']) ? 'Unavailable — deleted' : ($externalOpsTerminated ? 'Unavailable — terminated' : ($externalOpsInactive ? 'Account inactive — granting access will reactivate it' : 'Not granted'))); ?></strong></p>
+    <div class="pa-edit-card" data-custom-integration-permission style="margin:16px 0;">
+      <input type="hidden" name="custom_integration_access_present" value="1">
+      <h3 style="margin:0 0 8px;font-size:16px;">Custom integrations access</h3>
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-bottom:10px;">
+        <input type="checkbox" name="custom_integration_access" value="1" <?php echo $externalOpsSelected ? 'checked' : ''; ?> <?php echo $externalOpsCannotGrant ? 'disabled' : ''; ?> style="margin-top:3px;">
+        <span><strong>Allow this account to use the configured custom integration</strong><br><small style="color:#6b7280">This is the same access selection shown in Settings &gt; Custom integrations.</small></span>
+      </label>
+      <p style="margin:0 0 6px"><strong><?php echo $externalOpsEffective ? 'Access granted' : ($externalOpsSelected ? 'Selected, but unavailable while the account or worker is inactive' : (!empty($user['deleted_at']) ? 'Unavailable — deleted' : ($externalOpsTerminated ? 'Unavailable — terminated' : 'Not granted'))); ?></strong></p>
       <p style="margin:0 0 6px;color:#6b7280;font-size:13px">Role: <?php echo e($externalOpsRoleLabel); ?>. Project, Operation, and Task assignments separately control what this user can see.</p>
-      <p style="margin:0 0 12px;color:#6b7280;font-size:13px">Synchronization: <?php echo e($deliveryLabel); ?></p>
-      <?php if (!$externalOpsTerminated && empty($user['deleted_at']) && !$externalOpsEffective): ?>
-      <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Grant external operations access? If this PA account is inactive, it will also be reactivated. Data visibility assignments will not be changed.')">
-        <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>"><input type="hidden" name="action" value="grant-access"><input type="hidden" name="user_id" value="<?php echo $userId; ?>"><input type="hidden" name="return_to" value="account-edit">
-        <button class="btn btn-primary" type="submit"><?php echo e($grantExternalOpsLabel); ?></button>
-      </form>
-      <?php elseif ($externalOpsEffective): ?>
-      <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Revoke external operations access? The Project Alpha account will remain active.')">
-        <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>"><input type="hidden" name="action" value="revoke-access"><input type="hidden" name="user_id" value="<?php echo $userId; ?>"><input type="hidden" name="return_to" value="account-edit">
-        <button class="btn" type="submit"><?php echo e($revokeExternalOpsLabel); ?></button>
-      </form>
-      <?php else: ?><p style="margin:0;color:#92400e">Restore this worker separately before granting external operations access.</p><?php endif; ?>
+      <p style="margin:0;color:#6b7280;font-size:13px">Synchronization: <?php echo e($deliveryLabel); ?></p>
     </div>
     <?php endif; ?>
+    </form>
     <script>
       window.PA_EDIT_ROLE_DEFAULTS = <?php echo json_encode($roleDefaults, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
       window.PA_EDIT_ROLE_META = <?php echo json_encode($roleMeta, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
@@ -557,6 +549,17 @@ try {
           senderToggle.addEventListener('change', updateSenderFields);
           updateSenderFields();
         }
+
+        root.querySelectorAll('#permissions-panel-edit input[name^="allow_"], #permissions-panel-edit input[name^="deny_"]').forEach(function(checkbox) {
+          if (checkbox.dataset.permissionPairReady === '1') return;
+          checkbox.dataset.permissionPairReady = '1';
+          checkbox.addEventListener('change', function() {
+            var isAllow = this.name.indexOf('allow_') === 0;
+            var pairedName = isAllow ? this.name.replace('allow_', 'deny_') : this.name.replace('deny_', 'allow_');
+            var paired = root.querySelector('#permissions-panel-edit input[name="' + pairedName + '"]');
+            if (paired) paired.checked = !this.checked;
+          });
+        });
       }
       initAccountEditForm.pageInitializerId = 'account-edit-form';
       if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {

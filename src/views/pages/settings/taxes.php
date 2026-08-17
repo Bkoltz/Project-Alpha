@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/tax_lookup.php';
 
-if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+if (session_status() !== PHP_SESSION_ACTIVE && !defined('PA_SESSION_READ_ONLY')) { session_start(); }
 
 // Check for import success/error messages
 $importSuccess = isset($_GET['import_success']);

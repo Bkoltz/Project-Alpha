@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/organization_schema.php';
 require_once __DIR__ . '/../../utils/address_book.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 $id = (int)($_POST['id'] ?? 0);
 $name = trim($_POST['name'] ?? '');
@@ -112,14 +113,12 @@ if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_f
     $prevStmt->execute([$id]);
     $prev = $prevStmt->fetchColumn();
 
-    $stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?' . $addressSql . ', tax_exempt_file = ?, tax_exempt_uploaded_at = NOW() WHERE id = ?');
-    $stmt->execute(array_merge([
-        $name,
-        $notes ?: null,
-    ], $addressParams, [
-        $filename,
-        $id
-    ]));
+    $projection = new \App\Services\PortalProjectionMutationService();
+    $beforeScopes = $projection->organizationScopes($pdo, $id);
+    portal_projection_mutate($pdo, $beforeScopes, static function () use ($pdo, $name, $notes, $addressSql, $addressParams, $filename, $id): void {
+        $stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?' . $addressSql . ', tax_exempt_file = ?, tax_exempt_uploaded_at = NOW(), source_version = ? WHERE id = ?');
+        $stmt->execute(array_merge([$name, $notes ?: null], $addressParams, [$filename, portal_projection_source_version(), $id]));
+    }, static fn(): array => $projection->organizationScopes($pdo, $id));
     $saveReusableAddress();
     
     error_log('ORG_UPDATE_UPLOAD: Database updated with filename: ' . $filename);
@@ -144,26 +143,24 @@ if ($remove_tax) {
         $path = __DIR__ . '/../../uploads/organizations/' . $prev;
         if (is_file($path)) @unlink($path);
     }
-    $stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?' . $addressSql . ', tax_exempt_file = NULL, tax_exempt_uploaded_at = NULL WHERE id = ?');
-    $stmt->execute(array_merge([
-        $name,
-        $notes ?: null,
-    ], $addressParams, [
-        $id
-    ]));
+    $projection = new \App\Services\PortalProjectionMutationService();
+    $beforeScopes = $projection->organizationScopes($pdo, $id);
+    portal_projection_mutate($pdo, $beforeScopes, static function () use ($pdo, $name, $notes, $addressSql, $addressParams, $id): void {
+        $stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?' . $addressSql . ', tax_exempt_file = NULL, tax_exempt_uploaded_at = NULL, source_version = ? WHERE id = ?');
+        $stmt->execute(array_merge([$name, $notes ?: null], $addressParams, [portal_projection_source_version(), $id]));
+    }, static fn(): array => $projection->organizationScopes($pdo, $id));
     $saveReusableAddress();
     header('Location: /?page=organization/organizations-edit&id=' . $id . '&updated=1');
     exit;
 }
 
 // Default update (no file change)
-$stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?' . $addressSql . ' WHERE id = ?');
-$stmt->execute(array_merge([
-    $name,
-    $notes ?: null,
-], $addressParams, [
-    $id
-]));
+$projection = new \App\Services\PortalProjectionMutationService();
+$beforeScopes = $projection->organizationScopes($pdo, $id);
+portal_projection_mutate($pdo, $beforeScopes, static function () use ($pdo, $name, $notes, $addressSql, $addressParams, $id): void {
+    $stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?' . $addressSql . ', source_version = ? WHERE id = ?');
+    $stmt->execute(array_merge([$name, $notes ?: null], $addressParams, [portal_projection_source_version(), $id]));
+}, static fn(): array => $projection->organizationScopes($pdo, $id));
 $saveReusableAddress();
 
 header('Location: /?page=organization/organizations-list&updated=1');

@@ -26,7 +26,8 @@ if ($client_id > 0) {
   $where[] = 'i.client_id=?';
   $params[] = $client_id;
 } elseif ($client_name !== '') {
-  $where[] = 'c.name LIKE ?';
+  $where[] = '(c.name LIKE ? OR o.name LIKE ?)';
+  $params[] = '%'.$client_name.'%';
   $params[] = '%'.$client_name.'%';
 }
 if ($start !== '') {
@@ -76,12 +77,13 @@ $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$sqlCount = 'SELECT COUNT(*) FROM invoices i'.($where ? ' JOIN clients c ON c.id=i.client_id WHERE '.implode(' AND ', $where) : '');
+$documentJoins = ' JOIN clients c ON c.id=i.client_id LEFT JOIN organizations o ON o.id=COALESCE(i.organization_id,c.organization_id)';
+$sqlCount = 'SELECT COUNT(*) FROM invoices i'.$documentJoins.' WHERE '.implode(' AND ', $where);
 $stc = $pdo->prepare($sqlCount);
 $stc->execute($params);
 $total = (int)$stc->fetchColumn();
 
-$sql = 'SELECT i.id,i.doc_number,i.invoice_type,i.project_code,i.total,i.status,i.collection_mode,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id';
+$sql = 'SELECT i.id,i.doc_number,i.invoice_type,i.project_code,i.total,i.status,i.collection_mode,i.created_at,i.due_date,c.name client,c.id AS client_id,o.name organization_name FROM invoices i'.$documentJoins;
 if ($where) {
   $sql .= ' WHERE ' . implode(' AND ', $where);
 }
@@ -176,7 +178,8 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
         <tr style="text-align:left;border-bottom:1px solid #eee">
           <th style="padding:10px">No.</th>
           <th style="padding:10px">Project</th>
-          <th style="padding:10px">Client</th>
+          <th style="padding:10px">Customer</th>
+          <th style="padding:10px">Contact</th>
           <th style="padding:10px">Total</th>
           <th style="padding:10px">Status</th>
           <th style="padding:10px">Created</th>
@@ -205,7 +208,8 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px"><?php echo htmlspecialchars(pa_invoice_label_from_row($r)); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
-            <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
+            <td style="padding:10px"><?php echo htmlspecialchars($r['organization_name'] ?: $r['client']); ?></td>
+            <td style="padding:10px"><?php if (!empty($r['organization_name'])): ?><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a><?php endif; ?></td>
             <td style="padding:10px">$<?php echo number_format((float)$r['total'], 2); ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>

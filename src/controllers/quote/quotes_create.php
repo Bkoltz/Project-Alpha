@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
+require_once __DIR__ . '/../../utils/quote_numbers.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
@@ -89,6 +90,7 @@ if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_i
     exit;
 }
 $__orgId = resolve_client_context_org_id($pdo, $client_id, $project_id, $__orgId);
+$showContactOnDocument = $__orgId && !empty($_POST['show_contact_on_document']) ? 1 : 0;
 
 // Items are required for regular quotes, on-demand itemized quotes, and long-term fixed totals.
 // Items are optional for long-term per-invoice pricing and on-demand flat pricing.
@@ -174,8 +176,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, quote_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, organization_id, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, null, null, 'draft', $quote_type, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, $__orgId, $__creator, date("Y-m-d H:i:s")]);
+    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, quote_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, organization_id, show_contact_on_document, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, null, null, 'draft', $quote_type, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, $__orgId, $showContactOnDocument, $__creator, date("Y-m-d H:i:s")]);
     $quote_id = (int)$pdo->lastInsertId();
 
     // Assign a new Project ID for this quote
@@ -192,12 +194,8 @@ try {
     }
 
     // Assign per-type doc_number for quotes (separate sequences for regular, long-term, and on-demand)
-    $qMaxStmt = $pdo->prepare('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE quote_type = ?');
-    $qMaxStmt->execute([$quote_type]);
-    $qMax = (int)$qMaxStmt->fetchColumn();
-
     $stmt = $pdo->prepare('UPDATE quotes SET doc_number=? WHERE id=?');
-    $stmt->execute([$qMax + 1, $quote_id]);
+    $stmt->execute([pa_next_quote_doc_number($pdo, $quote_type), $quote_id]);
 
     // Only insert items if we have them (not needed for per_invoice or on_demand long-term quotes)
     if (!empty($items)) {

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/address_book.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'clients', $id);
@@ -24,7 +25,8 @@ if ($id <= 0 || $name === '') {
   exit;
 }
 
-$st = $pdo->prepare('UPDATE clients SET name=?, email=?, phone=?, organization_id=?, notes=?, address_line1=?, address_line2=?, city=?, state=?, postal_code=?, country=? WHERE id=?');
+$portalProjection=new App\Services\PortalProjectionMutationService();
+portal_projection_mutate($pdo,static fn():array=>$portalProjection->lockedClientScopes($pdo,$id,$organization_id>0?$organization_id:null),static function()use($pdo,$name,$email,$phone,$organization_id,$notes,$address_line1,$address_line2,$city,$state,$postal,$country,$id):void{$st = $pdo->prepare('UPDATE clients SET name=?, email=?, phone=?, organization_id=?, notes=?, address_line1=?, address_line2=?, city=?, state=?, postal_code=?, country=?,source_version=? WHERE id=?');
 $st->execute([
   $name,
   $email ?: null,
@@ -37,8 +39,9 @@ $st->execute([
   ($state ?: 'WI'),
   $postal ?: null,
   $country,
+  portal_projection_source_version(),
   $id
-]);
+]);},static fn():array=>$portalProjection->clientScopes($pdo,$id));
 address_book_save($pdo, [
   'label'=>'Billing address','address_line1'=>$address_line1,'address_line2'=>$address_line2,'city'=>$city,
   'state'=>$state,'postal_code'=>$postal,'country'=>$country,

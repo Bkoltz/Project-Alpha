@@ -156,37 +156,6 @@ $permissionsEmbedInParentForm = !empty($permissionsEmbedInParentForm);
                 }
             });
         }
-        // Mutual exclusion: checking Allow unchecks Deny and vice versa
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('input[name^="allow_"]').forEach(function(cb) {
-                cb.addEventListener('change', function() {
-                    if (this.checked) {
-                        var denyName = this.name.replace('allow_', 'deny_');
-                        var denyCb = document.querySelector('input[name="' + denyName + '"]');
-                        if (denyCb) denyCb.checked = false;
-                    } else {
-                        // If unchecking allow, auto-check deny (every box must be one or the other)
-                        var denyName = this.name.replace('allow_', 'deny_');
-                        var denyCb = document.querySelector('input[name="' + denyName + '"]');
-                        if (denyCb) denyCb.checked = true;
-                    }
-                });
-            });
-            document.querySelectorAll('input[name^="deny_"]').forEach(function(cb) {
-                cb.addEventListener('change', function() {
-                    if (this.checked) {
-                        var allowName = this.name.replace('deny_', 'allow_');
-                        var allowCb = document.querySelector('input[name="' + allowName + '"]');
-                        if (allowCb) allowCb.checked = false;
-                    } else {
-                        // If unchecking deny, auto-check allow
-                        var allowName = this.name.replace('deny_', 'allow_');
-                        var allowCb = document.querySelector('input[name="' + allowName + '"]');
-                        if (allowCb) allowCb.checked = true;
-                    }
-                });
-            });
-        });
         </script>
         </div>
 </div>

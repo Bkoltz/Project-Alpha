@@ -43,6 +43,16 @@ function getMainContentRoot() {
     return document.querySelector('.main-content') || document;
 }
 
+function isExecutableScript(script) {
+    const type = (script.getAttribute('type') || '').trim().toLowerCase();
+    return type === '' || type === 'module' || [
+        'text/javascript',
+        'application/javascript',
+        'text/ecmascript',
+        'application/ecmascript'
+    ].includes(type);
+}
+
 function shellAssetSignature(doc = document) {
     const version = doc.querySelector('meta[name="project-alpha-version"]')?.getAttribute('content') || '';
     const assets = Array.from(doc.querySelectorAll('[data-pa-shell-asset]'))
@@ -130,16 +140,16 @@ window.ProjectAlpha.cleanupPage = runPageCleanups;
     Updates the navigation sidebar 
 */
 function updateActiveNavigation(page) {
-    // Remove active class from all nav links
-    document.querySelectorAll('.primary-nav a').forEach(link => {
-        link.classList.remove('active');
+    const normalizedPage = normalizePageName(page);
+    document.querySelectorAll('.side-nav [data-page]').forEach(link => {
+        const isActive = link.dataset.page === normalizedPage;
+        link.classList.toggle('active', isActive);
+        if (isActive) {
+            link.setAttribute('aria-current', 'page');
+        } else {
+            link.removeAttribute('aria-current');
+        }
     });
-
-    // Add active class to current page link
-    const activeLink = document.querySelector(`[data-page="${page}"]`);
-    if (activeLink) {
-        activeLink.classList.add('active');
-    }
 }
 
 // Build a canonical URL from a "page" string which may include additional
@@ -220,7 +230,10 @@ async function loadPageContent(page) {
         }
 
         if (newMainContent) {
-            const scripts = Array.from(newMainContent.querySelectorAll('script'));
+            // Preserve inert data scripts in the page fragment. Item Library
+            // reads its application/json payload from the injected DOM.
+            const scripts = Array.from(newMainContent.querySelectorAll('script'))
+                .filter(isExecutableScript);
             const stylesheetLinks = Array.from(newMainContent.querySelectorAll('link[rel~="stylesheet"][href]'));
 
             const inlineScripts = scripts.map(s => ({
@@ -308,7 +321,6 @@ function appendPageScript(scriptData) {
     return new Promise(resolve => {
         try {
             const scr = document.createElement('script');
-            let blobUrl = '';
             cachedScripts.push(scr);
 
             if (scriptData.type) {
@@ -317,12 +329,7 @@ function appendPageScript(scriptData) {
 
             scr.async = false;
 
-            const cleanup = () => {
-                if (blobUrl) {
-                    try { URL.revokeObjectURL(blobUrl); } catch (e) { /* ignore */ }
-                }
-                resolve();
-            };
+            const cleanup = () => resolve();
 
             scr.addEventListener('load', cleanup, { once: true });
             scr.addEventListener('error', function () {
@@ -333,15 +340,19 @@ function appendPageScript(scriptData) {
             if (scriptData.src) {
                 scr.src = scriptData.src;
             } else if (scriptData.code) {
-                // Run inline fragment scripts as same-origin blob scripts so CSP stays centralized.
-                blobUrl = URL.createObjectURL(new Blob([scriptData.code], { type: 'application/javascript' }));
-                scr.src = blobUrl;
+                // Blob URLs are not permitted by the production CSP. Inline
+                // page scripts are same-origin response content, so retain the
+                // existing CSP policy and execute them directly.
+                scr.textContent = scriptData.code;
             } else {
                 resolve();
                 return;
             }
 
             document.body.appendChild(scr);
+            if (!scriptData.src && scriptData.type !== 'module') {
+                resolve();
+            }
         } catch (err) {
             console.error('Error executing page script', err);
             resolve();
