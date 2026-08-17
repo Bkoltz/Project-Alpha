@@ -11,6 +11,7 @@ use DateTimeZone;
 /** Strict, provider-neutral parsers for the public portal integration wire contracts. */
 final class PortalIntegrationContract
 {
+    public const CATALOG_SCOPE = 'portal.catalog.publish';
     public const PRICING_SCOPE = 'portal.pricing.preview';
     public const DRAFT_SCOPE = 'portal.quote-draft.create';
     public const DISCLAIMER = 'Planning guidance only. Final quote after staff review.';
@@ -58,6 +59,12 @@ final class PortalIntegrationContract
         if($kind==='snapshot.activate'){
             self::exactKeys($delivery,array_merge($common,['snapshotHash','pageCount','itemCount']),'catalog-snapshot-activate-invalid');self::sha256($delivery['snapshotHash'],'catalog-snapshot-hash-invalid');self::integer($delivery['pageCount'],1,100,'catalog-page-count-invalid');self::integer($delivery['itemCount'],0,500,'catalog-item-count-invalid');return;
         }
+        if($kind==='event'){
+            self::exactKeys($delivery,array_merge($common,['event']),'catalog-event-invalid');$event=self::arrayValue($delivery['event'],'catalog-event-invalid');$action=$event['action']??null;
+            if($action==='upsert'){self::exactKeys($event,['action','item'],'catalog-event-fields-invalid');self::validateCatalogItem(self::arrayValue($event['item'],'catalog-item-invalid'));return;}
+            if($action==='tombstone'){self::exactKeys($event,['action','publicId','sourceVersion'],'catalog-event-fields-invalid');self::opaqueId($event['publicId'],'catalog-item-id-invalid');self::boundedString($event['sourceVersion'],1,191,'catalog-item-version-invalid');return;}
+            throw new DomainException('catalog-event-action-invalid');
+        }
         throw new DomainException('catalog-kind-invalid');
     }
 
@@ -74,9 +81,17 @@ final class PortalIntegrationContract
         self::exactKeys($response,['receiptId','draftQuote'],'draft-response-fields-invalid');self::opaqueId($response['receiptId'],'draft-receipt-id-invalid');$quote=self::arrayValue($response['draftQuote'],'draft-response-invalid');self::exactKeys($quote,['publicId','documentNumber','status','version','editorPath'],'draft-response-fields-invalid');self::opaqueId($quote['publicId'],'draft-quote-id-invalid');if($quote['status']!=='draft'||!is_int($quote['version'])||$quote['version']<1)throw new DomainException('draft-response-state-invalid');$expected='/quotes/'.rawurlencode($quote['publicId']).'/edit';if($quote['editorPath']!==$expected)throw new DomainException('draft-response-editor-path-invalid');if($quote['documentNumber']!==null)self::boundedString($quote['documentNumber'],1,100,'draft-response-number-invalid');
     }
 
+    /** @param array<string,mixed> $body */
+    public static function validateDraftErrorResponse(int $status,array $body):void
+    {
+        $expected=[409=>['IDEMPOTENCY_CONFLICT','STALE_CATALOG'],403=>['SCOPE_DENIED']];
+        self::exactKeys($body,['code'],'draft-error-fields-invalid');
+        if(!isset($expected[$status])||!is_string($body['code'])||!in_array($body['code'],$expected[$status],true))throw new DomainException('draft-error-response-invalid');
+    }
+
     private static function validateRelation(mixed$value):void{$relation=self::arrayValue($value,'portal-relation-invalid');self::exactKeys($relation,['publicId','relationType','from','to','sourceVersion','active'],'portal-relation-fields-invalid');$from=self::arrayValue($relation['from'],'portal-relation-shape-invalid');$to=self::arrayValue($relation['to'],'portal-relation-shape-invalid');self::exactKeys($from,['type','publicId'],'portal-relation-shape-invalid');self::exactKeys($to,['type','publicId'],'portal-relation-shape-invalid');$direction=$from['type'].'->'.$to['type'];$allowed=$relation['relationType']==='contains'?['organization->department','organization->client','organization->project','standalone_client->project','department->project','client->project']:array_map(static fn($s)=>$s.'->contact',['organization','standalone_client','department','client','project']);if(!in_array($direction,$allowed,true))throw new DomainException('portal-relation-shape-invalid');}
     private static function validateLifecycle(mixed$value):void{$lifecycle=self::arrayValue($value,'portal-project-lifecycle-invalid');self::exactKeys($lifecycle,['projectPublicId','status','completedAt','sourceVersion'],'portal-project-lifecycle-invalid');if(!in_array($lifecycle['status'],['active','completed'],true)||($lifecycle['status']==='active'&&$lifecycle['completedAt']!==null)||($lifecycle['status']==='completed'&&$lifecycle['completedAt']===null))throw new DomainException('portal-project-lifecycle-invalid');}
-    private static function validateEntitlement(mixed$value):void{$entitlement=self::arrayValue($value,'portal-entitlement-invalid');self::exactKeys($entitlement,['publicId','principalPublicId','capability','effect','scopeType','scopePublicId','sourceVersion','active','validFrom','expiresAt'],'portal-entitlement-fields-invalid');self::opaqueId($entitlement['publicId'],'portal-public-id-invalid');self::opaqueId($entitlement['principalPublicId'],'portal-public-id-invalid');self::opaqueId($entitlement['scopePublicId'],'portal-public-id-invalid');if(!in_array($entitlement['capability'],['workspace.view','directory.read','delivery.view','request.create','member.manage','delegated_share.create'],true)||!in_array($entitlement['effect'],['allow','deny'],true)||!in_array($entitlement['scopeType'],['workspace','organization','department','client','project'],true)||!is_bool($entitlement['active']))throw new DomainException('portal-entitlement-invalid');self::boundedString($entitlement['sourceVersion'],1,191,'portal-source-version-invalid');self::timestamp($entitlement['validFrom'],'portal-entitlement-window-invalid');if($entitlement['expiresAt']!==null){self::timestamp($entitlement['expiresAt'],'portal-entitlement-window-invalid');if(strcmp((string)$entitlement['expiresAt'],(string)$entitlement['validFrom'])<=0)throw new DomainException('portal-entitlement-window-invalid');}}
+    private static function validateEntitlement(mixed$value):void{$entitlement=self::arrayValue($value,'portal-entitlement-invalid');self::exactKeys($entitlement,['publicId','principalPublicId','capability','effect','scopeType','scopePublicId','sourceVersion','active','validFrom','expiresAt'],'portal-entitlement-fields-invalid');self::opaqueId($entitlement['publicId'],'portal-public-id-invalid');self::opaqueId($entitlement['principalPublicId'],'portal-public-id-invalid');self::opaqueId($entitlement['scopePublicId'],'portal-public-id-invalid');if(!in_array($entitlement['capability'],['workspace.view','directory.read','delivery.view','request.create','member.manage','delegated_share.create','viewer.share.create'],true)||!in_array($entitlement['effect'],['allow','deny'],true)||!in_array($entitlement['scopeType'],['workspace','organization','department','client','project'],true)||!is_bool($entitlement['active']))throw new DomainException('portal-entitlement-invalid');self::boundedString($entitlement['sourceVersion'],1,191,'portal-source-version-invalid');self::timestamp($entitlement['validFrom'],'portal-entitlement-window-invalid');if($entitlement['expiresAt']!==null){self::timestamp($entitlement['expiresAt'],'portal-entitlement-window-invalid');if(strcmp((string)$entitlement['expiresAt'],(string)$entitlement['validFrom'])<=0)throw new DomainException('portal-entitlement-window-invalid');}}
 
     /** @param array<string,mixed> $request */
     public static function validatePricingRequest(array $request): void
@@ -240,9 +255,11 @@ final class PortalIntegrationContract
         }
     }
 
-    public static function verifySignedRequest(string $applicationKey, string $scope, string $path, string $rawBody, array $server, string $secret): void
+    /** @param string|list<string> $secrets */
+    public static function verifySignedRequest(string $applicationKey, string $scope, string $path, string $rawBody, array $server, string|array $secrets): void
     {
-        if (strlen($secret) < 32) {
+        $secrets=is_array($secrets)?array_values(array_filter($secrets,static fn($secret):bool=>is_string($secret)&&strlen($secret)>=32)):[$secrets];
+        if ($secrets === [] || strlen((string)$secrets[0]) < 32) {
             throw new DomainException('integration-signing-key-unavailable');
         }
         $timestamp = trim((string)($server['HTTP_X_PORTAL_INTEGRATION_TIMESTAMP'] ?? ''));
@@ -266,8 +283,8 @@ final class PortalIntegrationContract
             throw new DomainException('integration-idempotency-key-invalid');
         }
         $input = $timestamp . "\nPOST\n" . $path . "\n" . $idempotency . "\n" . $bodyDigest;
-        $expected = hash_hmac('sha256', $input, $secret);
-        if (!hash_equals($expected, $match[1])) {
+        $valid=false;foreach($secrets as$secret)$valid=hash_equals(hash_hmac('sha256',$input,$secret),$match[1])||$valid;
+        if (!$valid) {
             throw new DomainException('integration-signature-invalid');
         }
     }

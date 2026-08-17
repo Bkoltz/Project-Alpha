@@ -248,7 +248,11 @@ require_once __DIR__ . '/../src/config/bootstrap.php';
 // Slash-prefixed 'settings/' routes are AJAX/JSON handlers.
 $isServerOnlyIntegration = in_array($page, ['api-integration-pricing-hints','api-integration-draft-quotes'], true);
 if ($isServerOnlyIntegration && trim((string)($_SERVER['HTTP_ORIGIN'] ?? '')) !== '') {
+    require_once __DIR__.'/../src/utils/api_response.php';
+    try{(new App\Services\PortalIntegrationAuditService())->recordCommand($pdo,(string)($_GET['_integration_key']??''),0,$page==='api-integration-pricing-hints'?App\Services\PortalIntegrationContract::PRICING_SCOPE:App\Services\PortalIntegrationContract::DRAFT_SCOPE,'denied',api_request_id(),'BROWSER_ORIGIN_DENIED');}
+    catch(Throwable$error){error_log('[PortalIntegrationOrigin]['.api_request_id().'] audit='.get_class($error));header('Content-Type: application/json; charset=UTF-8');header('Cache-Control: no-store');http_response_code(503);echo json_encode(['code'=>'AUDIT_UNAVAILABLE']);exit;}
     header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
     http_response_code(403);
     echo json_encode(['code' => 'BROWSER_ORIGIN_DENIED']);
     exit;
@@ -283,7 +287,7 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
         exit;
     }
     $apiKey = $isServerOnlyIntegration
-        ? api_require_key([$requiredApiScope], false)
+        ? api_require_key([$requiredApiScope],false,['application_key'=>(string)($_GET['_integration_key']??''),'capability'=>(string)$requiredApiScope])
         : api_require_key([$requiredApiScope]);
 
     // Map API endpoints

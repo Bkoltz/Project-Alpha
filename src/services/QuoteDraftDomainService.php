@@ -9,11 +9,11 @@ use DomainException;
 /** Shared exact-decimal policy for portal previews and private quote drafts. */
 final class QuoteDraftDomainService
 {
-    /** @param list<array<string,mixed>> $services @return array{available:bool,total:string,currency:?string,lines:list<array<string,mixed>>,reason:?string} */
+    /** @param list<array<string,mixed>> $services @return array{available:bool,mode:string,total:string,typicalMinimum:?string,typicalMaximum:?string,currency:?string,lines:list<array<string,mixed>>,reason:?string} */
     public function priceServices(array $services): array
     {
-        if ($services === []) throw new DomainException('catalog-services-required');
-        $totalCents=0;$currency=null;$lines=[];$allFixed=true;
+        if($services===[])throw new DomainException('catalog-services-required');
+        $totalCents=0;$rangeMinimumCents=0;$rangeMaximumCents=0;$currency=null;$lines=[];$allFixed=true;$allRanged=true;
         foreach($services as $service){
             $serviceCurrency=strtoupper((string)($service['pricing_currency']??'USD'));
             if(preg_match('/^[A-Z]{3}$/D',$serviceCurrency)!==1)throw new DomainException('catalog-currency-invalid');
@@ -21,10 +21,15 @@ final class QuoteDraftDomainService
             $currency=$serviceCurrency;
             $fixed=(string)($service['client_pricing_model']??'fixed')==='fixed'&&in_array((string)($service['billing_unit']??'each'),['each','project'],true);
             $cents=$fixed?self::moneyToMinor((string)$service['unit_price']):0;
+            $minimum=$service['portal_pricing_typical_minimum']??null;$maximum=$service['portal_pricing_typical_maximum']??null;
+            if(($minimum===null)!==($maximum===null))throw new DomainException('catalog-pricing-range-incomplete');
+            $ranged=$minimum!==null;$allRanged=$allRanged&&$ranged;
+            if($ranged){$minimumCents=self::moneyToMinor((string)$minimum);$maximumCents=self::moneyToMinor((string)$maximum);if($minimumCents>$maximumCents)throw new DomainException('catalog-pricing-range-invalid');$rangeMinimumCents+=$minimumCents;$rangeMaximumCents+=$maximumCents;}
             $allFixed=$allFixed&&$fixed;$totalCents+=$cents;
             $lines[]=['item_library_id'=>(int)$service['id'],'item'=>(string)$service['item_name'],'description'=>$service['description'],'quantity'=>'1.00','unit_price'=>self::minorToMoney($cents),'line_total'=>self::minorToMoney($cents),'billing_unit'=>(string)$service['billing_unit'],'pricing_status'=>$fixed?'standard':'variable','catalog_snapshot'=>['publicId'=>(string)$service['portal_public_id'],'sourceVersion'=>(string)$service['portal_source_version']]];
         }
-        return ['available'=>$allFixed&&$totalCents>0,'total'=>self::minorToMoney($totalCents),'currency'=>$currency,'lines'=>$lines,'reason'=>$allFixed?($totalCents>0?null:'Pricing provided after review'):'Pricing depends on staff-reviewed service details'];
+        $mode=$allRanged&&$rangeMaximumCents>0?'typical_range':($allFixed&&$totalCents>0?'starting_at':'none');
+        return['available'=>$mode!=='none','mode'=>$mode,'total'=>self::minorToMoney($totalCents),'typicalMinimum'=>$mode==='typical_range'?self::minorToMoney($rangeMinimumCents):null,'typicalMaximum'=>$mode==='typical_range'?self::minorToMoney($rangeMaximumCents):null,'currency'=>$currency,'lines'=>$lines,'reason'=>$mode!=='none'?null:($allFixed?'Pricing provided after review':'Pricing depends on staff-reviewed service details')];
     }
 
     public static function moneyToMinor(string $amount): int

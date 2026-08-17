@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use PDO;
-use Throwable;
 
 /** Transactional fan-out used by authoritative PA mutations. Caller owns the transaction. */
 final class PortalProjectionMutationService
@@ -152,16 +151,25 @@ final class PortalProjectionMutationService
     }
 
     /**
-     * Reconcile only the supplied roots. Successful outbox writes commit with
-     * the caller's mutation; projection faults roll back to a savepoint so the
-     * PA mutation remains available for a later complete reconciliation.
+     * Reconcile only the supplied roots. Projection and outbox failures bubble
+     * to the transaction owner so authoritative mutations cannot commit alone.
      *
      * @param list<array{root_type:string,root_public_id:string}> $scopes
      */
     public function afterMutation(PDO$pdo,array$scopes):bool
     {
-        if(!$pdo->inTransaction()||!$this->hooksEnabled($pdo)||$scopes===[])return true;$scopes=$this->uniqueScopes($scopes);$savepoint='portal_projection_hook';
-        try{$pdo->exec('SAVEPOINT '.$savepoint);$this->reconcileRelations($pdo,$scopes);foreach($scopes as$scope)$this->reconcileWorkspace($pdo,$scope);$pdo->exec('RELEASE SAVEPOINT '.$savepoint);return true;}catch(Throwable$error){try{$pdo->exec('ROLLBACK TO SAVEPOINT '.$savepoint);$pdo->exec('RELEASE SAVEPOINT '.$savepoint);}catch(Throwable){}@error_log('[portal_projection_hook] reconciliation deferred code='.substr(hash('sha256',get_class($error).':'.$error->getMessage()),0,12));return false;}
+        if(!$pdo->inTransaction()||$scopes===[])return true;
+        if(!$this->hooksEnabled($pdo))return true;
+        $scopes=$this->uniqueScopes($scopes);
+        $this->reconcileRelations($pdo,$scopes);
+
+        // Reparenting can affect more than one workspace. Publish every removal
+        // before any addition so a receiver never observes simultaneous access
+        // through both the old and new root. These remain ordinary ordered
+        // events; control-plane revocations alone may bypass normal retry delay.
+        foreach($scopes as$scope)$this->reconcileWorkspace($pdo,$scope,'tombstone');
+        foreach($scopes as$scope)$this->reconcileWorkspace($pdo,$scope,'upsert');
+        return true;
     }
 
     /** @return list<array<string,mixed>> */
@@ -171,20 +179,29 @@ final class PortalProjectionMutationService
         foreach($profileIds as$profileId)$summaries[]=$projection->queueCatalogSnapshot($pdo,['id'=>(int)$profileId]);return$summaries;
     }
 
-    private function queueWorkspaces(PDO $pdo,array $workspaceIds):void
+    /** @return list<array<string,mixed>> */
+    public function queueCatalogChanges(PDO$pdo,?int$onlyProfileId=null):array
+    {
+        if(!$pdo->inTransaction())throw new \DomainException('catalog-transaction-required');$sql='SELECT id FROM portal_integration_profiles WHERE enabled=1 AND catalog_projection_enabled=1 AND catalog_route IS NOT NULL';$params=[];if($onlyProfileId!==null){$sql.=' AND id=?';$params[]=$onlyProfileId;}$sql.=' ORDER BY id';$statement=$pdo->prepare($sql);$statement->execute($params);$summaries=[];$projection=new PortalProjectionService();foreach($statement->fetchAll(PDO::FETCH_COLUMN)as$profileId)$summaries[]=$projection->queueCatalogChanges($pdo,['id'=>(int)$profileId]);return$summaries;
+    }
+
+    private function queueWorkspaces(PDO $pdo,array $workspaceIds,?string$onlyAction=null):void
     {
         if($workspaceIds===[])return;
         $profiles=$pdo->prepare('SELECT p.id FROM portal_integration_profiles p JOIN portal_integration_profile_workspaces pw ON pw.profile_id=p.id AND pw.active=1 JOIN portal_v2_workspaces w ON w.id=pw.workspace_id AND w.active=1 WHERE p.enabled=1 AND p.portal_projection_enabled=1 AND w.public_id=? ORDER BY p.id');
         $projection=new PortalProjectionService();
-        foreach(array_unique(array_map('strval',$workspaceIds))as$workspaceId){$profiles->execute([$workspaceId]);foreach($profiles->fetchAll(PDO::FETCH_COLUMN)as$profileId)$projection->queueWorkspaceSnapshot($pdo,['id'=>(int)$profileId],$workspaceId);}
+        foreach(array_unique(array_map('strval',$workspaceIds))as$workspaceId){$profiles->execute([$workspaceId]);foreach($profiles->fetchAll(PDO::FETCH_COLUMN)as$profileId)$projection->queueWorkspaceChanges($pdo,['id'=>(int)$profileId],$workspaceId,$onlyAction);}
     }
 
     /** @param array{root_type:string,root_public_id:string} $scope */
-    private function reconcileWorkspace(PDO$pdo,array$scope):void
+    private function reconcileWorkspace(PDO$pdo,array$scope,?string$onlyAction=null):void
     {
         $workspace=$pdo->prepare('SELECT * FROM portal_v2_workspaces WHERE root_type=? AND root_public_id=?');$workspace->execute([$scope['root_type'],$scope['root_public_id']]);$row=$workspace->fetch(PDO::FETCH_ASSOC);if(!$row)return;$rootTable=$scope['root_type']==='organization'?'organizations':'clients';$root=$pdo->prepare("SELECT name FROM {$rootTable} WHERE public_id=?");$root->execute([$scope['root_public_id']]);$name=$root->fetchColumn();
-        if($name===false){$profiles=$pdo->prepare('SELECT p.* FROM portal_integration_profiles p JOIN portal_integration_profile_workspaces pw ON pw.profile_id=p.id AND pw.active=1 WHERE pw.workspace_id=? AND p.enabled=1 AND p.portal_projection_enabled=1 ORDER BY p.id');$profiles->execute([(int)$row['id']]);$projection=new PortalProjectionService();foreach($profiles->fetchAll(PDO::FETCH_ASSOC)as$profile)$projection->queueWorkspaceRevocation($pdo,$profile,(string)$row['public_id']);$pdo->prepare('UPDATE portal_v2_workspaces SET active=0,source_version=? WHERE id=?')->execute([PortalSourceVersion::from(['publicId'=>(string)$row['public_id'],'active'=>false]),(int)$row['id']]);$pdo->prepare('UPDATE portal_integration_profile_workspaces SET active=0 WHERE workspace_id=?')->execute([(int)$row['id']]);return;}
-        $pdo->prepare('UPDATE portal_v2_workspaces SET display_name=?,source_version=?,active=1 WHERE id=?')->execute([(string)$name,PortalSourceVersion::from(['publicId'=>(string)$row['public_id'],'rootType'=>$scope['root_type'],'rootPublicId'=>$scope['root_public_id'],'displayName'=>(string)$name,'active'=>true]),(int)$row['id']]);$this->queueWorkspaces($pdo,[(string)$row['public_id']]);
+        if($name===false){
+            if($onlyAction==='upsert')return;
+            $profiles=$pdo->prepare('SELECT p.* FROM portal_integration_profiles p JOIN portal_integration_profile_workspaces pw ON pw.profile_id=p.id AND pw.active=1 WHERE pw.workspace_id=? AND p.enabled=1 AND p.portal_projection_enabled=1 ORDER BY p.id');$profiles->execute([(int)$row['id']]);$projection=new PortalProjectionService();foreach($profiles->fetchAll(PDO::FETCH_ASSOC)as$profile)$projection->queueWorkspaceRevocation($pdo,$profile,(string)$row['public_id']);$pdo->prepare('UPDATE portal_v2_workspaces SET active=0,source_version=? WHERE id=?')->execute([PortalSourceVersion::from(['publicId'=>(string)$row['public_id'],'active'=>false]),(int)$row['id']]);$pdo->prepare('UPDATE portal_integration_profile_workspaces SET active=0 WHERE workspace_id=?')->execute([(int)$row['id']]);return;
+        }
+        $pdo->prepare('UPDATE portal_v2_workspaces SET display_name=?,source_version=?,active=1 WHERE id=?')->execute([(string)$name,PortalSourceVersion::from(['publicId'=>(string)$row['public_id'],'rootType'=>$scope['root_type'],'rootPublicId'=>$scope['root_public_id'],'displayName'=>(string)$name,'active'=>true]),(int)$row['id']]);$this->queueWorkspaces($pdo,[(string)$row['public_id']],$onlyAction);
     }
 
     /** @param list<array{root_type:string,root_public_id:string}> $scopes */
@@ -239,7 +256,7 @@ final class PortalProjectionMutationService
     private function isRootNode(string$type):bool{return in_array($type,['organization','standalone_client'],true);}
     /** @param array<string,mixed> $edge */
     private function edgeKey(array$edge):string{return implode('|',[(string)$edge['relation_type'],(string)$edge['from_type'],(string)$edge['from_public_id'],(string)$edge['to_type'],(string)$edge['to_public_id']]);}
-    private function hooksEnabled(PDO$pdo):bool{try{$s=$pdo->prepare("SELECT config_value FROM app_config WHERE organization_id=0 AND config_key='portal_authoritative_hooks_enabled'");$s->execute();return filter_var($s->fetchColumn()?:'0',FILTER_VALIDATE_BOOLEAN);}catch(Throwable){return false;}}
+    private function hooksEnabled(PDO$pdo):bool{$s=$pdo->prepare("SELECT config_value FROM app_config WHERE organization_id=0 AND config_key='portal_authoritative_hooks_enabled'");$s->execute();return filter_var($s->fetchColumn()?:'0',FILTER_VALIDATE_BOOLEAN);}
     /** @param list<array{root_type:string,root_public_id:string}> $scopes @return list<array{root_type:string,root_public_id:string}> */
     private function uniqueScopes(array$scopes):array{$out=[];foreach($scopes as$scope){$type=(string)($scope['root_type']??'');$id=(string)($scope['root_public_id']??'');if(!in_array($type,['organization','standalone_client'],true)||$id==='')continue;$out[$type.'|'.$id]=['root_type'=>$type,'root_public_id'=>$id];}ksort($out);return array_values($out);}
     private function all(PDO$pdo,string$sql,array$params):array{$s=$pdo->prepare($sql);$s->execute($params);return$s->fetchAll(PDO::FETCH_ASSOC);}

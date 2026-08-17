@@ -83,7 +83,7 @@ try {
         $pdo->prepare('DELETE FROM catalog_work_components WHERE item_library_id=?')->execute([$id]);
         $pdo->prepare('DELETE FROM item_library WHERE id=?')->execute([$id]);
         if ($linkedWorkTypeId > 0) $pdo->prepare('DELETE FROM work_types WHERE id=?')->execute([$linkedWorkTypeId]);
-        (new App\Services\PortalProjectionMutationService())->queueCatalog($pdo);
+        (new App\Services\PortalProjectionMutationService())->queueCatalogChanges($pdo);
         $pdo->commit();
         header("Location: {$redirect}&purged=1");
         exit;
@@ -100,7 +100,7 @@ try {
             $placeholders = implode(',', array_fill(0, count($linkedWorkTypeIds), '?'));
             $pdo->prepare("UPDATE work_types SET is_active=0 WHERE id IN ({$placeholders})")->execute($linkedWorkTypeIds);
         }
-        (new App\Services\PortalProjectionMutationService())->queueCatalog($pdo);
+        (new App\Services\PortalProjectionMutationService())->queueCatalogChanges($pdo);
         $pdo->commit();
         header("Location: {$redirect}&deleted=1");
         exit;
@@ -115,6 +115,8 @@ try {
     $clientIncludedMinutes = trim((string)($_POST['client_included_minutes'] ?? '')) === '' ? null : max(0, (int)$_POST['client_included_minutes']);
     $clientOverageRate = trim((string)($_POST['client_overage_rate'] ?? '')) === '' ? null : max(0, (float)$_POST['client_overage_rate']);
     $pricingCurrency = strtoupper(trim((string)($_POST['pricing_currency'] ?? 'USD')));
+    $typicalMinimum=trim((string)($_POST['portal_pricing_typical_minimum']??''));$typicalMaximum=trim((string)($_POST['portal_pricing_typical_maximum']??''));
+    $typicalMinimum=$typicalMinimum===''?null:$typicalMinimum;$typicalMaximum=$typicalMaximum===''?null:$typicalMaximum;
     $entryType = (string)($_POST['entry_type'] ?? 'service');
     $billingUnit = (string)($_POST['billing_unit'] ?? 'each');
     $fulfillmentNotes = trim((string)($_POST['fulfillment_notes'] ?? ''));
@@ -129,6 +131,8 @@ try {
     }
     if($portalRequestable&&$entryType!=='service')throw new DomainException('Only individual services may be published to a portal.');if(!in_array($portalGeometry,['none','optional','required'],true))throw new DomainException('Choose a valid portal geometry requirement.');if(!is_array($portalQuestions)||!array_is_list($portalQuestions))throw new DomainException('Portal questions must be a JSON list.');if($portalRequestable&&$portalCategory==='')throw new DomainException('A client-safe portal category is required.');
     if (!preg_match('/^[A-Z]{3}$/', $pricingCurrency)) throw new DomainException('Pricing currency must use a three-letter code.');
+    if(($typicalMinimum===null)!==($typicalMaximum===null))throw new DomainException('Portal typical pricing requires both a minimum and maximum.');
+    if($typicalMinimum!==null&&(preg_match('/^(0|[1-9][0-9]{0,9})(?:\.[0-9]{1,2})?$/D',$typicalMinimum)!==1||preg_match('/^(0|[1-9][0-9]{0,9})(?:\.[0-9]{1,2})?$/D',(string)$typicalMaximum)!==1||(float)$typicalMinimum>(float)$typicalMaximum))throw new DomainException('Choose a valid portal typical pricing range.');
     if ($pricingModel === 'base_overage' && ($clientIncludedMinutes === null || $clientOverageRate === null)) {
         throw new DomainException('Base-plus-overage pricing requires included minutes and an hourly overage rate.');
     }
@@ -177,16 +181,16 @@ try {
     $portalVisible=['publicId'=>(string)($portalPublicId??'unpublished-service'),'name'=>$itemName,'summary'=>$portalSummary!==''?$portalSummary:null,'category'=>$portalCategory!==''?$portalCategory:'Uncategorized','displayOrder'=>$portalDisplayOrder,'geometryRequirement'=>$portalGeometry,'questions'=>$portalQuestions];$portalVersion=App\Services\PortalSourceVersion::from($portalVisible);if($portalRequestable)App\Services\PortalIntegrationContract::validateCatalogItem(['publicId'=>$portalVisible['publicId'],'sourceVersion'=>$portalVersion]+array_slice($portalVisible,1,null,true));
     if ($action === 'create') {
         $stmt = $pdo->prepare(
-            'INSERT INTO item_library (item_name,description,entry_type,unit_price,client_pricing_model,client_included_minutes,client_overage_rate,pricing_currency,billing_unit,tax_behavior,fulfillment_notes,category,is_active,portal_public_id,portal_source_version,portal_requestable,portal_summary,portal_category,portal_display_order,portal_geometry_requirement,portal_questions_json)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            'INSERT INTO item_library (item_name,description,entry_type,unit_price,client_pricing_model,client_included_minutes,client_overage_rate,pricing_currency,portal_pricing_typical_minimum,portal_pricing_typical_maximum,billing_unit,tax_behavior,fulfillment_notes,category,is_active,portal_public_id,portal_source_version,portal_requestable,portal_summary,portal_category,portal_display_order,portal_geometry_requirement,portal_questions_json)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         );
-        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$pricingModel,$clientIncludedMinutes,$clientOverageRate,$pricingCurrency,$billingUnit,'inherit',$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$isActive,$portalPublicId,$portalVersion,$portalRequestable,$portalSummary!==''?$portalSummary:null,$portalCategory!==''?$portalCategory:null,$portalDisplayOrder,$portalGeometry,json_encode($portalQuestions,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);
+        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$pricingModel,$clientIncludedMinutes,$clientOverageRate,$pricingCurrency,$typicalMinimum,$typicalMaximum,$billingUnit,'inherit',$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$isActive,$portalPublicId,$portalVersion,$portalRequestable,$portalSummary!==''?$portalSummary:null,$portalCategory!==''?$portalCategory:null,$portalDisplayOrder,$portalGeometry,json_encode($portalQuestions,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);
         $id = (int)$pdo->lastInsertId();
     } else {
         $stmt = $pdo->prepare(
-            'UPDATE item_library SET item_name=?,description=?,entry_type=?,unit_price=?,client_pricing_model=?,client_included_minutes=?,client_overage_rate=?,pricing_currency=?,billing_unit=?,tax_behavior=?,fulfillment_notes=?,category=?,is_active=?,portal_public_id=?,portal_source_version=?,portal_requestable=?,portal_summary=?,portal_category=?,portal_display_order=?,portal_geometry_requirement=?,portal_questions_json=? WHERE id=?'
+            'UPDATE item_library SET item_name=?,description=?,entry_type=?,unit_price=?,client_pricing_model=?,client_included_minutes=?,client_overage_rate=?,pricing_currency=?,portal_pricing_typical_minimum=?,portal_pricing_typical_maximum=?,billing_unit=?,tax_behavior=?,fulfillment_notes=?,category=?,is_active=?,portal_public_id=?,portal_source_version=?,portal_requestable=?,portal_summary=?,portal_category=?,portal_display_order=?,portal_geometry_requirement=?,portal_questions_json=? WHERE id=?'
         );
-        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$pricingModel,$clientIncludedMinutes,$clientOverageRate,$pricingCurrency,$billingUnit,'inherit',$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$isActive,$portalPublicId,$portalVersion,$portalRequestable,$portalSummary!==''?$portalSummary:null,$portalCategory!==''?$portalCategory:null,$portalDisplayOrder,$portalGeometry,json_encode($portalQuestions,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),$id]);
+        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$pricingModel,$clientIncludedMinutes,$clientOverageRate,$pricingCurrency,$typicalMinimum,$typicalMaximum,$billingUnit,'inherit',$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$isActive,$portalPublicId,$portalVersion,$portalRequestable,$portalSummary!==''?$portalSummary:null,$portalCategory!==''?$portalCategory:null,$portalDisplayOrder,$portalGeometry,json_encode($portalQuestions,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),$id]);
         if ($stmt->rowCount() === 0) {
             $exists = $pdo->prepare('SELECT 1 FROM item_library WHERE id=?'); $exists->execute([$id]);
             if (!$exists->fetchColumn()) throw new DomainException('Service not found.');
@@ -308,7 +312,7 @@ try {
             $bundleInsert->execute([$id,$childId,$childQuantity,$order]);
         }
     }
-    (new App\Services\PortalProjectionMutationService())->queueCatalog($pdo);
+    (new App\Services\PortalProjectionMutationService())->queueCatalogChanges($pdo);
     $pdo->commit();
     header("Location: {$redirect}&" . ($action === 'create' ? 'created' : 'updated') . '=1');
     exit;

@@ -16,6 +16,9 @@ test('portal authority controls remain native-keyboard operable at 320/390 width
   assert.match(page, /name="action" value="set-portal-workspace-link"/);
   assert.match(page, /Profile workspace allowlist/);
   assert.match(page, /No workspaces authorized/);
+  assert.match(page, /name="viewer_share_create" value="1"> Create public model-viewer links/);
+  assert.doesNotMatch(page, /name="viewer_share_create"[^>]*checked/i);
+  assert.match(page, /Deny \(takes precedence\)/);
   assert.match(page, /role="alert"/);
 });
 

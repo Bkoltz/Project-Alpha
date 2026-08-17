@@ -46,23 +46,20 @@ final class PortalIntegrationService
             'schemaVersion' => 1,
             'catalogVersion' => $this->catalogVersion($services),
             'coverageSquareMetres' => (string)$request['coverageSquareMetres'],
-            'displayMode' => $pricing['available'] ? 'starting_at' : 'none',
+            'displayMode' => $pricing['mode'],
             'currency' => $pricing['available'] ? $pricing['currency'] : null,
-            'startingAt' => $pricing['available'] ? $pricing['total'] : null,
-            'typicalMinimum' => null,
-            'typicalMaximum' => null,
+            'startingAt' => $pricing['mode']==='starting_at' ? $pricing['total'] : null,
+            'typicalMinimum' => $pricing['typicalMinimum'],
+            'typicalMaximum' => $pricing['typicalMaximum'],
             'reasonUnavailable' => $pricing['available'] ? null : $pricing['reason'],
             'disclaimer' => PortalIntegrationContract::DISCLAIMER,
             'validUntil' => $now->modify('+10 minutes')->format('Y-m-d\TH:i:s.000\Z'),
         ];
-        $this->audit($pdo, (int)$profile['id'], $apiKeyId, 'portal.pricing.preview', 'project', (string)$project['public_id'], [
-            'service_count' => count($services), 'display_mode' => $response['displayMode'],
-        ]);
         return $response;
     }
 
     /** @return array{status:int,body:array<string,mixed>} */
-    public function createDraftQuote(PDO $pdo, int $apiKeyId, string $applicationKey, string $idempotencyKey, string $payloadHash, array $request): array
+    public function createDraftQuote(PDO $pdo,int $apiKeyId,string $applicationKey,string $idempotencyKey,string $payloadHash,array$request,string$correlationId):array
     {
         PortalIntegrationContract::validateDraftRequest($request);
         if ($idempotencyKey === '' || strlen($idempotencyKey) > 255 || preg_match('/^[\x21-\x7E]+$/D', $idempotencyKey) !== 1) {
@@ -84,10 +81,12 @@ final class PortalIntegrationService
             $receipt = $existing->fetch(PDO::FETCH_ASSOC);
             if ($receipt) {
                 if (!hash_equals((string)$receipt['payload_hash'], $payloadHash)) {
-                    if ($ownsTransaction) $pdo->rollBack();
+                    (new PortalIntegrationAuditService())->recordCommand($pdo,$applicationKey,$apiKeyId,PortalIntegrationContract::DRAFT_SCOPE,'conflicted',$correlationId,'IDEMPOTENCY_CONFLICT');
+                    if($ownsTransaction)$pdo->commit();
                     return ['status' => 409, 'body' => ['code' => 'IDEMPOTENCY_CONFLICT']];
                 }
                 $body = json_decode((string)$receipt['response_json'], true, 32, JSON_THROW_ON_ERROR);
+                (new PortalIntegrationAuditService())->recordCommand($pdo,$applicationKey,$apiKeyId,PortalIntegrationContract::DRAFT_SCOPE,'replayed',$correlationId,null,'quote',(string)($body['draftQuote']['publicId']??''));
                 if ($ownsTransaction) $pdo->commit();
                 return ['status' => 200, 'body' => $body];
             }
@@ -99,10 +98,10 @@ final class PortalIntegrationService
                 $statement = $pdo->prepare('SELECT * FROM projects WHERE public_id=? AND client_id=? AND status<>\'cancelled\'');
                 $statement->execute([(string)$auth['projectPublicId'], (int)$client['id']]);
                 $project = $statement->fetch(PDO::FETCH_ASSOC) ?: null;
-                if ($project === null) return $this->rollbackResult($pdo, $ownsTransaction, 403, 'SCOPE_DENIED');
+                if($project===null){(new PortalIntegrationAuditService())->recordCommand($pdo,$applicationKey,$apiKeyId,PortalIntegrationContract::DRAFT_SCOPE,'denied',$correlationId,'SCOPE_DENIED');if($ownsTransaction)$pdo->commit();return['status'=>403,'body'=>['code'=>'SCOPE_DENIED']];}
             }
             try { $services = $this->resolveServices($pdo, $request['services'], 'catalogVersion'); }
-            catch (DomainException $error) { if($error->getMessage()==='stale-catalog') return $this->rollbackResult($pdo,$ownsTransaction,409,'STALE_CATALOG'); throw $error; }
+            catch(DomainException$error){if($error->getMessage()==='stale-catalog'){(new PortalIntegrationAuditService())->recordCommand($pdo,$applicationKey,$apiKeyId,PortalIntegrationContract::DRAFT_SCOPE,'conflicted',$correlationId,'STALE_CATALOG');if($ownsTransaction)$pdo->commit();return['status'=>409,'body'=>['code'=>'STALE_CATALOG']];}throw$error;}
             $pricing=(new QuoteDraftDomainService())->priceServices($services);
             $subtotal=$pricing['total'];
             $publicId = bin2hex(random_bytes(16));
@@ -142,9 +141,7 @@ final class PortalIntegrationService
             ];
             $pdo->prepare('INSERT INTO portal_draft_quote_commands (integration_profile_id,api_key_id,idempotency_hash,payload_hash,receipt_public_id,quote_id,response_json) VALUES (?,?,?,?,?,?,?)')
                 ->execute([(int)$profile['id'], $apiKeyId, $idempotencyHash, $payloadHash, $receiptPublicId, $quoteId, json_encode($response, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)]);
-            $this->audit($pdo, (int)$profile['id'], $apiKeyId, 'portal.quote-draft.created', 'quote', $publicId, [
-                'receipt_id' => $receiptPublicId, 'source_request_id' => $request['request']['publicId'],
-            ]);
+            (new PortalIntegrationAuditService())->recordCommand($pdo,$applicationKey,$apiKeyId,PortalIntegrationContract::DRAFT_SCOPE,'allowed',$correlationId,null,'quote',$publicId,['receipt_id'=>$receiptPublicId,'source_request_id'=>$request['request']['publicId']]);
             if ($ownsTransaction) $pdo->commit();
             return ['status' => 201, 'body' => $response];
         } catch (Throwable $error) {
@@ -229,19 +226,6 @@ final class PortalIntegrationService
     private function catalogVersion(array $services): string
     {
         return 'catalog-' . substr(hash('sha256', json_encode(array_map(fn($s) => [$s['portal_public_id'], $s['portal_source_version']], $services), JSON_THROW_ON_ERROR)), 0, 24);
-    }
-
-    private function audit(PDO $pdo, int $profileId, int $apiKeyId, string $action, ?string $targetType, ?string $targetPublicId, array $metadata): void
-    {
-        $pdo->prepare('INSERT INTO portal_integration_audit (integration_profile_id,api_key_id,action,target_type,target_public_id,metadata_json) VALUES (?,?,?,?,?,?)')
-            ->execute([$profileId, $apiKeyId ?: null, $action, $targetType, $targetPublicId, json_encode($metadata, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)]);
-    }
-
-    /** @return array{status:int,body:array{code:string}} */
-    private function rollbackResult(PDO $pdo, bool $ownsTransaction, int $status, string $code): array
-    {
-        if ($ownsTransaction && $pdo->inTransaction()) $pdo->rollBack();
-        return ['status' => $status, 'body' => ['code' => $code]];
     }
 
 }

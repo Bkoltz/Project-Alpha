@@ -251,6 +251,7 @@ function page_permission_map(): array
         'organization/organization-update-notes'   => 'organizations.manage',
         'organization/organizations_upload'        => 'organizations.manage',
         'organization/organization-departments-options' => 'organizations.view',
+        'organization/organization-departments'         => 'organizations.manage',
         'organization/org-create'                => 'organizations.manage',
         'organization/org-search'                => 'organizations.view',
         'organizations-create'                   => 'organizations.manage',

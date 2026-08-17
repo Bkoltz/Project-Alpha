@@ -65,6 +65,7 @@ final class PortalProjectionService
         $this->enqueue($pdo, $profile, $workspacePublicId, $schemaVersion, $sequence, 'snapshot.activate', 'portal', $activation);
         $pdo->prepare('UPDATE portal_projection_state SET last_snapshot_hash=? WHERE integration_profile_id=? AND workspace_public_id=?')
             ->execute([$snapshotHash,(int)$profile['id'],$workspacePublicId]);
+        $this->replaceResourceState($pdo,$profileId,$workspacePublicId,'portal',$this->portalResourceRecords($workspace,$projection,$schemaVersion));
         return ['sourceGeneration'=>$generation,'sourceSequence'=>$sequence,'snapshotHash'=>$snapshotHash,'pageCount'=>count($pages),'recordCount'=>count($records)];
     }
 
@@ -87,7 +88,45 @@ final class PortalProjectionService
             'pageCount'=>$pageCount,'itemCount'=>$itemCount,
         ];PortalIntegrationContract::validateCatalogDelivery($activation);$this->enqueue($pdo,$profile,'catalog',2,$sequence,'snapshot.activate','catalog',$activation);
         $pdo->prepare('UPDATE portal_projection_state SET last_snapshot_hash=? WHERE integration_profile_id=? AND workspace_public_id=?')->execute([$snapshotHash,$profileId,'catalog']);
+        $this->replaceResourceState($pdo,$profileId,'catalog','catalog',$this->catalogResourceRecords($items));
         return['sourceGeneration'=>$generation,'sourceSequence'=>$sequence,'snapshotHash'=>$snapshotHash,'pageCount'=>$pageCount,'itemCount'=>$itemCount];
+    }
+
+    /** Queue only changed portal resources after a complete generation has established the checkpoint. */
+    public function queueWorkspaceChanges(PDO$pdo,array$profile,string$workspacePublicId,?string$onlyAction=null):array
+    {
+        if($onlyAction!==null&&!in_array($onlyAction,['upsert','tombstone'],true))throw new DomainException('portal-change-action-invalid');
+        $profileId=(int)($profile['id']??0);if($profileId<1)throw new DomainException('portal-profile-workspace-denied');
+        $profile=self::lockProfileContract($pdo,$profileId);if(empty($profile['enabled'])||empty($profile['portal_projection_enabled']))throw new DomainException('portal-profile-disabled');
+        $workspace=(new PortalWorkspaceAuthorizationService())->requireWorkspace($pdo,$profileId,$workspacePublicId);$state=$this->stateForUpdate($pdo,$profileId,$workspacePublicId);
+        if(!$state||empty($state['last_snapshot_hash']))return$onlyAction==='tombstone'?['snapshot'=>null,'events'=>[]]:['snapshot'=>$this->queueWorkspaceSnapshot($pdo,$profile,$workspacePublicId),'events'=>[]];
+        $schemaVersion=!empty($profile['relation_projection_enabled'])?3:2;$projection=$this->workspaceProjection($pdo,$workspace,$schemaVersion);$current=$this->portalResourceRecords($workspace,$projection,$schemaVersion);$events=[];
+        foreach($this->resourceChanges($pdo,$profileId,$workspacePublicId,'portal',$current)as$change){
+            if($onlyAction!==null&&$change['action']!==$onlyAction)continue;
+            if($change['action']==='upsert')$event=$this->portalUpsertEvent($change['resource'],$change['record']);
+            elseif($change['resource']==='project_lifecycle'){ $this->deleteResourceState($pdo,$profileId,$workspacePublicId,'portal',$change['resource'],$change['publicId']);continue; }
+            else $event=['resource'=>$change['resource'],'action'=>'tombstone','publicId'=>$change['publicId'],'sourceVersion'=>$change['sourceVersion']];
+            $events[]=$this->queueEvent($pdo,$profile,$workspacePublicId,$event,false);
+            if($change['action']==='upsert')$this->saveResourceState($pdo,$profileId,$workspacePublicId,'portal',$change['resource'],$change['publicId'],$change['sourceVersion'],$change['record']);
+            else $this->deleteResourceState($pdo,$profileId,$workspacePublicId,'portal',$change['resource'],$change['publicId']);
+        }
+        return['snapshot'=>null,'events'=>$events];
+    }
+
+    /** Queue strict Service Library upsert/tombstone events after a complete snapshot. */
+    public function queueCatalogChanges(PDO$pdo,array$profile):array
+    {
+        $profileId=(int)($profile['id']??0);if($profileId<1)throw new DomainException('portal-profile-disabled');
+        $profile=self::lockProfileContract($pdo,$profileId);if(empty($profile['enabled'])||empty($profile['catalog_projection_enabled'])||empty($profile['catalog_route']))throw new DomainException('catalog-profile-disabled');
+        $state=$this->stateForUpdate($pdo,$profileId,'catalog');if(!$state||empty($state['last_snapshot_hash']))return['snapshot'=>$this->queueCatalogSnapshot($pdo,$profile),'events'=>[]];
+        $items=(new PortalIntegrationService())->catalog($pdo)['items'];$current=$this->catalogResourceRecords($items);$events=[];
+        foreach($this->resourceChanges($pdo,$profileId,'catalog','catalog',$current)as$change){
+            $event=$change['action']==='upsert'?['action'=>'upsert','item'=>$change['record']]:['action'=>'tombstone','publicId'=>$change['publicId'],'sourceVersion'=>$change['sourceVersion']];
+            $events[]=$this->queueCatalogEvent($pdo,$profile,$event,false);
+            if($change['action']==='upsert')$this->saveResourceState($pdo,$profileId,'catalog','catalog','catalog_item',$change['publicId'],$change['sourceVersion'],$change['record']);
+            else $this->deleteResourceState($pdo,$profileId,'catalog','catalog','catalog_item',$change['publicId']);
+        }
+        return['snapshot'=>null,'events'=>$events];
     }
 
     /** Queue one ordered incremental delivery after a complete generation exists. */
@@ -112,6 +151,17 @@ final class PortalProjectionService
         return $payload;
     }
 
+    /** Queue one catalog event against the currently active catalog generation. */
+    public function queueCatalogEvent(PDO$pdo,array$profile,array$event,bool$isRevocation=false):array
+    {
+        $profileId=(int)($profile['id']??0);if($profileId<1)throw new DomainException('portal-profile-disabled');
+        $profile=self::lockProfileContract($pdo,$profileId);if(empty($profile['enabled'])||empty($profile['catalog_projection_enabled'])||empty($profile['catalog_route']))throw new DomainException('catalog-profile-disabled');
+        $state=$this->stateForUpdate($pdo,$profileId,'catalog');if(!$state||empty($state['last_snapshot_hash']))throw new DomainException('catalog-snapshot-required');$sequence=(int)$state['source_sequence']+1;
+        $pdo->prepare('UPDATE portal_projection_state SET source_sequence=? WHERE integration_profile_id=? AND workspace_public_id=?')->execute([$sequence,$profileId,'catalog']);
+        $payload=['schemaVersion'=>2,'applicationKey'=>(string)$profile['application_key'],'deliveryId'=>self::uuid(),'occurredAt'=>self::now(),'sourceGeneration'=>(string)$state['source_generation'],'sourceSequence'=>$sequence,'kind'=>'event','event'=>$event];
+        PortalIntegrationContract::validateCatalogDelivery($payload);$this->enqueue($pdo,$profile,'catalog',2,$sequence,'event','catalog',$payload,$isRevocation);return$payload;
+    }
+
     /**
      * Queue a final profile-scoped revocation for a workspace that was previously
      * activated. A never-published workspace has nothing downstream to revoke.
@@ -131,6 +181,7 @@ final class PortalProjectionService
             'sourceVersion'=>PortalSourceVersion::from(['publicId'=>$workspacePublicId,'active'=>false]),
         ],true);
         $pdo->prepare('UPDATE portal_projection_state SET last_snapshot_hash=NULL WHERE integration_profile_id=? AND workspace_public_id=?')->execute([$profileId,$workspacePublicId]);
+        $pdo->prepare("DELETE FROM portal_projection_resource_state WHERE integration_profile_id=? AND workspace_public_id=? AND route_type='portal'")->execute([$profileId,$workspacePublicId]);
         return$payload;
     }
 
@@ -166,7 +217,7 @@ final class PortalProjectionService
             foreach($clients as $row){$entities[]=$this->entity('client',$row,$rootId,false);$scopeIds['client'][]=(string)$row['public_id'];}
             $pdo->prepare('INSERT IGNORE INTO portal_v2_contacts (client_id,display_name) SELECT DISTINCT c.id,c.name FROM organization_department_contacts dc JOIN clients c ON c.id=dc.client_id JOIN organization_departments d ON d.id=dc.department_id JOIN organizations o ON o.id=d.organization_id WHERE o.public_id=?')->execute([$rootId]);
             $pdo->prepare('UPDATE portal_v2_contacts pc JOIN clients c ON c.id=pc.client_id SET pc.display_name=c.name,pc.active=1 WHERE c.organization_id=(SELECT id FROM organizations WHERE public_id=?)')->execute([$rootId]);
-            $contacts=$this->all($pdo,'SELECT pc.public_id,pc.display_name,pc.source_version,pc.active,MIN(d.public_id) parent_public_id,MAX(dc.is_primary) primary_contact FROM portal_v2_contacts pc JOIN organization_department_contacts dc ON dc.client_id=pc.client_id JOIN organization_departments d ON d.id=dc.department_id JOIN organizations o ON o.id=d.organization_id WHERE o.public_id=? GROUP BY pc.public_id,pc.display_name,pc.source_version,pc.active ORDER BY pc.public_id',[$rootId]);
+            $contacts=$this->all($pdo,'SELECT pc.public_id,pc.display_name,pc.source_version,pc.active,MIN(d.public_id) parent_public_id,MAX(dc.is_primary) primary_contact FROM portal_v2_contacts pc JOIN organization_department_contacts dc ON dc.client_id=pc.client_id JOIN organization_departments d ON d.id=dc.department_id JOIN organizations o ON o.id=d.organization_id WHERE o.public_id=? AND pc.active=1 GROUP BY pc.public_id,pc.display_name,pc.source_version,pc.active ORDER BY pc.public_id',[$rootId]);
             foreach($contacts as$row){$contact=['type'=>'contact','publicId'=>(string)$row['public_id'],'parentPublicId'=>(string)$row['parent_public_id'],'displayName'=>(string)$row['display_name'],'active'=>(bool)$row['active'],'primaryContact'=>(bool)$row['primary_contact']];$entities[]=['type'=>$contact['type'],'publicId'=>$contact['publicId'],'parentPublicId'=>$contact['parentPublicId'],'displayName'=>$contact['displayName'],'sourceVersion'=>PortalSourceVersion::from($contact),'active'=>$contact['active'],'primaryContact'=>$contact['primaryContact']];}
             $projects=$this->all($pdo,"SELECT p.public_id,p.name,p.source_version,p.status,p.completed_at,p.department_id,p.client_id,d.public_id department_public_id,c.public_id client_public_id FROM projects p LEFT JOIN organization_departments d ON d.id=p.department_id LEFT JOIN clients c ON c.id=p.client_id WHERE p.organization_id=(SELECT id FROM organizations WHERE public_id=?) AND p.status<>'cancelled' ORDER BY p.public_id",[$rootId]);
         } else {
@@ -181,15 +232,62 @@ final class PortalProjectionService
             $status=(string)$row['status']==='completed'?'completed':'active';if($status==='completed'&&empty($row['completed_at']))throw new DomainException('portal-project-completed-at-missing');
             $lifecycle=['projectPublicId'=>(string)$row['public_id'],'status'=>$status,'completedAt'=>$status==='completed'?$this->utc($row['completed_at']):null];$lifecycles[]=['projectPublicId'=>$lifecycle['projectPublicId'],'status'=>$lifecycle['status'],'completedAt'=>$lifecycle['completedAt'],'sourceVersion'=>PortalSourceVersion::from($lifecycle)];
         }
-        if($schemaVersion===3){$entityMap=[];foreach($entities as$entity)$entityMap[(string)$entity['type'].'|'.(string)$entity['publicId']]=true;foreach($this->all($pdo,'SELECT * FROM portal_v2_relations ORDER BY public_id',[])as$row){if(!isset($entityMap[(string)$row['from_type'].'|'.(string)$row['from_public_id']],$entityMap[(string)$row['to_type'].'|'.(string)$row['to_public_id']]))continue;$relation=['publicId'=>(string)$row['public_id'],'relationType'=>(string)$row['relation_type'],'from'=>['type'=>(string)$row['from_type'],'publicId'=>(string)$row['from_public_id']],'to'=>['type'=>(string)$row['to_type'],'publicId'=>(string)$row['to_public_id']],'active'=>(bool)$row['active']];$relations[]=['publicId'=>$relation['publicId'],'relationType'=>$relation['relationType'],'from'=>$relation['from'],'to'=>$relation['to'],'sourceVersion'=>PortalSourceVersion::from($relation),'active'=>$relation['active']];}}
+        if($schemaVersion===3){$entityMap=[];foreach($entities as$entity)$entityMap[(string)$entity['type'].'|'.(string)$entity['publicId']]=true;foreach($this->all($pdo,'SELECT * FROM portal_v2_relations WHERE active=1 ORDER BY public_id',[])as$row){if(!isset($entityMap[(string)$row['from_type'].'|'.(string)$row['from_public_id']],$entityMap[(string)$row['to_type'].'|'.(string)$row['to_public_id']]))continue;$relation=['publicId'=>(string)$row['public_id'],'relationType'=>(string)$row['relation_type'],'from'=>['type'=>(string)$row['from_type'],'publicId'=>(string)$row['from_public_id']],'to'=>['type'=>(string)$row['to_type'],'publicId'=>(string)$row['to_public_id']],'active'=>true];$relations[]=['publicId'=>$relation['publicId'],'relationType'=>$relation['relationType'],'from'=>$relation['from'],'to'=>$relation['to'],'sourceVersion'=>PortalSourceVersion::from($relation),'active'=>$relation['active']];}}
         $entitlements=[];$principalIds=[];
         foreach($scopeIds as $scopeType=>$ids){foreach(array_unique($ids??[]) as $scopeId){
-            $rows=$this->all($pdo,'SELECT e.*,p.public_id principal_public_id FROM portal_v2_entitlements e JOIN portal_principals p ON p.id=e.portal_principal_id WHERE e.scope_type=? AND e.scope_public_id=?',[$scopeType,$scopeId]);
+            $rows=$this->all($pdo,'SELECT e.*,p.public_id principal_public_id FROM portal_v2_entitlements e JOIN portal_principals p ON p.id=e.portal_principal_id WHERE e.scope_type=? AND e.scope_public_id=? AND e.active=1 AND (e.valid_from IS NULL OR e.valid_from<=CURRENT_TIMESTAMP) AND (e.expires_at IS NULL OR e.expires_at>CURRENT_TIMESTAMP) AND p.enabled=1 AND p.revoked_at IS NULL',[$scopeType,$scopeId]);
             foreach($rows as $row){$principalIds[(int)$row['portal_principal_id']]=true;$visible=['publicId'=>(string)$row['public_id'],'principalPublicId'=>(string)$row['principal_public_id'],'capability'=>(string)$row['capability'],'effect'=>(string)$row['effect'],'scopeType'=>(string)$row['scope_type'],'scopePublicId'=>(string)$row['scope_public_id'],'active'=>(bool)$row['active'],'validFrom'=>$this->utc($row['valid_from']),'expiresAt'=>$this->utc($row['expires_at'])];$entitlements[]=['publicId'=>$visible['publicId'],'principalPublicId'=>$visible['principalPublicId'],'capability'=>$visible['capability'],'effect'=>$visible['effect'],'scopeType'=>$visible['scopeType'],'scopePublicId'=>$visible['scopePublicId'],'sourceVersion'=>PortalSourceVersion::from($visible),'active'=>$visible['active'],'validFrom'=>$visible['validFrom'],'expiresAt'=>$visible['expiresAt']];}
         }}
         $principals=[];foreach(array_keys($principalIds) as $id){$row=$this->one($pdo,'SELECT * FROM portal_principals WHERE id=?',[$id]);if($row){$visible=['publicId'=>(string)$row['public_id'],'emailHint'=>(string)($row['email_hint']??''),'displayName'=>(string)($row['display_name']??''),'active'=>(bool)$row['enabled']&&empty($row['revoked_at'])];$principals[]=['publicId'=>$visible['publicId'],'emailHint'=>$visible['emailHint'],'displayName'=>$visible['displayName'],'sourceVersion'=>PortalSourceVersion::from($visible),'active'=>$visible['active']];}}
         return ['entities'=>$entities,'principals'=>$principals,'entitlements'=>$entitlements,'relations'=>$schemaVersion===3?$relations:[],'projectLifecycles'=>$schemaVersion===3?$lifecycles:[]];
     }
+
+    /** @return array<string,array{resource:string,publicId:string,sourceVersion:string,record:array<string,mixed>}> */
+    private function portalResourceRecords(array$workspace,array$projection,int$schemaVersion):array
+    {
+        $workspaceRecord=['publicId'=>(string)$workspace['public_id'],'rootType'=>(string)$workspace['root_type'],'rootPublicId'=>(string)$workspace['root_public_id'],'displayName'=>(string)$workspace['display_name'],'sourceVersion'=>PortalSourceVersion::from(['publicId'=>(string)$workspace['public_id'],'rootType'=>(string)$workspace['root_type'],'rootPublicId'=>(string)$workspace['root_public_id'],'displayName'=>(string)$workspace['display_name'],'active'=>true]),'active'=>true];
+        $records=[];$this->addResourceRecord($records,'workspace',(string)$workspaceRecord['publicId'],(string)$workspaceRecord['sourceVersion'],$workspaceRecord);
+        foreach($projection['entities']as$record)$this->addResourceRecord($records,'entity',(string)$record['publicId'],(string)$record['sourceVersion'],$record);
+        foreach($projection['principals']as$record)$this->addResourceRecord($records,'principal',(string)$record['publicId'],(string)$record['sourceVersion'],$record);
+        foreach($projection['entitlements']as$record)$this->addResourceRecord($records,'entitlement',(string)$record['publicId'],(string)$record['sourceVersion'],$record);
+        if($schemaVersion===3){foreach($projection['relations']as$record)$this->addResourceRecord($records,'relation',(string)$record['publicId'],(string)$record['sourceVersion'],$record);foreach($projection['projectLifecycles']as$record)$this->addResourceRecord($records,'project_lifecycle',(string)$record['projectPublicId'],(string)$record['sourceVersion'],$record);}
+        return$records;
+    }
+
+    /** @param list<array<string,mixed>> $items @return array<string,array{resource:string,publicId:string,sourceVersion:string,record:array<string,mixed>}> */
+    private function catalogResourceRecords(array$items):array{$records=[];foreach($items as$record)$this->addResourceRecord($records,'catalog_item',(string)$record['publicId'],(string)$record['sourceVersion'],$record);return$records;}
+
+    /** @param array<string,array{resource:string,publicId:string,sourceVersion:string,record:array<string,mixed>}> $records @param array<string,mixed> $record */
+    private function addResourceRecord(array&$records,string$resource,string$publicId,string$sourceVersion,array$record):void{$records[$resource.'|'.$publicId]=['resource'=>$resource,'publicId'=>$publicId,'sourceVersion'=>$sourceVersion,'record'=>$record];}
+
+    /**
+     * @param array<string,array{resource:string,publicId:string,sourceVersion:string,record:array<string,mixed>}> $current
+     * @return list<array{action:string,resource:string,publicId:string,sourceVersion:string,record:array<string,mixed>}>
+     */
+    private function resourceChanges(PDO$pdo,int$profileId,string$workspaceId,string$route,array$current):array
+    {
+        $statement=$pdo->prepare('SELECT resource_type,resource_public_id,source_version,payload_hash,record_json FROM portal_projection_resource_state WHERE integration_profile_id=? AND workspace_public_id=? AND route_type=?');$statement->execute([$profileId,$workspaceId,$route]);$existing=[];
+        foreach($statement->fetchAll(PDO::FETCH_ASSOC)as$row)$existing[(string)$row['resource_type'].'|'.(string)$row['resource_public_id']]=$row;
+        $changes=[];foreach($current as$key=>$entry){$hash=hash('sha256',self::canonicalJson($entry['record']));$prior=$existing[$key]??null;if($prior&&hash_equals((string)$prior['payload_hash'],$hash)){unset($existing[$key]);continue;}if($prior&&hash_equals((string)$prior['source_version'],$entry['sourceVersion']))throw new DomainException('portal-source-version-reuse');$changes[]=['action'=>'upsert']+$entry;unset($existing[$key]);}
+        foreach($existing as$row){$resource=(string)$row['resource_type'];$publicId=(string)$row['resource_public_id'];$version=PortalSourceVersion::from(['resource'=>$resource,'publicId'=>$publicId,'active'=>false,'previousSourceVersion'=>(string)$row['source_version']]);$changes[]=['action'=>'tombstone','resource'=>$resource,'publicId'=>$publicId,'sourceVersion'=>$version,'record'=>[]];}
+        $upsertOrder=['workspace'=>0,'entity'=>1,'principal'=>2,'entitlement'=>3,'relation'=>4,'project_lifecycle'=>5,'catalog_item'=>0];$tombstoneOrder=['relation'=>0,'entitlement'=>1,'project_lifecycle'=>2,'principal'=>3,'entity'=>4,'workspace'=>5,'catalog_item'=>0];
+        usort($changes,static function(array$a,array$b)use($upsertOrder,$tombstoneOrder):int{$aOrder=($a['action']==='upsert'?$upsertOrder:$tombstoneOrder)[$a['resource']]??99;$bOrder=($b['action']==='upsert'?$upsertOrder:$tombstoneOrder)[$b['resource']]??99;return[$a['action']==='tombstone'?0:1,$aOrder,$a['resource'],$a['publicId']]<=>[$b['action']==='tombstone'?0:1,$bOrder,$b['resource'],$b['publicId']];});return$changes;
+    }
+
+    /** @param array<string,mixed> $record @return array<string,mixed> */
+    private function portalUpsertEvent(string$resource,array$record):array{$field=match($resource){'workspace'=>'workspace','entity'=>'entity','principal'=>'principal','entitlement'=>'entitlement','relation'=>'relation','project_lifecycle'=>'projectLifecycle',default=>throw new DomainException('portal-event-resource-invalid')};return['resource'=>$resource,'action'=>'upsert',$field=>$record];}
+
+    /** @param array<string,array{resource:string,publicId:string,sourceVersion:string,record:array<string,mixed>}> $records */
+    private function replaceResourceState(PDO$pdo,int$profileId,string$workspaceId,string$route,array$records):void{$pdo->prepare('DELETE FROM portal_projection_resource_state WHERE integration_profile_id=? AND workspace_public_id=? AND route_type=?')->execute([$profileId,$workspaceId,$route]);foreach($records as$entry)$this->saveResourceState($pdo,$profileId,$workspaceId,$route,$entry['resource'],$entry['publicId'],$entry['sourceVersion'],$entry['record']);}
+
+    /** @param array<string,mixed> $record */
+    private function saveResourceState(PDO$pdo,int$profileId,string$workspaceId,string$route,string$resource,string$publicId,string$sourceVersion,array$record):void
+    {
+        $json=json_encode($record,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);$hash=hash('sha256',self::canonicalJson($record));$update=$pdo->prepare('UPDATE portal_projection_resource_state SET source_version=?,payload_hash=?,record_json=? WHERE integration_profile_id=? AND workspace_public_id=? AND route_type=? AND resource_type=? AND resource_public_id=?');$update->execute([$sourceVersion,$hash,$json,$profileId,$workspaceId,$route,$resource,$publicId]);
+        if($update->rowCount()===0)$pdo->prepare('INSERT INTO portal_projection_resource_state (integration_profile_id,workspace_public_id,route_type,resource_type,resource_public_id,source_version,payload_hash,record_json) VALUES (?,?,?,?,?,?,?,?)')->execute([$profileId,$workspaceId,$route,$resource,$publicId,$sourceVersion,$hash,$json]);
+    }
+
+    private function deleteResourceState(PDO$pdo,int$profileId,string$workspaceId,string$route,string$resource,string$publicId):void{$pdo->prepare('DELETE FROM portal_projection_resource_state WHERE integration_profile_id=? AND workspace_public_id=? AND route_type=? AND resource_type=? AND resource_public_id=?')->execute([$profileId,$workspaceId,$route,$resource,$publicId]);}
 
     private function nextSequence(PDO $pdo,int $profileId,string $workspaceId,string $generation):int
     {

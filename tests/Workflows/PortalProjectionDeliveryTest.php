@@ -85,6 +85,25 @@ final class PortalProjectionDeliveryTest extends TestCase
         self::assertStringNotContainsString('secret host detail', (string)$pdo->query('SELECT last_error_code FROM portal_projection_outbox WHERE id=1')->fetchColumn());
     }
 
+    public function testOrdinaryTombstoneCannotLeapAQueuedEarlierSequence(): void
+    {
+        $pdo = $this->deliveryDatabase();
+        $pdo->exec('UPDATE portal_integration_profiles SET enabled=1,portal_projection_enabled=1 WHERE id=1');
+        $this->insertDelivery($pdo, 1, 'grant-sequence-10', '{"sourceSequence":10,"event":{"action":"upsert"}}', false, 10);
+        $this->insertDelivery($pdo, 1, 'remove-sequence-11', '{"sourceSequence":11,"event":{"action":"tombstone"}}', false, 11);
+        $seen = [];
+
+        $summary = (new PortalProjectionOutboxSender())->deliverDue($pdo, 2, static function (string $url, array $headers, string $body) use (&$seen): array {
+            $seen[] = $body;
+            return ['status'=>503];
+        });
+
+        self::assertSame(1, $summary['processed']);
+        self::assertSame(['{"sourceSequence":10,"event":{"action":"upsert"}}'], $seen);
+        self::assertSame(0, (int)$pdo->query("SELECT attempts FROM portal_projection_outbox WHERE delivery_id='remove-sequence-11'")->fetchColumn());
+        self::assertSame(0, (int)$pdo->query("SELECT is_revocation FROM portal_projection_outbox WHERE delivery_id='remove-sequence-11'")->fetchColumn());
+    }
+
     public function testSigningKeyRotationIsBlockedUntilPendingRowsAreResolved(): void
     {
         $pdo = $this->deliveryDatabase();
@@ -227,6 +246,38 @@ final class PortalProjectionDeliveryTest extends TestCase
         self::assertSame(0, (int)$pdo->query('SELECT COUNT(*) FROM portal_projection_outbox')->fetchColumn());
     }
 
+    public function testReparentDiffRevokesOldEdgeBeforeGrantingNewEdge(): void
+    {
+        $pdo = new PDO('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('CREATE TABLE portal_projection_resource_state(integration_profile_id INTEGER,workspace_public_id TEXT,route_type TEXT,resource_type TEXT,resource_public_id TEXT,source_version TEXT,payload_hash TEXT,record_json TEXT)');
+        $old = ['publicId'=>'edge-old','relationType'=>'contains','from'=>['type'=>'organization','publicId'=>'org-old'],'to'=>['type'=>'client','publicId'=>'client-a'],'sourceVersion'=>'old-version','active'=>true];
+        $oldJson = json_encode($old, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $insert = $pdo->prepare("INSERT INTO portal_projection_resource_state VALUES(1,'workspace-a','portal','relation','edge-old','old-version',?,?)");
+        $insert->execute([hash('sha256', $this->canonicalJson($old)), $oldJson]);
+        $new = ['publicId'=>'edge-new','relationType'=>'contains','from'=>['type'=>'organization','publicId'=>'org-new'],'to'=>['type'=>'client','publicId'=>'client-a'],'sourceVersion'=>'new-version','active'=>true];
+        $current = ['relation|edge-new'=>['resource'=>'relation','publicId'=>'edge-new','sourceVersion'=>'new-version','record'=>$new]];
+
+        $method = new \ReflectionMethod(\App\Services\PortalProjectionService::class, 'resourceChanges');
+        $changes = $method->invoke(new \App\Services\PortalProjectionService(), $pdo, 1, 'workspace-a', 'portal', $current);
+
+        self::assertSame(['tombstone','upsert'], array_column($changes, 'action'));
+        self::assertSame(['edge-old','edge-new'], array_column($changes, 'publicId'));
+        $activeRoots = ['org-old'=>true];
+        foreach ($changes as $change) {
+            if ($change['action']==='tombstone') unset($activeRoots['org-old']);
+            else $activeRoots['org-new']=true;
+            self::assertLessThanOrEqual(1, count($activeRoots), 'A reparent must never expose both roots at once.');
+        }
+
+        $source = (string)file_get_contents(dirname(__DIR__, 2) . '/src/services/PortalProjectionMutationService.php');
+        $revokePass = "reconcileWorkspace(\$pdo,\$scope,'tombstone')";
+        $grantPass = "reconcileWorkspace(\$pdo,\$scope,'upsert')";
+        self::assertIsInt(strpos($source, $revokePass));
+        self::assertIsInt(strpos($source, $grantPass));
+        self::assertLessThan(strpos($source, $grantPass), strpos($source, $revokePass));
+    }
+
     public function testStaleCrossRootRelationCannotExpandReconciliationIntoAnotherWorkspace(): void
     {
         $pdo = $this->mutationDatabase();
@@ -250,6 +301,13 @@ final class PortalProjectionDeliveryTest extends TestCase
         $pdo->beginTransaction();$pdo->exec("INSERT INTO clients VALUES(50,'client-new','New Client',1,0,NULL,'new-v1')");self::assertTrue($service->afterMutation($pdo,$service->clientScopes($pdo,50)));self::assertSame(1,$this->edgeActive($pdo,'org-a','client-new'));$pdo->rollBack();
         self::assertSame(0,(int)$pdo->query("SELECT COUNT(*) FROM clients WHERE id=50")->fetchColumn());self::assertSame(0,(int)$pdo->query("SELECT COUNT(*) FROM portal_v2_relations WHERE to_public_id='client-new'")->fetchColumn());
         $pdo->beginTransaction();$pdo->exec("INSERT INTO clients VALUES(50,'client-new','New Client',1,0,NULL,'new-v2')");self::assertTrue($service->afterMutation($pdo,$service->clientScopes($pdo,50)));$pdo->commit();self::assertSame(1,$this->edgeActive($pdo,'org-a','client-new'));
+    }
+
+    public function testProjectionFailureAbortsAuthoritativeMutation():void
+    {
+        $pdo=$this->mutationDatabase();$service=new PortalProjectionMutationService();$pdo->exec("INSERT INTO portal_integration_profiles VALUES(1,1,1);INSERT INTO portal_integration_profile_workspaces VALUES(1,1,1)");$pdo->beginTransaction();$pdo->exec("INSERT INTO clients VALUES(50,'client-new','New Client',1,0,NULL,'new-v1')");
+        try{$service->afterMutation($pdo,$service->clientScopes($pdo,50));self::fail('Expected projection fault.');}catch(\PDOException){$pdo->rollBack();}
+        self::assertSame(0,(int)$pdo->query('SELECT COUNT(*) FROM clients WHERE id=50')->fetchColumn());
     }
 
     public function testMutationHookIsDefaultOffAndControllerCoverageIsTransactional(): void
@@ -374,10 +432,10 @@ final class PortalProjectionDeliveryTest extends TestCase
         return $pdo;
     }
 
-    private function insertDelivery(PDO $pdo, int $profileId, string $deliveryId, string $body, bool $revocation=false): void
+    private function insertDelivery(PDO $pdo, int $profileId, string $deliveryId, string $body, bool $revocation=false, int $sourceSequence=1): void
     {
-        $pdo->prepare("INSERT INTO portal_projection_outbox(integration_profile_id,delivery_id,workspace_public_id,schema_version,source_sequence,delivery_kind,route_type,is_revocation,destination_url,signing_key_id,payload_json) VALUES(?,?,'workspace-a',3,1,'event','portal',?,'https://receiver.example/internal/portal','key-current',?)")
-            ->execute([$profileId, $deliveryId, $revocation ? 1 : 0, $body]);
+        $pdo->prepare("INSERT INTO portal_projection_outbox(integration_profile_id,delivery_id,workspace_public_id,schema_version,source_sequence,delivery_kind,route_type,is_revocation,destination_url,signing_key_id,payload_json) VALUES(?,?,'workspace-a',3,?,'event','portal',?,'https://receiver.example/internal/portal','key-current',?)")
+            ->execute([$profileId, $deliveryId, $sourceSequence, $revocation ? 1 : 0, $body]);
     }
 
     /** @param list<string> $headers @return array<string,string> */
@@ -420,5 +478,17 @@ final class PortalProjectionDeliveryTest extends TestCase
         $query = $pdo->prepare('SELECT active FROM portal_v2_relations WHERE from_public_id=? AND to_public_id=?');
         $query->execute([$from, $to]);
         return (int)$query->fetchColumn();
+    }
+
+    /** @param array<string,mixed> $value */
+    private function canonicalJson(array $value): string
+    {
+        $sort = static function (&$item) use (&$sort): void {
+            if (!is_array($item)) return;
+            if (array_is_list($item)) { foreach ($item as &$child) $sort($child); unset($child); return; }
+            ksort($item); foreach ($item as &$child) $sort($child); unset($child);
+        };
+        $sort($value);
+        return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     }
 }
