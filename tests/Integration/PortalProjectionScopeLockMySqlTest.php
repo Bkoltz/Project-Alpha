@@ -25,7 +25,7 @@ final class PortalProjectionScopeLockMySqlTest extends TestCase
         }
         $expectedDatabase = trim((string)(getenv('PORTAL_SCOPE_MYSQL_DATABASE') ?: ''));
         if (getenv('PORTAL_SCOPE_MYSQL_ALLOW_DESTRUCTIVE') !== 'isolated-disposable-only'
-            || preg_match('/^portal_scope_test_[0-9]+$/D', $expectedDatabase) !== 1) {
+            || preg_match('/^portal_scope_test_[a-f0-9]{32}$/D', $expectedDatabase) !== 1) {
             throw new \RuntimeException('Portal scope MySQL tests require the disposable runner and its destructive-test sentinel.');
         }
         $options = [
