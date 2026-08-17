@@ -66,9 +66,9 @@ try {
             }
             $targetOrganizationId = $matchOrganizationId;
         } elseif ($organizationResolution === 'create' && $submittedOrganizationName !== '') {
-            $orgInsert = $pdo->prepare('INSERT INTO organizations (name) VALUES (?)');
+            $orgInsert = $pdo->prepare('INSERT INTO organizations (name,source_version) VALUES (?,?)');
             try {
-                $orgInsert->execute([$submittedOrganizationName]);
+                $orgInsert->execute([$submittedOrganizationName,portal_projection_source_version()]);
                 $targetOrganizationId = (int)$pdo->lastInsertId();
             } catch (Throwable $orgError) {
                 $orgLookup = $pdo->prepare('SELECT id FROM organizations WHERE name=?');

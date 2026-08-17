@@ -2,6 +2,7 @@
 // src/controllers/organization/org_create.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 header('Content-Type: application/json');
 
@@ -37,12 +38,17 @@ try {
         exit;
     }
 
-    $ins = $pdo->prepare('INSERT INTO organizations (name, created_at) VALUES (?, NOW())');
-    $ins->execute([$name]);
+    $pdo->beginTransaction();
+    $ins = $pdo->prepare('INSERT INTO organizations (name, source_version, created_at) VALUES (?, ?, NOW())');
+    $ins->execute([$name,portal_projection_source_version()]);
     $id = (int)$pdo->lastInsertId();
+    $projection=new App\Services\PortalProjectionMutationService();
+    $projection->afterMutation($pdo,$projection->organizationScopes($pdo,$id));
+    $pdo->commit();
     echo json_encode(['success'=>true,'id'=>$id,'name'=>$name]);
     exit;
 } catch (Throwable $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
     http_response_code(500);
     echo json_encode(['success'=>false,'error'=>'Failed to create organization']);
     exit;

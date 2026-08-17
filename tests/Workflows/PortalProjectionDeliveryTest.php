@@ -161,6 +161,14 @@ final class PortalProjectionDeliveryTest extends TestCase
         self::assertSame(1, $this->edgeActive($pdo, 'client-a', 'project-b'));
     }
 
+    public function testAuthoritativeCreateAndRelationReconciliationShareTheTransaction(): void
+    {
+        $pdo=$this->mutationDatabase();$service=new PortalProjectionMutationService();
+        $pdo->beginTransaction();$pdo->exec("INSERT INTO clients VALUES(50,'client-new','New Client',1,0,NULL,'new-v1')");self::assertTrue($service->afterMutation($pdo,$service->clientScopes($pdo,50)));self::assertSame(1,$this->edgeActive($pdo,'org-a','client-new'));$pdo->rollBack();
+        self::assertSame(0,(int)$pdo->query("SELECT COUNT(*) FROM clients WHERE id=50")->fetchColumn());self::assertSame(0,(int)$pdo->query("SELECT COUNT(*) FROM portal_v2_relations WHERE to_public_id='client-new'")->fetchColumn());
+        $pdo->beginTransaction();$pdo->exec("INSERT INTO clients VALUES(50,'client-new','New Client',1,0,NULL,'new-v2')");self::assertTrue($service->afterMutation($pdo,$service->clientScopes($pdo,50)));$pdo->commit();self::assertSame(1,$this->edgeActive($pdo,'org-a','client-new'));
+    }
+
     public function testMutationHookIsDefaultOffAndControllerCoverageIsTransactional(): void
     {
         $root = dirname(__DIR__, 2);
@@ -171,23 +179,29 @@ final class PortalProjectionDeliveryTest extends TestCase
         foreach (['CURLOPT_FOLLOWLOCATION=>false', "CURLOPT_PROXY=>''", "CURLOPT_NOPROXY=>'*'", 'CURLOPT_SSL_VERIFYPEER=>true', 'CURLOPT_RESOLVE=>[$resolve]'] as $control) {
             self::assertStringContainsString($control, $sender);
         }
-        foreach ([
-            'src/controllers/organization/organizations_update.php',
-            'src/controllers/organization/organizations_delete.php',
-            'src/controllers/organization/organization_departments.php',
-            'src/controllers/organization/organization_add_client.php',
-            'src/controllers/organization/organization_remove_client.php',
-            'src/controllers/client/clients_update.php',
-            'src/controllers/client/clients_delete.php',
-            'src/controllers/client/client_onboarding_review.php',
-            'src/controllers/project/projects_create.php',
-            'src/controllers/project/projects_update.php',
-            'src/controllers/project/projects_delete.php',
-        ] as $file) {
-            $source = (string)file_get_contents($root . '/' . $file);
-            self::assertStringContainsString('PortalProjectionMutationService', $source, $file);
-            self::assertTrue(str_contains($source, 'portal_projection_mutate') || (str_contains($source, 'beginTransaction') && (str_contains($source, 'afterMutation') || str_contains($source, 'queueProject'))), $file);
+        $authoritativeMutationPaths=[];$authoritativeCreatePaths=[];
+        foreach ([$root.'/src/controllers',$root.'/src/services'] as $directory) {
+            $iterator=new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory,\FilesystemIterator::SKIP_DOTS));
+            foreach($iterator as$fileInfo){if(!$fileInfo->isFile()||$fileInfo->getExtension()!=='php')continue;$source=(string)file_get_contents($fileInfo->getPathname());$table='(?:clients|organizations|projects|organization_departments|organization_department_contacts)(?![A-Za-z0-9_])';$creates=preg_match('/INSERT\s+INTO\s+`?'.$table.'`?/i',$source)===1;$restores=preg_match('/UPDATE\s+`?'.$table.'`?\s+SET[\s\S]{0,300}?(?:archived\s*=\s*0|deleted_at\s*=\s*NULL)/i',$source)===1;$updates=preg_match('/UPDATE\s+`?'.$table.'`?\s+SET[\s\S]{0,300}?\b(?:name|organization_id|department_id|client_id|status|archived|deleted_at|is_primary|role)\s*=/i',$source)===1;$deletes=preg_match('/DELETE\s+FROM\s+`?'.$table.'`?/i',$source)===1;if(!$creates&&!$restores&&!$updates&&!$deletes)continue;$file=str_replace('\\','/',substr($fileInfo->getPathname(),strlen($root)+1));$authoritativeMutationPaths[]=$file;if($creates||$restores){$authoritativeCreatePaths[]=$file;self::assertStringContainsString('source_version',$source,$file);}self::assertStringContainsString('PortalProjectionMutationService',$source,$file);self::assertTrue(str_contains($source,'beginTransaction')||str_contains($source,'portal_projection_mutate'),$file);self::assertTrue(str_contains($source,'afterMutation')||str_contains($source,'queueProject')||str_contains($source,'portal_projection_mutate'),$file);}
         }
+        sort($authoritativeMutationPaths);sort($authoritativeCreatePaths);self::assertGreaterThanOrEqual(8,count($authoritativeCreatePaths));self::assertGreaterThan(count($authoritativeCreatePaths),count($authoritativeMutationPaths));self::assertSame($authoritativeMutationPaths,array_values(array_unique($authoritativeMutationPaths)));
+    }
+
+    public function testIpv4EmbeddedIpv6CannotBypassPublicDestinationFilter(): void
+    {
+        $sender = new PortalProjectionOutboxSender();
+        $method = new \ReflectionMethod($sender, 'publicAddresses');
+        foreach (['::ffff:127.0.0.1', '::ffff:7f00:1', '::127.0.0.1', '::ffff:0:127.0.0.1', '64:ff9b::127.0.0.1', '64:ff9b:1::7f00:1', '2002:7f00:1::', '2001:0000::1', '2001:4860::5efe:127.0.0.1'] as $literal) {
+            self::assertSame([], $method->invoke($sender, $literal), $literal);
+        }
+        self::assertSame([], $method->invoke($sender, 'receiver.example', static fn(): array => [
+            ['type'=>'AAAA', 'ipv6'=>'::ffff:127.0.0.1'],
+            ['type'=>'AAAA', 'ipv6'=>'64:ff9b::10.0.0.1'],
+            ['type'=>'AAAA', 'ipv6'=>'2606:4700:4700::1111'],
+        ]));
+        self::assertSame(['2606:4700:4700::1111'], $method->invoke($sender, 'receiver.example', static fn(): array => [
+            ['type'=>'AAAA', 'ipv6'=>'2606:4700:4700::1111'],
+        ]));
     }
 
     private function deliveryDatabase(): PDO
