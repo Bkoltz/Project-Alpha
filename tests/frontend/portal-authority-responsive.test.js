@@ -11,7 +11,7 @@ test('portal authority controls remain native-keyboard operable at 320/390 width
   assert.match(page, /grid-template-columns:minmax\(0,1fr\)/);
   assert.match(page, /width:calc\(100vw - 40px\)/);
   assert.doesNotMatch(page, /onclick=/i);
-  assert.match(page, /<details><summary class="btn btn-sm">Edit<\/summary>/);
+  assert.match(page, /<details><summary class="btn btn-sm">Edit profile<\/summary>/);
   assert.match(page, /<button class="btn btn-primary">Save manager authority<\/button>/);
   assert.match(page, /name="action" value="set-portal-workspace-link"/);
   assert.match(page, /Profile workspace allowlist/);

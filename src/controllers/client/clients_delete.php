@@ -1,6 +1,7 @@
 <?php
 // src/controllers/clients_delete.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
@@ -17,7 +18,7 @@ if (!$client) {
   exit;
 }
 
-$pdo->beginTransaction();
+$projection=new App\Services\PortalProjectionMutationService();$beforeScopes=$projection->clientScopes($pdo,$id);$pdo->beginTransaction();
 try {
   // 1) Archive client basic row
   $insC = $pdo->prepare('INSERT INTO archived_clients (client_id,name,email,phone,organization_id,notes,address_line1,address_line2,city,state,postal_code,country,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
@@ -78,6 +79,7 @@ try {
 
   // 6) Delete client (will cascade to related tables based on FKs in schema)
   $pdo->prepare('DELETE FROM clients WHERE id=?')->execute([$id]);
+  $projection->afterMutation($pdo,$beforeScopes);
 
   $pdo->commit();
   header('Location: /?page=client/clients-list&archived=1');

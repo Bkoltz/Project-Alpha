@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/project_files.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('project/projects-delete');
@@ -35,10 +36,22 @@ function project_delete_upload_tree(string $dir, string $root): void
     @rmdir($realDir);
 }
 
-// Delete mappings first
-$pdo->prepare('DELETE FROM project_documents WHERE project_id=?')->execute([$id]);
-// Delete project
-$pdo->prepare('DELETE FROM projects WHERE id=?')->execute([$id]);
+$portalProjection = new \App\Services\PortalProjectionMutationService();
+$portalBeforeScopes = $portalProjection->projectScopes($pdo, $id);
+$pdo->beginTransaction();
+try {
+    // Delete mappings first
+    $pdo->prepare('DELETE FROM project_documents WHERE project_id=?')->execute([$id]);
+    // Delete project
+    $pdo->prepare('DELETE FROM projects WHERE id=?')->execute([$id]);
+    $portalProjection->afterMutation($pdo, $portalBeforeScopes);
+    $pdo->commit();
+} catch (Throwable $error) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    throw $error;
+}
 project_delete_upload_tree(project_files_project_dir($id), project_files_storage_root());
 
 header('Location: ' . $redirect . '&deleted=1');

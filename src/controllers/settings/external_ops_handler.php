@@ -7,6 +7,8 @@ use App\Services\ExternalOpsOutboxSender;
 use App\Services\ExternalOpsConfigService;
 use App\Services\PortalAuthorityService;
 use App\Services\PortalProjectionService;
+use App\Services\PortalProjectionDeliveryConfigService;
+use App\Services\PortalProjectionOutboxSender;
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
@@ -38,6 +40,12 @@ try {
         $profileId=(new PortalAuthorityService())->saveProfile($pdo,$_POST,$actorUserId);
         audit_log($pdo,'portal.integration_profile.saved','portal_integration_profile',$profileId,['application_key'=>(string)($_POST['application_key']??''),'enabled'=>!empty($_POST['enabled'])]);
         $message='Portal integration profile saved.';
+    } elseif ($action === 'save-portal-runtime') {
+        $runtime=(new PortalProjectionDeliveryConfigService())->saveRuntime($pdo,$_POST);audit_log($pdo,'portal.runtime.saved','settings',null,$runtime);$message='Portal projection runtime gates saved.';
+    } elseif ($action === 'save-portal-delivery') {
+        $profileId=(int)($_POST['profile_id']??0);(new PortalProjectionDeliveryConfigService())->saveProfile($pdo,$profileId,$_POST,$actorUserId);audit_log($pdo,'portal.delivery.saved','portal_integration_profile',$profileId,['enabled'=>!empty($_POST['delivery_enabled']),'key_id'=>(string)($_POST['delivery_key_id']??'')]);$message='Encrypted portal delivery settings saved.';
+    } elseif ($action === 'send-portal-now') {
+        $summary=(new PortalProjectionOutboxSender())->deliverDue($pdo,5,null,20);audit_log($pdo,'portal.delivery.run','settings',null,$summary);$message=sprintf('Portal delivery processed %d records; %d delivered, %d retrying, %d dead-lettered.',$summary['processed'],$summary['delivered'],$summary['failed'],$summary['dead_lettered']);
     } elseif ($action === 'save-portal-workspace') {
         $workspaceId=(new PortalAuthorityService())->saveWorkspace($pdo,(int)($_POST['profile_id']??0),(string)($_POST['root_type']??''),(string)($_POST['root_public_id']??''),(string)($_POST['display_name']??''),$actorUserId);
         audit_log($pdo,'portal.workspace.saved','portal_workspace',null,['workspace_public_id'=>$workspaceId]);$message='Portal workspace saved and explicitly linked to the selected profile.';
@@ -102,11 +110,11 @@ try {
         : '/?page=settings&tab=external-ops&saved=1' . (isset($message) ? '&message=' . rawurlencode($message) : '');
     header('Location: ' . $location);
 } catch (Throwable $error) {
-    error_log('[external_ops_settings] ' . $error->getMessage());
+    $diagnostic=substr(hash('sha256',get_class($error).':'.$error->getMessage()),0,12);error_log('[external_ops_settings] failed code='.$diagnostic);
     $returnTo = trim((string)($_POST['return_to'] ?? ''));
     $location = $returnTo === 'account-edit' && !empty($_POST['user_id'])
         ? '/?page=account-edit&id=' . (int)$_POST['user_id'] . '&error=' . rawurlencode($error->getMessage())
-        : '/?page=settings&tab=external-ops&saved=0&error=' . rawurlencode($error->getMessage());
+        : '/?page=settings&tab=external-ops&saved=0&error=' . rawurlencode($error instanceof DomainException?$error->getMessage():'The integration action failed. Diagnostic code '.$diagnostic);
     header('Location: ' . $location);
 }
 exit;

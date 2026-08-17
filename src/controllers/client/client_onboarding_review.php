@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/client_onboarding.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 $organizationId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
@@ -45,6 +46,11 @@ try {
     }
 
     $clientId = (int)($submission['client_id'] ?? 0);
+    $projection = new \App\Services\PortalProjectionMutationService();
+    $portalBeforeScopes = [];
+    foreach (array_unique(array_filter([$clientId, $matchClientId])) as $portalClientId) {
+        $portalBeforeScopes = array_merge($portalBeforeScopes, $projection->clientScopes($pdo, (int)$portalClientId));
+    }
     if ($decision === 'approve') {
         $emailValue = client_onboarding_submitted_email($data, $submission);
         if ($emailValue !== '' && !filter_var($emailValue, FILTER_VALIDATE_EMAIL)) {
@@ -108,7 +114,7 @@ try {
                     $merged[$field] = client_onboarding_merge_value($sourceData, $existingClient, $field, $mergeFields);
                 }
                 $update = $pdo->prepare(
-                    'UPDATE clients SET name=?,email=?,phone=?,address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,client_type=?,organization_id=COALESCE(?, organization_id) WHERE id=?'
+                    'UPDATE clients SET name=?,email=?,phone=?,address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,client_type=?,organization_id=COALESCE(?, organization_id),source_version=? WHERE id=?'
                 );
                 $update->execute([
                     $merged['name'] ?: $existingClient['name'],
@@ -122,6 +128,7 @@ try {
                     $merged['country'] ?: 'US',
                     $merged['client_type'] ?: 'unknown',
                     $targetOrganizationId,
+                    portal_projection_source_version(),
                     $clientId,
                 ]);
             }
@@ -129,17 +136,18 @@ try {
                 ->execute([$clientId, $targetOrganizationId, (int)$submission['invitation_id']]);
         } elseif ($clientId > 0) {
             $update = $pdo->prepare(
-                'UPDATE clients SET name=?,email=?,phone=?,address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,client_type=?,organization_id=COALESCE(?, organization_id) WHERE id=?'
+                'UPDATE clients SET name=?,email=?,phone=?,address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,client_type=?,organization_id=COALESCE(?, organization_id),source_version=? WHERE id=?'
             );
-            $update->execute(array_merge($values, [$targetOrganizationId, $clientId]));
+            $update->execute(array_merge($values, [$targetOrganizationId, portal_projection_source_version(), $clientId]));
         } else {
             $insert = $pdo->prepare(
                 'INSERT INTO clients
-                 (name,email,phone,address_line1,address_line2,city,state,postal_code,country,client_type,organization_id,created_by)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+                 (name,email,phone,address_line1,address_line2,city,state,postal_code,country,client_type,organization_id,source_version,created_by)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
             );
             $insert->execute(array_merge($values, [
                 $targetOrganizationId,
+                portal_projection_source_version(),
                 $userId,
             ]));
             $clientId = (int)$pdo->lastInsertId();
@@ -153,6 +161,9 @@ try {
         ->execute([$status, $userId, $notes ?: null, $submissionId]);
     $pdo->prepare('UPDATE client_onboarding_invitations SET status=? WHERE id=?')
         ->execute([$status, (int)$submission['invitation_id']]);
+    if ($decision === 'approve' && $clientId > 0) {
+        $projection->afterMutation($pdo, array_merge($portalBeforeScopes, $projection->clientScopes($pdo, $clientId)));
+    }
     $pdo->commit();
 
     audit_log($pdo, 'client_onboarding.' . $status, 'client_onboarding_submission', $submissionId, [

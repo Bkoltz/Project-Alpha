@@ -53,7 +53,7 @@ final class PortalProjectionService
                 $payload['projectLifecycles']=$pageFamilies['projectLifecycles'];
             }
             PortalIntegrationContract::validatePortalDelivery($payload,$schemaVersion===3);
-            $this->enqueue($pdo, (int)$profile['id'], $workspacePublicId, $schemaVersion, $sequence, 'snapshot.page', 'portal', $payload);
+            $this->enqueue($pdo, $profile, $workspacePublicId, $schemaVersion, $sequence, 'snapshot.page', 'portal', $payload);
         }
         $activation = [
             'schemaVersion'=>$schemaVersion, 'applicationKey'=>(string)$profile['application_key'],
@@ -62,14 +62,14 @@ final class PortalProjectionService
             'snapshotHash'=>$snapshotHash, 'pageCount'=>count($pages), 'recordCount'=>count($records),
         ];
         PortalIntegrationContract::validatePortalDelivery($activation,$schemaVersion===3);
-        $this->enqueue($pdo, (int)$profile['id'], $workspacePublicId, $schemaVersion, $sequence, 'snapshot.activate', 'portal', $activation);
+        $this->enqueue($pdo, $profile, $workspacePublicId, $schemaVersion, $sequence, 'snapshot.activate', 'portal', $activation);
         $pdo->prepare('UPDATE portal_projection_state SET last_snapshot_hash=? WHERE integration_profile_id=? AND workspace_public_id=?')
             ->execute([$snapshotHash,(int)$profile['id'],$workspacePublicId]);
         return ['sourceGeneration'=>$generation,'sourceSequence'=>$sequence,'snapshotHash'=>$snapshotHash,'pageCount'=>count($pages),'recordCount'=>count($records)];
     }
 
     /** Queue one ordered incremental delivery after a complete generation exists. */
-    public function queueEvent(PDO $pdo, array $profile, string $workspacePublicId, array $event): array
+    public function queueEvent(PDO $pdo, array $profile, string $workspacePublicId, array $event, bool $isRevocation=false): array
     {
         $profileId=(int)($profile['id']??0);if($profileId<1)throw new DomainException('portal-profile-workspace-denied');
         $profile=self::lockProfileContract($pdo,$profileId);if(empty($profile['enabled'])||empty($profile['portal_projection_enabled']))throw new DomainException('portal-profile-disabled');
@@ -86,7 +86,7 @@ final class PortalProjectionService
             'workspaceId'=>$workspacePublicId, 'kind'=>'event', 'event'=>$event,
         ];
         PortalIntegrationContract::validatePortalDelivery($payload,!empty($profile['relation_projection_enabled']));
-        $this->enqueue($pdo,(int)$profile['id'],$workspacePublicId,(int)$payload['schemaVersion'],$sequence,'event','portal',$payload);
+        $this->enqueue($pdo,$profile,$workspacePublicId,(int)$payload['schemaVersion'],$sequence,'event','portal',$payload,$isRevocation);
         return $payload;
     }
 
@@ -107,7 +107,7 @@ final class PortalProjectionService
         $payload=$this->queueEvent($pdo,$profile,$workspacePublicId,[
             'resource'=>'workspace','action'=>'tombstone','publicId'=>$workspacePublicId,
             'sourceVersion'=>PortalSourceVersion::from(['publicId'=>$workspacePublicId,'active'=>false]),
-        ]);
+        ],true);
         $pdo->prepare('UPDATE portal_projection_state SET last_snapshot_hash=NULL WHERE integration_profile_id=? AND workspace_public_id=?')->execute([$profileId,$workspacePublicId]);
         return$payload;
     }
@@ -177,7 +177,7 @@ final class PortalProjectionService
         return $sequence;
     }
     private function stateForUpdate(PDO $pdo,int $profileId,string $workspaceId):array|false{$suffix=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql'?' FOR UPDATE':'';$s=$pdo->prepare('SELECT * FROM portal_projection_state WHERE integration_profile_id=? AND workspace_public_id=?'.$suffix);$s->execute([$profileId,$workspaceId]);return $s->fetch(PDO::FETCH_ASSOC);}
-    private function enqueue(PDO $pdo,int $profileId,string $workspaceId,int $schema,int $sequence,string $kind,string $route,array $payload):void{$pdo->prepare('INSERT INTO portal_projection_outbox (integration_profile_id,delivery_id,workspace_public_id,schema_version,source_sequence,delivery_kind,route_type,payload_json) VALUES (?,?,?,?,?,?,?,?)')->execute([$profileId,$payload['deliveryId'],$workspaceId,$schema,$sequence,$kind,$route,json_encode($payload,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);}
+    private function enqueue(PDO $pdo,array $profile,string $workspaceId,int $schema,int $sequence,string $kind,string $route,array $payload,bool$isRevocation=false):void{$destination=$route==='catalog'?($profile['catalog_route']??null):($profile['portal_route']??null);$pdo->prepare('INSERT INTO portal_projection_outbox (integration_profile_id,delivery_id,workspace_public_id,schema_version,source_sequence,delivery_kind,route_type,is_revocation,destination_url,signing_key_id,payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)')->execute([(int)$profile['id'],$payload['deliveryId'],$workspaceId,$schema,$sequence,$kind,$route,$isRevocation?1:0,$destination?:null,$profile['delivery_key_id']??null,json_encode($payload,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);}
     private function entity(string $type,array $row,?string $parent,bool $primary):array{$visible=['type'=>$type,'publicId'=>(string)$row['public_id'],'parentPublicId'=>$parent,'displayName'=>(string)$row['name'],'active'=>true,'primaryContact'=>$primary];return['type'=>$visible['type'],'publicId'=>$visible['publicId'],'parentPublicId'=>$visible['parentPublicId'],'displayName'=>$visible['displayName'],'sourceVersion'=>PortalSourceVersion::from($visible),'active'=>$visible['active'],'primaryContact'=>$visible['primaryContact']];}
     private function one(PDO $pdo,string $sql,array $params):array|false{$s=$pdo->prepare($sql);$s->execute($params);return $s->fetch(PDO::FETCH_ASSOC);}
     private function all(PDO $pdo,string $sql,array $params):array{$s=$pdo->prepare($sql);$s->execute($params);return $s->fetchAll(PDO::FETCH_ASSOC);}
