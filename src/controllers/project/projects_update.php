@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/ScheduleService.php';
 require_once __DIR__ . '/../../utils/external_ops.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('project/projects-update');
@@ -142,9 +143,19 @@ if ($publicProjectRequirePassword && $publicProjectPassword === '' && trim((stri
 
 $hasAutoEmailColumn = project_invoice_table_has_column($pdo, 'projects', 'project_invoice_auto_email');
 $hasDepartmentColumn = project_invoice_table_has_column($pdo, 'projects', 'department_id');
+$portalProjection = new \App\Services\PortalProjectionMutationService();
+$pdo->beginTransaction();
+try {
+$portalBeforeScopes = $portalProjection->lockedProjectScopes(
+	$pdo,
+	$id,
+	$client_id > 0 ? $client_id : null,
+	$organization_id > 0 ? $organization_id : null,
+	$department_id > 0 ? $department_id : null
+);
 if ($hasAutoEmailColumn) {
 	$departmentSet = $hasDepartmentColumn ? 'department_id=?,' : '';
-	$stmt = $pdo->prepare("UPDATE projects SET name=?, client_id=?, organization_id=?, {$departmentSet} business_unit_id=?, manager_user_id=?, invoice_billing_period=?, invoice_net_terms_days=?, project_invoice_auto_email=?, estimated_start=?, estimated_end=?, notes=?, updated_at=NOW() WHERE id=?");
+	$stmt = $pdo->prepare("UPDATE projects SET name=?, client_id=?, organization_id=?, {$departmentSet} business_unit_id=?, manager_user_id=?, invoice_billing_period=?, invoice_net_terms_days=?, project_invoice_auto_email=?, estimated_start=?, estimated_end=?, notes=?, source_version=?, updated_at=NOW() WHERE id=?");
 	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
@@ -162,12 +173,13 @@ if ($hasAutoEmailColumn) {
 		$estimated_start !== '' ? $estimated_start : null,
 		$estimated_end !== '' ? $estimated_end : null,
 		$notes ?: null,
+		portal_projection_source_version(),
 		$id
 	]);
 	$stmt->execute($params);
 } else {
 	$departmentSet = $hasDepartmentColumn ? 'department_id=?,' : '';
-	$stmt = $pdo->prepare("UPDATE projects SET name=?, client_id=?, organization_id=?, {$departmentSet} business_unit_id=?, manager_user_id=?, invoice_billing_period=?, invoice_net_terms_days=?, estimated_start=?, estimated_end=?, notes=?, updated_at=NOW() WHERE id=?");
+	$stmt = $pdo->prepare("UPDATE projects SET name=?, client_id=?, organization_id=?, {$departmentSet} business_unit_id=?, manager_user_id=?, invoice_billing_period=?, invoice_net_terms_days=?, estimated_start=?, estimated_end=?, notes=?, source_version=?, updated_at=NOW() WHERE id=?");
 	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
@@ -184,6 +196,7 @@ if ($hasAutoEmailColumn) {
 		$estimated_start !== '' ? $estimated_start : null,
 		$estimated_end !== '' ? $estimated_end : null,
 		$notes ?: null,
+		portal_projection_source_version(),
 		$id
 	]);
 	$stmt->execute($params);
@@ -251,5 +264,13 @@ if(!empty($opsConfig['enabled'])){
 }
 if($storedBusinessUnitId!==$businessUnitId)audit_log($pdo,'project.business_unit.changed','project',$id,['from'=>$storedBusinessUnitId?:null,'to'=>$businessUnitId?:null]);
 if($storedManagerUserId!==$managerUserId)audit_log($pdo,'project.manager.changed','project',$id,['from'=>$storedManagerUserId?:null,'to'=>$managerUserId?:null]);
+$portalProjection->afterMutation($pdo, array_merge($portalBeforeScopes, $portalProjection->projectScopes($pdo, $id)));
+$pdo->commit();
+} catch (Throwable $error) {
+	if ($pdo->inTransaction()) {
+		$pdo->rollBack();
+	}
+	throw $error;
+}
 header('Location: '.$detailsRedirect.'&updated=1');
 exit;

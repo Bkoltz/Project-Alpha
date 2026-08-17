@@ -92,6 +92,9 @@ jobs:
       - name: Composer audit
         run: docker compose exec -T web composer audit --locked
 
+      - name: Frontend regression tests
+        run: node --test tests/frontend/*.test.js
+
       - name: PHPUnit
         run: docker compose exec -T web vendor/bin/phpunit --colors=always
 

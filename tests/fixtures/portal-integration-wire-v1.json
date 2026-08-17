@@ -1,0 +1,74 @@
+{
+  "contract": "portal-integration-wire-v1",
+  "testSecret": "wire-fixture-secret-32-bytes-long!!",
+  "projectionHeaders": [
+    "X-Portal-Integration-Application-Key",
+    "X-Portal-Integration-Timestamp",
+    "X-Portal-Integration-Body-SHA256",
+    "X-Portal-Integration-Key-Id",
+    "X-Portal-Integration-Delivery-Id",
+    "X-Portal-Integration-Signature"
+  ],
+  "commandHeaders": [
+    "X-Portal-Integration-Application-Key",
+    "X-Portal-Integration-Timestamp",
+    "X-Portal-Integration-Body-SHA256",
+    "X-Portal-Integration-Signature"
+  ],
+  "rotationOverlap": {
+    "currentKeyId": "portal-key-v1",
+    "previousKeyId": "portal-key-v0",
+    "previousTestSecret": "wire-fixture-previous-secret-32bytes!!",
+    "unknownKeyId": "portal-key-unknown",
+    "previousCanonical": "2026-08-17T00:00:00.000Z\\nPOST\\n/api/internal/project-alpha/portal-v2\\nportal-key-v0\\nportal-wire-1\\n{\"schemaVersion\":2,\"applicationKey\":\"field_operations_portal\",\"deliveryId\":\"portal-wire-1\",\"occurredAt\":\"2026-08-17T00:00:00.000Z\",\"sourceGeneration\":\"portal-wire-generation\",\"sourceSequence\":1,\"workspaceId\":\"workspace-wire\",\"kind\":\"snapshot.activate\",\"snapshotHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"pageCount\":1,\"recordCount\":1}",
+    "previousSignature": "sha256=f45be694a136f455f3ab9e6ba115af2eb4c95322e7a0e8c0944b5c40b44e0cd4"
+  },
+  "cases": {
+    "portalProjection": {
+      "method": "POST",
+      "path": "/api/internal/project-alpha/portal-v2",
+      "applicationKey": "field_operations_portal",
+      "keyId": "portal-key-v1",
+      "deliveryId": "portal-wire-1",
+      "timestamp": "2026-08-17T00:00:00.000Z",
+      "body": "{\"schemaVersion\":2,\"applicationKey\":\"field_operations_portal\",\"deliveryId\":\"portal-wire-1\",\"occurredAt\":\"2026-08-17T00:00:00.000Z\",\"sourceGeneration\":\"portal-wire-generation\",\"sourceSequence\":1,\"workspaceId\":\"workspace-wire\",\"kind\":\"snapshot.activate\",\"snapshotHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"pageCount\":1,\"recordCount\":1}",
+      "bodySha256": "e132001ea34e999557d11796d6cd148e5543b63b08215ad4180761aa4984a144",
+      "canonical": "2026-08-17T00:00:00.000Z\\nPOST\\n/api/internal/project-alpha/portal-v2\\nportal-key-v1\\nportal-wire-1\\n{\"schemaVersion\":2,\"applicationKey\":\"field_operations_portal\",\"deliveryId\":\"portal-wire-1\",\"occurredAt\":\"2026-08-17T00:00:00.000Z\",\"sourceGeneration\":\"portal-wire-generation\",\"sourceSequence\":1,\"workspaceId\":\"workspace-wire\",\"kind\":\"snapshot.activate\",\"snapshotHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"pageCount\":1,\"recordCount\":1}",
+      "signature": "sha256=2fe96825ba9477d56d9e882f4adf51a5706062b3f9393cadf8f1fad3778fba67"
+    },
+    "catalogProjection": {
+      "method": "POST",
+      "path": "/api/internal/project-alpha/catalog-v2",
+      "applicationKey": "field_operations_catalog",
+      "keyId": "catalog-key-v1",
+      "deliveryId": "catalog-wire-1",
+      "timestamp": "2026-08-17T00:00:00.000Z",
+      "body": "{\"schemaVersion\":2,\"applicationKey\":\"field_operations_catalog\",\"deliveryId\":\"catalog-wire-1\",\"occurredAt\":\"2026-08-17T00:00:00.000Z\",\"sourceGeneration\":\"catalog-wire-generation\",\"sourceSequence\":1,\"kind\":\"snapshot.activate\",\"snapshotHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"pageCount\":1,\"itemCount\":0}",
+      "bodySha256": "85d6d03d7f0ba39ac9dcab5c7763c1a3882808d4d44cf3029a573bcc93f94ce4",
+      "canonical": "2026-08-17T00:00:00.000Z\\nPOST\\n/api/internal/project-alpha/catalog-v2\\ncatalog-key-v1\\ncatalog-wire-1\\n{\"schemaVersion\":2,\"applicationKey\":\"field_operations_catalog\",\"deliveryId\":\"catalog-wire-1\",\"occurredAt\":\"2026-08-17T00:00:00.000Z\",\"sourceGeneration\":\"catalog-wire-generation\",\"sourceSequence\":1,\"kind\":\"snapshot.activate\",\"snapshotHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"pageCount\":1,\"itemCount\":0}",
+      "signature": "sha256=f7e3db326d8199367380822d0de525fed627b00bead56152c1193a0b234df625"
+    },
+    "pricing": {
+      "method": "POST",
+      "path": "/api/v2/integrations/field_operations_pricing/pricing-hints",
+      "applicationKey": "field_operations_pricing",
+      "timestamp": "2026-08-17T00:00:00.000Z",
+      "scopeOrIdempotencyKey": "portal.pricing.preview",
+      "body": "{\"schemaVersion\":1,\"source\":\"generic-client-portal\",\"scope\":\"portal.pricing.preview\"}",
+      "bodySha256": "bc3de1871a5351da191b6e78167f961162137ac14b7d00f33e3acd94e96e632c",
+      "canonical": "2026-08-17T00:00:00.000Z\\nPOST\\n/api/v2/integrations/field_operations_pricing/pricing-hints\\nportal.pricing.preview\\nbc3de1871a5351da191b6e78167f961162137ac14b7d00f33e3acd94e96e632c",
+      "signature": "sha256=6ed664481e235898f613f117b0aefc933815e2ab0ac057862749c93412bc64c8"
+    },
+    "draft": {
+      "method": "POST",
+      "path": "/api/v2/integrations/field_operations_drafts/draft-quotes",
+      "applicationKey": "field_operations_drafts",
+      "timestamp": "2026-08-17T00:00:00.000Z",
+      "scopeOrIdempotencyKey": "draft-wire-idempotency-1",
+      "body": "{\"schemaVersion\":1,\"source\":\"generic-operations\"}",
+      "bodySha256": "a86f530a617024fe0c9d4cbad7cc598da5e074a1a9414a440197b3edb90c9e92",
+      "canonical": "2026-08-17T00:00:00.000Z\\nPOST\\n/api/v2/integrations/field_operations_drafts/draft-quotes\\ndraft-wire-idempotency-1\\na86f530a617024fe0c9d4cbad7cc598da5e074a1a9414a440197b3edb90c9e92",
+      "signature": "sha256=d5c51823d9960df6603159eba49dc7b7344e3afcf71a9f10258afea0ab766292"
+    }
+  }
+}

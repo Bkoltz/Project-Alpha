@@ -35,6 +35,54 @@ final class SessionSecurityPolicyTest extends TestCase
         self::assertTrue(SessionPolicy::isIntentionalActivity('invoice/invoice-details'));
     }
 
+    public function testOrdinaryViewsReleaseTheSessionLockButSessionMutationsDoNot(): void
+    {
+        $session = [
+            'user' => ['id' => 42, 'role' => 'admin'],
+            'csrf' => str_repeat('a', 64),
+            'last_activity' => time(),
+        ];
+
+        self::assertTrue(SessionPolicy::canReleaseBeforeViewRendering('GET', 'home', $session));
+        self::assertTrue(SessionPolicy::canReleaseBeforeViewRendering('GET', 'settings', $session));
+        self::assertFalse(SessionPolicy::canReleaseBeforeViewRendering('POST', 'home', $session));
+        self::assertFalse(SessionPolicy::canReleaseBeforeViewRendering('GET', 'home', []));
+        self::assertFalse(SessionPolicy::canReleaseBeforeViewRendering('GET', 'account', $session));
+
+        foreach (['flash_api_key', 'flash_backup', 'flash_general_recipient_link',
+                  'flash_quote_approve', 'client_onboarding_link', 'tax_import_summary'] as $key) {
+            self::assertFalse(
+                SessionPolicy::canReleaseBeforeViewRendering('GET', 'home', $session + [$key => null]),
+                $key
+            );
+        }
+    }
+
+    public function testFrontControllerReleasesTheSessionAfterTheShellAndBeforeTheView(): void
+    {
+        $front = (string)file_get_contents(dirname(__DIR__, 2) . '/public/index.php');
+        $legacyCsrf = (string)file_get_contents(dirname(__DIR__, 2) . '/src/utils/csrf.php');
+        $symfonyCsrf = (string)file_get_contents(dirname(__DIR__, 2) . '/src/utils/csrf_sf.php');
+        $linksView = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/settings/links.php');
+        $taxesView = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/settings/taxes.php');
+        $header = strrpos($front, "require_once __DIR__ . '/../src/views/partials/header.php';");
+        $release = strpos($front, 'SessionPolicy::canReleaseBeforeViewRendering', (int)$header);
+        $close = strpos($front, 'session_write_close();', (int)$release);
+        $view = strpos($front, '$view = resolve_view_path($page);', (int)$close);
+
+        self::assertNotFalse($header);
+        self::assertNotFalse($release);
+        self::assertNotFalse($close);
+        self::assertNotFalse($view);
+        self::assertLessThan($release, $header);
+        self::assertLessThan($close, $release);
+        self::assertLessThan($view, $close);
+        self::assertStringContainsString("!defined('PA_SESSION_READ_ONLY')", $legacyCsrf);
+        self::assertStringContainsString("!defined('PA_SESSION_READ_ONLY')", $symfonyCsrf);
+        self::assertStringContainsString("!defined('PA_SESSION_READ_ONLY')", $linksView);
+        self::assertStringContainsString("!defined('PA_SESSION_READ_ONLY')", $taxesView);
+    }
+
     public function testOnlySecuritySensitiveAccountChangesRequireGlobalRevocation(): void
     {
         $before = ['email' => 'user@example.test', 'username' => 'user', 'role' => 'member', 'is_disabled' => 0, 'force_password_reset' => 0];

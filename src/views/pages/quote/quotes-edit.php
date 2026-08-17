@@ -18,7 +18,7 @@
   $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=? AND is_travel=0');
   $items->execute([$id]);
   $items = $items->fetchAll(PDO::FETCH_ASSOC);
-  $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
+  $clients = $pdo->query("SELECT c.id, c.name, c.organization_id, o.name AS organization_name FROM clients c LEFT JOIN organizations o ON o.id=c.organization_id ORDER BY c.name ASC")->fetchAll();
 ?>
 
 <section>
@@ -27,14 +27,20 @@
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$quote['id']; ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
-      <label>
+      <div data-document-recipient-picker>
+      <label style="display:block">
         <div>Client</div>
-        <select required name="client_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <select required name="client_id" data-document-client-id data-document-client-search style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <?php foreach ($clients as $c): ?>
-            <option value="<?php echo (int)$c['id']; ?>" <?php echo (int)$quote['client_id'] === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
+            <option value="<?php echo (int)$c['id']; ?>" data-organization-id="<?php echo (int)($c['organization_id'] ?? 0) ?: ''; ?>" data-organization-name="<?php echo htmlspecialchars((string)($c['organization_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" <?php echo (int)$quote['client_id'] === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?><?php echo !empty($c['organization_name']) ? ' — '.htmlspecialchars($c['organization_name']) : ''; ?></option>
           <?php endforeach; ?>
         </select>
       </label>
+      <label data-document-contact-option hidden style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:13px">
+        <input data-document-contact-checkbox type="checkbox" name="show_contact_on_document" value="1" <?php echo !empty($quote['show_contact_on_document']) ? 'checked' : ''; ?>>
+        <span>Include contact on document <small data-document-organization-name style="display:block;color:var(--muted)"></small></span>
+      </label>
+      </div>
       <div>
         <?php echo render_tax_lookup_control('taxPercent', 'tax_percent', (float)($quote['tax_percent'] ?? 0)); ?>
       </div>
@@ -214,4 +220,5 @@
 
 <!-- Client logic -->
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/quotes-edit-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/document-recipient-presentation.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

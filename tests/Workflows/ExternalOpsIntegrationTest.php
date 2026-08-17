@@ -56,14 +56,23 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertStringContainsString('grantAccountAccess(', $handler);
         self::assertStringContainsString('revokeAccountAccess(', $handler);
         self::assertStringContainsString("'resend-access'", $handler);
-        self::assertStringContainsString('resyncAccountAccess(', $handler);
+        self::assertStringContainsString('resendAccountAccess(', $handler);
         self::assertStringContainsString("user_can(\$pdo, \$actorUserId, 'users.manage'", $handler);
         self::assertStringContainsString('Resend <?=$h($grantAccessLabel)?> access', $page);
+        self::assertStringContainsString('data-external-ops-detail-link', $page);
+        self::assertStringContainsString('data-external-ops-detail-region', $page);
+        self::assertStringContainsString('type="search" list="external-ops-eligible-users"', $page);
+        self::assertStringNotContainsString('<select class="input" name="user_id"', $page);
         $accountCreate = (string)file_get_contents($root . '/src/views/pages/auth/accounts.php');
         $accountEdit = (string)file_get_contents($root . '/src/views/pages/auth/account-edit.php');
+        $accountUpdate = (string)file_get_contents($root . '/src/controllers/accounts/accounts_update.php');
         self::assertStringNotContainsString('name="external_ops_enabled"', $accountCreate);
         self::assertStringNotContainsString('name="external_ops_enabled"', $accountEdit);
-        self::assertStringContainsString('Grant external operations access', $accountEdit);
+        self::assertStringContainsString('Custom integrations access', $accountEdit);
+        self::assertStringContainsString('name="custom_integration_access"', $accountEdit);
+        self::assertStringNotContainsString('$externalOpsLabel', $accountEdit);
+        self::assertStringContainsString('$externalOps->grantAccountAccess(', $accountUpdate);
+        self::assertStringContainsString('$externalOps->revokeAccountAccess(', $accountUpdate);
         $completionMigration = (string)file_get_contents($root . '/database/migrations/0055_business_unit_memberships_and_project_managers.sql');
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS business_unit_memberships', $completionMigration);
         self::assertStringContainsString('membership_role', $completionMigration);
@@ -456,17 +465,54 @@ final class ExternalOpsIntegrationTest extends TestCase
     {
         $service = new ExternalOpsIntegrationService();
         $service->grantAccountAccess($this->pdo, 2, 'external_operations', 1);
-        $result = $service->resyncAccountAccess($this->pdo, 2, 'external_operations', 1);
+        $entitlementId = (int)$this->pdo->query(
+            "SELECT id FROM application_entitlements WHERE user_id=2 AND application_key='external_operations'"
+        )->fetchColumn();
+        $this->pdo->exec("INSERT INTO application_entitlement_business_units VALUES ({$entitlementId},30)");
+        $this->pdo->exec("INSERT INTO application_entitlement_oversight_units VALUES ({$entitlementId},31)");
+        $beforeEntitlement = $this->pdo->query(
+            "SELECT * FROM application_entitlements WHERE id={$entitlementId}"
+        )->fetch(PDO::FETCH_ASSOC);
+        $beforeBusinessUnits = $this->pdo->query(
+            "SELECT business_unit_id FROM application_entitlement_business_units WHERE entitlement_id={$entitlementId} ORDER BY business_unit_id"
+        )->fetchAll(PDO::FETCH_COLUMN);
+        $beforeOversightUnits = $this->pdo->query(
+            "SELECT business_unit_id FROM application_entitlement_oversight_units WHERE entitlement_id={$entitlementId} ORDER BY business_unit_id"
+        )->fetchAll(PDO::FETCH_COLUMN);
+
+        $result = $service->resendAccountAccess($this->pdo, 2, 'external_operations', 1);
 
         self::assertNotNull($result);
         self::assertNotSame('', $result['event_id']);
         self::assertSame(2, (int)$this->pdo->query('SELECT COUNT(*) FROM integration_outbox')->fetchColumn());
+        self::assertSame($beforeEntitlement, $this->pdo->query(
+            "SELECT * FROM application_entitlements WHERE id={$entitlementId}"
+        )->fetch(PDO::FETCH_ASSOC));
+        self::assertSame($beforeBusinessUnits, $this->pdo->query(
+            "SELECT business_unit_id FROM application_entitlement_business_units WHERE entitlement_id={$entitlementId} ORDER BY business_unit_id"
+        )->fetchAll(PDO::FETCH_COLUMN));
+        self::assertSame($beforeOversightUnits, $this->pdo->query(
+            "SELECT business_unit_id FROM application_entitlement_oversight_units WHERE entitlement_id={$entitlementId} ORDER BY business_unit_id"
+        )->fetchAll(PDO::FETCH_COLUMN));
 
         $payload = $this->latestPayload();
         self::assertSame('application_entitlement.changed', $payload['event_type']);
         self::assertTrue($payload['user']['active']);
         self::assertTrue($payload['entitlement']['enabled']);
         self::assertTrue($payload['entitlement']['manual_access']);
+        self::assertSame([], $payload['entitlement']['business_unit_ids']);
+        self::assertSame([], $payload['entitlement']['oversight_business_unit_ids']);
+    }
+
+    public function testResendRejectsInactiveOrMissingExplicitAccess(): void
+    {
+        $service = new ExternalOpsIntegrationService();
+        self::assertNull($service->resendAccountAccess($this->pdo, 2, 'external_operations', 1));
+
+        $service->grantAccountAccess($this->pdo, 2, 'external_operations', 1);
+        $this->pdo->exec('UPDATE users SET is_disabled=1 WHERE id=2');
+        self::assertNull($service->resendAccountAccess($this->pdo, 2, 'external_operations', 1));
+        self::assertSame(1, (int)$this->pdo->query('SELECT COUNT(*) FROM integration_outbox')->fetchColumn());
     }
 
     public function testEnabledRowWithoutExplicitSelectionIsNotEffectiveAccess(): void

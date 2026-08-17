@@ -71,7 +71,13 @@ final class DocumentRevisionService
 
     private static function snapshotAddresses(PDO $pdo, string $type, int $id, int $revision, array $row): void
     {
-        $billing = address_book_default_for_entity($pdo, 'client', (int)($row['client_id'] ?? 0), 'billing');
+        $organizationId = (int)($row['organization_id'] ?? 0);
+        $billing = $organizationId > 0
+            ? address_book_default_for_entity($pdo, 'organization', $organizationId, 'billing')
+            : null;
+        if (!$billing) {
+            $billing = address_book_default_for_entity($pdo, 'client', (int)($row['client_id'] ?? 0), 'billing');
+        }
         $serviceId = (int)($row['service_location_id'] ?? 0);
         $service = $serviceId > 0 ? address_book_for_service_location($pdo, $serviceId) : null;
         foreach (['billing' => $billing, 'service' => $service] as $purpose => $address) {

@@ -24,6 +24,8 @@ $postedRoleId = (int)($_POST['role_id'] ?? 0);
 $postedLegacyRole = trim($_POST['role'] ?? 'user');
 $forceReset = !empty($_POST['force_reset']);
 $isDisabled = !empty($_POST['is_disabled']);
+$customIntegrationAccessPresent = array_key_exists('custom_integration_access_present', $_POST);
+$customIntegrationAccessRequested = !empty($_POST['custom_integration_access']);
 $documentSenderEnabled = !empty($_POST['document_sender_enabled']);
 $documentSenderName = trim((string)($_POST['document_sender_name'] ?? ''));
 $documentSenderCompany = trim((string)($_POST['document_sender_company'] ?? ''));
@@ -389,22 +391,43 @@ try {
     $externalOpsConfig = pa_external_ops_delivery_config($pdo);
     if (!empty($externalOpsConfig['enabled'])) {
         $externalOps = new \App\Services\ExternalOpsIntegrationService();
-        $externalOps->refreshGrantedAccount(
-            $pdo,
-            $userId,
-            (string)$externalOpsConfig['application_key'],
-            (int)$_SESSION['user']['id']
-        );
+        $externalOpsApplicationKey = (string)$externalOpsConfig['application_key'];
+        $externalOpsActorId = (int)$_SESSION['user']['id'];
+        if ($customIntegrationAccessPresent) {
+            if ($customIntegrationAccessRequested) {
+                if ($accountDisabled) {
+                    throw new DomainException('Custom integrations access requires an active account. Clear Disable account or turn off custom integrations access.');
+                }
+                $externalOps->grantAccountAccess(
+                    $pdo,
+                    $userId,
+                    $externalOpsApplicationKey,
+                    $externalOpsActorId,
+                    (string)($externalOpsConfig['label'] ?? 'External operations')
+                );
+            } else {
+                $externalOps->revokeAccountAccess(
+                    $pdo,
+                    $userId,
+                    $externalOpsApplicationKey,
+                    $externalOpsActorId,
+                    (string)($externalOpsConfig['label'] ?? 'External operations')
+                );
+            }
+        } else {
+            // Backward compatibility for a form loaded before this control existed.
+            $externalOps->refreshGrantedAccount($pdo, $userId, $externalOpsApplicationKey, $externalOpsActorId);
+        }
         $currentAssignmentStmt = $pdo->prepare('SELECT id,project_id,user_id,assigned_at,ends_at,created_by,created_at,updated_at,1 active FROM project_assignments WHERE user_id=? AND (ends_at IS NULL OR ends_at>UTC_TIMESTAMP(6))');
         $currentAssignmentStmt->execute([$userId]);
         $currentAssignments = [];
         foreach ($currentAssignmentStmt->fetchAll(PDO::FETCH_ASSOC) as $assignment) {
             $currentAssignments[(int)$assignment['project_id']] = $assignment;
-            $externalOps->enqueueProjectionChange($pdo,(string)$externalOpsConfig['application_key'],'project_assignment',(int)$assignment['id'],'upsert',$assignment);
+            $externalOps->enqueueProjectionChange($pdo,$externalOpsApplicationKey,'project_assignment',(int)$assignment['id'],'upsert',$assignment);
         }
         foreach (array_diff_key($previousAssignments,$currentAssignments) as $assignment) {
             $assignment['active'] = 0;
-            $externalOps->enqueueProjectionChange($pdo,(string)$externalOpsConfig['application_key'],'project_assignment',(int)$assignment['id'],'revoke',$assignment);
+            $externalOps->enqueueProjectionChange($pdo,$externalOpsApplicationKey,'project_assignment',(int)$assignment['id'],'revoke',$assignment);
         }
     }
 
@@ -413,7 +436,7 @@ try {
     }
     $pdo->commit();
 
-    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $accountDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0, 'project_assignments' => count($employeeProjectIds), 'sessions_revoked' => $securitySensitiveChange]);
+    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $accountDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0, 'custom_integration_access' => $customIntegrationAccessPresent ? ($customIntegrationAccessRequested ? 1 : 0) : null, 'project_assignments' => count($employeeProjectIds), 'sessions_revoked' => $securitySensitiveChange]);
     if ($securitySensitiveChange && $userId === (int)$_SESSION['user']['id']) {
         $_SESSION = [];
         session_destroy();

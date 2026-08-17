@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/address_book.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -28,30 +29,42 @@ if ($name === '') {
     exit;
 }
 
-$stmt = $pdo->prepare('INSERT INTO clients (name, email, phone, organization_id, notes, address_line1, address_line2, city, state, postal_code, country, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-$stmt->execute([
-  $name,
-  $email ?: null,
-  $phone ?: null,
-  $organization_id > 0 ? $organization_id : null,
-  $notes ?: null,
-  $address_line1 ?: null,
-  $address_line2 ?: null,
-  $city ?: null,
-  ($state ?: ($appConfig['primary_state'] ?? 'WI')),
-  $postal ?: null,
-  $country,
-  $__creator
-]);
+try {
+  $pdo->beginTransaction();
+  $stmt = $pdo->prepare('INSERT INTO clients (name, email, phone, organization_id, notes, address_line1, address_line2, city, state, postal_code, country, source_version, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  $stmt->execute([
+    $name,
+    $email ?: null,
+    $phone ?: null,
+    $organization_id > 0 ? $organization_id : null,
+    $notes ?: null,
+    $address_line1 ?: null,
+    $address_line2 ?: null,
+    $city ?: null,
+    ($state ?: ($appConfig['primary_state'] ?? 'WI')),
+    $postal ?: null,
+    $country,
+    portal_projection_source_version(),
+    $__creator
+  ]);
 
-$client_id = (int)$pdo->lastInsertId();
-address_book_save($pdo, [
-  'label'=>'Billing address','address_line1'=>$address_line1,'address_line2'=>$address_line2,'city'=>$city,
-  'state'=>$state,'postal_code'=>$postal,'country'=>$country,
-  'google_place_id'=>trim((string)($_POST['google_place_id']??'')),
-  'source'=>trim((string)($_POST['google_place_id']??''))!==''?'google':'manual',
-], 'client', $client_id, 'billing', true, $__creator);
-audit_log($pdo, 'client.create', 'client', $client_id, ['organization_id' => $organization_id > 0 ? $organization_id : null, 'created_by' => $__creator]);
+  $client_id = (int)$pdo->lastInsertId();
+  address_book_save($pdo, [
+    'label'=>'Billing address','address_line1'=>$address_line1,'address_line2'=>$address_line2,'city'=>$city,
+    'state'=>$state,'postal_code'=>$postal,'country'=>$country,
+    'google_place_id'=>trim((string)($_POST['google_place_id']??'')),
+    'source'=>trim((string)($_POST['google_place_id']??''))!==''?'google':'manual',
+  ], 'client', $client_id, 'billing', true, $__creator);
+  audit_log($pdo, 'client.create', 'client', $client_id, ['organization_id' => $organization_id > 0 ? $organization_id : null, 'created_by' => $__creator]);
+  $projection=new App\Services\PortalProjectionMutationService();
+  $projection->afterMutation($pdo,$projection->clientScopes($pdo,$client_id));
+  $pdo->commit();
+} catch (Throwable $error) {
+  if ($pdo->inTransaction()) $pdo->rollBack();
+  error_log('[client_create] failed code='.substr(hash('sha256',get_class($error).':'.$error->getMessage()),0,12));
+  header('Location: /?page=client/clients-create&error=Create%20failed');
+  exit;
+}
 
 header('Location: /?page=client/clients-list&created=1');
 exit;

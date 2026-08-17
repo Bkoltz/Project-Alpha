@@ -131,6 +131,7 @@ elseif($deposit_type === 'fixed') {
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 $sessionUserId = (int)($_SESSION['user']['id'] ?? 0) ?: 1;
 $contractOrgId = resolve_client_context_org_id($pdo, $client_id, $project_id, request_client_org_id());
+$showContactOnDocument = $contractOrgId && !empty($_POST['show_contact_on_document']) ? 1 : 0;
 
 $pdo->beginTransaction();
 try{
@@ -148,15 +149,15 @@ try{
         billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid,
-        total_invoiced, invoice_count, scope, organization_id, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        total_invoiced, invoice_count, scope, organization_id, show_contact_on_document, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
         $client_id, $project_id, $projectCode, 'draft', 'on_demand', $billing_mode, $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, 'on_demand', $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0,
-        0, 0, $scope, $contractOrgId, $sessionUserId
+        0, 0, $scope, $contractOrgId, $showContactOnDocument, $sessionUserId
     ]);
     
     $contract_id = (int)$pdo->lastInsertId();

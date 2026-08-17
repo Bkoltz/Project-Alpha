@@ -520,19 +520,29 @@ function initQuoteClientDropdown() {
             .then(r => r.json())
             .then(list => {
                 if (!Array.isArray(list) || list.length === 0) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
-                sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
+                sug.innerHTML = list.map((x, index) => `<div data-client-index="${index}" style="padding:8px 10px;cursor:pointer"><strong>${escapeDocumentRecipient(x.name)}</strong>${x.org_name ? `<small style="display:block;color:#6b7280">${escapeDocumentRecipient(x.org_name)}</small>` : ''}</div>`).join('');
                 Array.from(sug.children).forEach(el => {
                     el.addEventListener('click', function (e) {
                         e.stopPropagation();
-                        ci.value = this.dataset.name; cid.value = this.dataset.id; cid.dispatchEvent(new Event('change', { bubbles: true }));
-                        if (this.dataset.taxexempt && taxBanner) { taxBanner.style.display = 'block'; } else if(taxBanner) { taxBanner.style.display = 'none'; }
-                        loadProjectsForClient(this.dataset.id);
+                        const client = list[Number(this.dataset.clientIndex)];
+                        if (!client) return;
+                        ci.value = client.name; cid.value = client.id;
+                        cid.dataset.organizationId = client.organization_id || '';
+                        cid.dataset.organizationName = client.org_name || '';
+                        cid.dispatchEvent(new Event('change', { bubbles: true }));
+                        if (client.tax_exempt_file && taxBanner) { taxBanner.style.display = 'block'; } else if(taxBanner) { taxBanner.style.display = 'none'; }
+                        loadProjectsForClient(client.id);
                         sug.style.display = 'none';
                     });
                 });
                 sug.style.display = 'block';
             }).catch(() => { sug.style.display = 'none' });
     });
+}
+function escapeDocumentRecipient(value) {
+    var element = document.createElement('div');
+    element.textContent = value == null ? '' : String(value);
+    return element.innerHTML;
 }
 initQuoteClientDropdown.pageInitializerId = 'quote-create-client-dropdown';
 

@@ -1,0 +1,243 @@
+{
+  "contract": "ltds-project-alpha-portal-v2",
+  "endpoint": "/api/internal/project-alpha/portal-v2",
+  "schemaVersion": 2,
+  "applicationKey": "field_operations_portal",
+  "valid": {
+    "snapshotPage": {
+      "schemaVersion": 2,
+      "applicationKey": "field_operations_portal",
+      "deliveryId": "portal-page-1",
+      "occurredAt": "2026-08-13T18:00:00.000Z",
+      "sourceGeneration": "portal-2026-08-13",
+      "sourceSequence": 10,
+      "workspaceId": "pa-workspace-acme",
+      "kind": "snapshot.page",
+      "snapshotHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "pageNumber": 1,
+      "pageCount": 1,
+      "recordCount": 7,
+      "workspace": {
+        "publicId": "pa-workspace-acme",
+        "rootType": "organization",
+        "rootPublicId": "pa-org-acme",
+        "displayName": "Acme Construction",
+        "sourceVersion": "org-v1",
+        "active": true
+      },
+      "entities": [
+        {
+          "type": "organization",
+          "publicId": "pa-org-acme",
+          "parentPublicId": null,
+          "displayName": "Acme Construction",
+          "sourceVersion": "org-v1",
+          "active": true,
+          "primaryContact": false
+        },
+        {
+          "type": "department",
+          "publicId": "pa-dept-field",
+          "parentPublicId": "pa-org-acme",
+          "displayName": "Field Team",
+          "sourceVersion": "dept-v1",
+          "active": true,
+          "primaryContact": false
+        },
+        {
+          "type": "contact",
+          "publicId": "pa-contact-primary",
+          "parentPublicId": "pa-dept-field",
+          "displayName": "Primary Contact",
+          "sourceVersion": "contact-v1",
+          "active": true,
+          "primaryContact": true
+        },
+        {
+          "type": "project",
+          "publicId": "pa-project-north",
+          "parentPublicId": "pa-dept-field",
+          "displayName": "North Site",
+          "sourceVersion": "project-v1",
+          "active": true,
+          "primaryContact": false
+        }
+      ],
+      "principals": [
+        {
+          "publicId": "pa-principal-manager",
+          "emailHint": "manager@example.test",
+          "displayName": "Portal Manager",
+          "sourceVersion": "principal-v1",
+          "active": true
+        }
+      ],
+      "entitlements": [
+        {
+          "publicId": "pa-entitlement-project",
+          "principalPublicId": "pa-principal-manager",
+          "capability": "delivery.view",
+          "effect": "allow",
+          "scopeType": "project",
+          "scopePublicId": "pa-project-north",
+          "sourceVersion": "grant-v1",
+          "active": true,
+          "validFrom": "2026-08-01T00:00:00.000Z",
+          "expiresAt": null
+        },
+        {
+          "publicId": "pa-entitlement-workspace",
+          "principalPublicId": "pa-principal-manager",
+          "capability": "workspace.view",
+          "effect": "allow",
+          "scopeType": "workspace",
+          "scopePublicId": "pa-workspace-acme",
+          "sourceVersion": "grant-v1",
+          "active": true,
+          "validFrom": "2026-08-01T00:00:00.000Z",
+          "expiresAt": null
+        }
+      ]
+    },
+    "snapshotActivate": {
+      "schemaVersion": 2,
+      "applicationKey": "field_operations_portal",
+      "deliveryId": "portal-activate-1",
+      "occurredAt": "2026-08-13T18:00:01.000Z",
+      "sourceGeneration": "portal-2026-08-13",
+      "sourceSequence": 10,
+      "workspaceId": "pa-workspace-acme",
+      "kind": "snapshot.activate",
+      "snapshotHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "pageCount": 1,
+      "recordCount": 7
+    },
+    "event": {
+      "schemaVersion": 2,
+      "applicationKey": "field_operations_portal",
+      "deliveryId": "portal-event-11",
+      "occurredAt": "2026-08-13T18:01:00.000Z",
+      "sourceGeneration": "portal-2026-08-13",
+      "sourceSequence": 11,
+      "workspaceId": "pa-workspace-acme",
+      "kind": "event",
+      "event": {
+        "resource": "principal",
+        "action": "upsert",
+        "principal": {
+          "publicId": "pa-principal-manager",
+          "emailHint": "manager@example.test",
+          "displayName": "Portal Manager",
+          "sourceVersion": "principal-v2",
+          "active": true
+        }
+      }
+    }
+  },
+  "invalid": [
+    {
+      "name": "numeric-workspace-public-id",
+      "expectedError": "portal-public-id-invalid",
+      "delivery": {
+        "schemaVersion": 2,
+        "applicationKey": "field_operations_portal",
+        "deliveryId": "portal-invalid-numeric",
+        "occurredAt": "2026-08-13T18:00:00.000Z",
+        "sourceGeneration": "portal-fixture-generation-1",
+        "sourceSequence": 10,
+        "workspaceId": "42",
+        "kind": "snapshot.activate",
+        "snapshotHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pageCount": 1,
+        "recordCount": 7
+      }
+    },
+    {
+      "name": "extra-activation-field",
+      "expectedError": "portal-snapshot-activate-invalid",
+      "delivery": {
+        "schemaVersion": 2,
+        "applicationKey": "field_operations_portal",
+        "deliveryId": "portal-invalid-activation-extra",
+        "occurredAt": "2026-08-13T18:00:00.000Z",
+        "sourceGeneration": "portal-fixture-generation-1",
+        "sourceSequence": 10,
+        "workspaceId": "pa-workspace-acme",
+        "kind": "snapshot.activate",
+        "snapshotHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pageCount": 1,
+        "recordCount": 7,
+        "entities": []
+      }
+    },
+    {
+      "name": "schema-v3-rejected-when-relations-disabled",
+      "expectedError": "portal-envelope-invalid",
+      "delivery": {
+        "schemaVersion": 3,
+        "applicationKey": "field_operations_portal",
+        "deliveryId": "portal-invalid-premature-v3",
+        "occurredAt": "2026-08-13T18:00:00.000Z",
+        "sourceGeneration": "portal-fixture-generation-1",
+        "sourceSequence": 10,
+        "workspaceId": "pa-workspace-acme",
+        "kind": "snapshot.page",
+        "snapshotHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pageNumber": 1,
+        "pageCount": 1,
+        "recordCount": 0,
+        "workspace": {},
+        "entities": [],
+        "principals": [],
+        "entitlements": [],
+        "relations": [],
+        "projectLifecycles": []
+      }
+    },
+    {
+      "name": "non-contact-primary-contact",
+      "expectedError": "portal-primary-contact-invalid",
+      "delivery": {
+        "schemaVersion": 2,
+        "applicationKey": "field_operations_portal",
+        "deliveryId": "portal-invalid-primary",
+        "occurredAt": "2026-08-13T18:00:00.000Z",
+        "sourceGeneration": "portal-fixture-generation-2",
+        "sourceSequence": 12,
+        "workspaceId": "pa-workspace-acme",
+        "kind": "snapshot.page",
+        "snapshotHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "pageNumber": 1,
+        "pageCount": 1,
+        "recordCount": 1,
+        "workspace": {
+          "publicId": "pa-workspace-acme",
+          "rootType": "organization",
+          "rootPublicId": "pa-org-acme",
+          "displayName": "Acme Construction",
+          "sourceVersion": "org-v1",
+          "active": true
+        },
+        "entities": [
+          {
+            "type": "department",
+            "publicId": "pa-dept-field",
+            "parentPublicId": "pa-org-acme",
+            "displayName": "Field Team",
+            "sourceVersion": "dept-v1",
+            "active": true,
+            "primaryContact": true
+          }
+        ],
+        "principals": [],
+        "entitlements": []
+      }
+    }
+  ],
+  "relationProjectionStatus": {
+    "nextSchemaVersion": 3,
+    "acceptedWhenRelationsFlagEnabled": true,
+    "runtimeFeatureFlagDefault": false,
+    "note": "The receiver accepts the separate schema-v3 fixture only when CLIENT_PORTAL_HIERARCHY_RELATIONS_ENABLED is exactly true. The default-off schema-v2 parser rejects this specimen."
+  }
+}

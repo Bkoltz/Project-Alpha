@@ -1,6 +1,6 @@
 <?php
 // src/utils/csrf.php
-if (session_status() !== PHP_SESSION_ACTIVE) {
+if (session_status() !== PHP_SESSION_ACTIVE && !defined('PA_SESSION_READ_ONLY')) {
     session_start();
 }
 

@@ -143,8 +143,10 @@ document.querySelectorAll('.field-toggle').forEach(toggle => {
 });
 
 // Drag and drop reordering
-const fieldsList = document.getElementById('fieldsList');
-let draggedElement = null;
+// This classic script can be loaded again after a settings soft navigation.
+// Top-level lexical bindings would throw on the second visit.
+var fieldsList = document.getElementById('fieldsList');
+var draggedElement = null;
 
 fieldsList.addEventListener('dragstart', function(e) {
     if (e.target.classList.contains('field-item')) {

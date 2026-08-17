@@ -18,6 +18,11 @@
   box-sizing: border-box;
 }
 
+/* Component layout rules must never override the native hidden state. */
+.settings-page [hidden] {
+  display: none !important;
+}
+
 .settings-page-header {
   align-items: flex-start;
   display: flex;
@@ -458,6 +463,18 @@
   display: grid;
   gap: 12px;
   min-width: 0;
+}
+
+/* Fieldsets default to min-width:min-content, which can force the settings
+   workspace wider than the available viewport. Keep wide controls contained. */
+.settings-content fieldset {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.settings-tab-list {
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .settings-form-body > fieldset,

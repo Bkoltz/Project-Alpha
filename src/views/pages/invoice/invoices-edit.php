@@ -23,11 +23,15 @@ $isGeneralRecipientInvoice = pa_invoice_is_general_recipient($inv);
 $items = $pdo->prepare('SELECT * FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);
-$clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
+$clients = $pdo->query("SELECT c.id, c.name, c.organization_id, o.name AS organization_name FROM clients c LEFT JOIN organizations o ON o.id=c.organization_id ORDER BY c.name ASC")->fetchAll();
 $clientName = '';
+$clientOrganizationId = 0;
+$clientOrganizationName = '';
 foreach ($clients as $c) {
   if ((int)$c['id'] === (int)$inv['client_id']) {
     $clientName = $c['name'];
+    $clientOrganizationId = (int)($c['organization_id'] ?? 0);
+    $clientOrganizationName = (string)($c['organization_name'] ?? '');
     break;
   }
 }
@@ -163,12 +167,20 @@ if (!empty($inv['contract_id'])) {
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$inv['id']; ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
-      <label style="position:relative">
+      <div data-document-recipient-picker>
+      <label style="position:relative;display:block">
         <div><?php echo $isGeneralRecipientInvoice ? 'Internal accounting client' : 'Client'; ?></div>
-        <input id="clientInputInv" type="text" value="<?php echo htmlspecialchars($clientName); ?>" placeholder="Type client name..." autocomplete="off" <?php echo $isGeneralRecipientInvoice ? 'readonly' : ''; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        <input id="clientIdInv" type="hidden" name="client_id" value="<?php echo (int)$inv['client_id']; ?>">
+        <input id="clientInputInv" data-document-client-search type="text" value="<?php echo htmlspecialchars($clientName); ?>" placeholder="Type client name..." autocomplete="off" <?php echo $isGeneralRecipientInvoice ? 'readonly' : ''; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientIdInv" data-document-client-id type="hidden" name="client_id" value="<?php echo (int)$inv['client_id']; ?>" data-organization-id="<?php echo $clientOrganizationId ?: ''; ?>" data-organization-name="<?php echo htmlspecialchars($clientOrganizationName, ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>">
         <div id="clientSuggestInv" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
+      <?php if (!$isGeneralRecipientInvoice): ?>
+      <label data-document-contact-option hidden style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:13px">
+        <input data-document-contact-checkbox type="checkbox" name="show_contact_on_document" value="1" <?php echo !empty($inv['show_contact_on_document']) ? 'checked' : ''; ?>>
+        <span>Include contact on document <small data-document-organization-name style="display:block;color:var(--muted)"></small></span>
+      </label>
+      <?php endif; ?>
+      </div>
       <label>
         <div>Due Date</div>
         <input type="date" name="due_date" value="<?php echo htmlspecialchars($inv['due_date'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -402,4 +414,5 @@ if (!empty($inv['contract_id'])) {
 </section>
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/invoices-edit-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/document-recipient-presentation.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

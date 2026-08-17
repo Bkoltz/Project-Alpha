@@ -15,7 +15,7 @@ $min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 $where=['(co.contract_type IS NULL OR co.contract_type = "regular")'];$p=[];
 if($client_id>0){$where[]='co.client_id=?';$p[]=$client_id;}
-elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
+elseif($client_name!==''){ $where[]='(c.name LIKE ? OR o.name LIKE ?)'; $p[]='%'.$client_name.'%'; $p[]='%'.$client_name.'%'; }
 if($start!==''){$where[]='co.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='co.created_at<=?';$p[]=$end.' 23:59:59';}
 if($status!==''){ $where[]='co.status=?'; $p[] = $status; }
@@ -34,12 +34,13 @@ $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$sqlCount = 'SELECT COUNT(*) FROM contracts co'.($where?' WHERE '.implode(' AND ',$where):'');
+$documentJoins = ' JOIN clients c ON c.id=co.client_id LEFT JOIN organizations o ON o.id=COALESCE(co.organization_id,c.organization_id)';
+$sqlCount = 'SELECT COUNT(*) FROM contracts co'.$documentJoins.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
 $has_signed = (bool)$pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='contracts' AND COLUMN_NAME='signed_pdf_path'")->fetchColumn();
 $select_signed = $has_signed ? 'co.signed_pdf_path' : 'NULL AS signed_pdf_path';
-$sql="SELECT co.id, co.doc_number, co.project_code, co.status, co.total, co.deposit_type, co.deposit_amount, co.deposit_paid, co.signed_at, {$select_signed}, c.name client, c.id AS client_id FROM contracts co JOIN clients c ON c.id=co.client_id";
+$sql="SELECT co.id, co.doc_number, co.project_code, co.status, co.total, co.deposit_type, co.deposit_amount, co.deposit_paid, co.signed_at, {$select_signed}, c.name client, c.id AS client_id, o.name organization_name FROM contracts co{$documentJoins}";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY co.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
@@ -130,7 +131,8 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
         <tr style="text-align:left;border-bottom:1px solid #eee">
           <th style="padding:10px">No.</th>
           <th style="padding:10px">Project</th>
-          <th style="padding:10px">Client</th>
+          <th style="padding:10px">Customer</th>
+          <th style="padding:10px">Contact</th>
           <th style="padding:10px">Status</th>
           <th style="padding:10px">Total</th>
           <th style="padding:10px">Actions</th>
@@ -146,7 +148,8 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px"><a href="/?page=contract/contract-details&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">C-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
-            <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
+            <td style="padding:10px"><?php echo htmlspecialchars($r['organization_name'] ?: $r['client']); ?></td>
+            <td style="padding:10px"><?php if (!empty($r['organization_name'])): ?><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a><?php endif; ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px">$<?php echo number_format((float)($r['total'] ?? 0),2); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">

@@ -4,6 +4,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../services/LinkResolverService.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -49,14 +50,18 @@ try {
         throw new RuntimeException('Invalid organization');
     }
     require_record_ownership($pdo, 'organizations', $organizationId);
+    $projection = new \App\Services\PortalProjectionMutationService();
+    $beforeScopes = $projection->organizationScopes($pdo, $organizationId);
+    $createdDepartmentTransition = null;
+    $pdo->beginTransaction();
 
     if ($action === 'save_link_strategy') {
         $strategy = (string)($_POST['link_strategy'] ?? 'overall_folder');
         if (!in_array($strategy, ['department_links_only', 'overall_folder', 'shared_folder'], true)) {
             $strategy = 'overall_folder';
         }
-        $stmt = $pdo->prepare('UPDATE organizations SET link_strategy = ?, updated_at = NOW() WHERE id = ?');
-        $stmt->execute([$strategy, $organizationId]);
+        $stmt = $pdo->prepare('UPDATE organizations SET link_strategy = ?, source_version = ?, updated_at = NOW() WHERE id = ?');
+        $stmt->execute([$strategy, portal_projection_source_version(), $organizationId]);
         $flag = 'link_strategy_saved=1';
     } elseif ($action === 'save_department') {
         $departmentId = (int)($_POST['department_id'] ?? 0);
@@ -98,20 +103,20 @@ try {
             }
             $stmt = $pdo->prepare('
                 UPDATE organization_departments
-                SET name = ?, folder_name = ?, folder_aliases = ?, resolver_mode = ?, notes = ?, updated_at = NOW()
+                SET name = ?, folder_name = ?, folder_aliases = ?, resolver_mode = ?, notes = ?, source_version = ?, updated_at = NOW()
                 WHERE id = ? AND organization_id = ?
             ');
-            $stmt->execute([$name, $folderName !== '' ? $folderName : null, $aliasesJson, $resolverMode, $notes !== '' ? $notes : null, $departmentId, $organizationId]);
+            $stmt->execute([$name, $folderName !== '' ? $folderName : null, $aliasesJson, $resolverMode, $notes !== '' ? $notes : null, portal_projection_source_version(), $departmentId, $organizationId]);
             $flag = 'department_saved=1';
         } else {
             $stmt = $pdo->prepare('
-                INSERT INTO organization_departments (organization_id, name, folder_name, folder_aliases, resolver_mode, notes)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO organization_departments (organization_id, name, folder_name, folder_aliases, resolver_mode, notes, source_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             ');
-            $stmt->execute([$organizationId, $name, $folderName !== '' ? $folderName : null, $aliasesJson, $resolverMode, $notes !== '' ? $notes : null]);
+            $stmt->execute([$organizationId, $name, $folderName !== '' ? $folderName : null, $aliasesJson, $resolverMode, $notes !== '' ? $notes : null, portal_projection_source_version()]);
             $departmentId = (int)$pdo->lastInsertId();
             if ($existingDepartmentCount === 0) {
-                organization_department_created_link_transition($pdo, $organizationId, $departmentId);
+                $createdDepartmentTransition = [$organizationId, $departmentId];
             }
             $flag = 'department_created=1';
         }
@@ -191,9 +196,17 @@ try {
         throw new RuntimeException('Invalid department action');
     }
 
+    $projection->afterMutation($pdo, array_merge($beforeScopes, $projection->organizationScopes($pdo, $organizationId)));
+    $pdo->commit();
+    if ($createdDepartmentTransition !== null) {
+        organization_department_created_link_transition($pdo, $createdDepartmentTransition[0], $createdDepartmentTransition[1]);
+    }
     header('Location: ' . $redirect . '&' . $flag);
     exit;
 } catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     @error_log('[organization_departments] ' . $e->getMessage());
     header('Location: ' . $redirect . '&error=' . urlencode($e->getMessage()));
     exit;

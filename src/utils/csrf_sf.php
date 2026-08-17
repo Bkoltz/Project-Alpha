@@ -6,7 +6,7 @@ use Symfony\Component\Security\Csrf\CsrfTokenManager;
 use Symfony\Component\Security\Csrf\TokenStorage\NativeSessionTokenStorage;
 use Symfony\Component\Security\Csrf\CsrfToken;
 
-if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+if (session_status() !== PHP_SESSION_ACTIVE && !defined('PA_SESSION_READ_ONLY')) { session_start(); }
 
 if (!class_exists(CsrfTokenManager::class)) {
   // If Symfony is not installed yet (before rebuild), fallback to legacy functions

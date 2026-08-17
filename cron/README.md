@@ -9,6 +9,7 @@ On container startup, the entrypoint runs a scheduled backup catch-up check and 
 | Local schedule | Script | Purpose |
 |---|---|---|
 | Every minute | `process_notification_relay.php` | Process the disabled-by-default internal notification relay queue |
+| Every minute | `send_portal_projection_outbox.php` | Deliver enabled, signed portal projection outbox records with bounded retries |
 | Daily 02:00 | `generate_recurring_invoices.php` | Generate due long-term invoices and catch up missed periods |
 | Daily 02:15 | `generate_recurring_expenses.php` | Generate due recurring expenses once per scheduled occurrence |
 | Daily 02:30 | `purge_mileage_tracking_points.php` | Delete finalized GPS route points after 90 days and discarded points immediately |
@@ -52,6 +53,7 @@ docker compose exec cron tail -f /var/www/config/logs/cron/cron.log
 docker compose exec cron php /var/www/src/cron/generate_recurring_invoices.php
 docker compose exec cron php /var/www/src/cron/generate_recurring_expenses.php
 docker compose exec cron php /var/www/src/cron/daily_link_resolver.php
+docker compose exec cron php /var/www/src/cron/send_portal_projection_outbox.php
 ```
 
 ## Application Settings
@@ -64,6 +66,7 @@ The container schedule always starts with the service. Individual scripts also h
 - invoice email-on-generation toggle
 - Stripe and SMTP configuration
 - internal notification relay enablement and policy (disabled by default)
+- portal authoritative mutation and outbound delivery gates, plus each profile's delivery switch (all disabled by default)
 
 Database backups are infrastructure protection and do not depend on the automatic-invoice `cron_enabled` setting.
 
@@ -76,5 +79,6 @@ Database backups are infrastructure protection and do not depend on the automati
 5. Confirm the configuration and encryption-key volumes are mounted.
 6. Confirm the deployed cron tag matches the intended branch.
 7. Confirm `/etc/cron.d/project-alpha` includes `/usr/local/bin` in `PATH`; otherwise the official PHP image's executable is not available to cron jobs.
+8. For portal delivery, inspect only the bounded error code and outbox counters in Settings; do not copy encrypted credentials, signed payloads, or receiver authorization headers into tickets.
 
 Do not paste production logs into a public issue without removing credentials and customer information.

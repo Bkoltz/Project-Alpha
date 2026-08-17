@@ -3,6 +3,7 @@
 // Provider-neutral import of successful external processor payments.
 
 require_once __DIR__ . '/../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../utils/portal_projection_hooks.php';
 
 class PaymentProcessorImportService
 {
@@ -255,25 +256,30 @@ class PaymentProcessorImportService
             return $clientId;
         }
 
-        $insert = $pdo->prepare(
-            'INSERT INTO clients
-                (name, email, phone, address_line1, address_line2, city, state, postal_code, country, organization_id, client_type, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "unknown", ?)'
-        );
-        $insert->execute([
-            $name,
-            $email,
-            self::nullableString($tx['payer_phone'] ?? null, 50),
-            self::nullableString($tx['payer_address_line1'] ?? null, 255),
-            self::nullableString($tx['payer_address_line2'] ?? null, 255),
-            self::nullableString($tx['payer_city'] ?? null, 100),
-            self::stateOrNull($tx['payer_state'] ?? null),
-            self::nullableString($tx['payer_postal_code'] ?? null, 20),
-            self::nullableString($tx['payer_country'] ?? null, 100) ?: 'US',
-            self::defaultOrganizationId($pdo),
-            'Created from ' . self::cleanProvider((string)$tx['provider']) . ' standalone payment import.',
-        ]);
-        return (int)$pdo->lastInsertId();
+        $owns=!$pdo->inTransaction();
+        try {
+            if($owns)$pdo->beginTransaction();
+            $insert = $pdo->prepare(
+                'INSERT INTO clients
+                    (name, email, phone, address_line1, address_line2, city, state, postal_code, country, organization_id, client_type, notes, source_version)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "unknown", ?, ?)'
+            );
+            $insert->execute([
+                $name,
+                $email,
+                self::nullableString($tx['payer_phone'] ?? null, 50),
+                self::nullableString($tx['payer_address_line1'] ?? null, 255),
+                self::nullableString($tx['payer_address_line2'] ?? null, 255),
+                self::nullableString($tx['payer_city'] ?? null, 100),
+                self::stateOrNull($tx['payer_state'] ?? null),
+                self::nullableString($tx['payer_postal_code'] ?? null, 20),
+                self::nullableString($tx['payer_country'] ?? null, 100) ?: 'US',
+                self::defaultOrganizationId($pdo),
+                'Created from ' . self::cleanProvider((string)$tx['provider']) . ' standalone payment import.',
+                portal_projection_source_version(),
+            ]);
+            $clientId=(int)$pdo->lastInsertId();$projection=new \App\Services\PortalProjectionMutationService();$projection->afterMutation($pdo,$projection->clientScopes($pdo,$clientId));if($owns)$pdo->commit();return$clientId;
+        } catch (Throwable$error) {if($owns&&$pdo->inTransaction())$pdo->rollBack();throw$error;}
     }
 
     private static function enrichClient(PDO $pdo, int $clientId, array $tx): void

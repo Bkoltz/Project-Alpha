@@ -122,6 +122,8 @@ $memo = trim((string)($_POST['memo'] ?? '')) ?: null;
 // Extract custom field values from POST
 $customFieldValues = extractCustomFieldValues($_POST);
 $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues) : null;
+$organizationId = resolve_client_context_org_id($pdo, $client_id, $project_id, request_client_org_id() ?: null);
+$showContactOnDocument = $organizationId && !empty($_POST['show_contact_on_document']) ? 1 : 0;
 
 $pdo->beginTransaction();
 try{
@@ -132,14 +134,14 @@ try{
   if ($isLongTermContract && $longTerm) {
     $pdo->prepare('
       UPDATE contracts
-      SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?,
+      SET client_id=?, project_id=?, organization_id=?, show_contact_on_document=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?,
           subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?,
           deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=?,
           start_date=?, end_date=?, billing_interval_count=?, billing_interval_unit=?, pricing_type=?,
           price_per_invoice=?, billing_start_mode=?, invoice_count=?, next_invoice_date=?, service_location_id=?
       WHERE id=?
     ')->execute([
-      $client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,
+      $client_id,$project_id,$organizationId,$showContactOnDocument,$billing_mode,$discount_type,$discount_value,$tax_percent,
       $subtotal,$total,$terms,$estimated,$weather,$deposit_type,
       $deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,
       $longTerm['start_date'],$longTerm['end_date'],$longTerm['billing_interval_count'],$longTerm['billing_interval_unit'],$longTerm['pricing_type'],
@@ -177,13 +179,13 @@ try{
       $pdo->prepare('UPDATE contract_recurring_services SET status="ended",next_invoice_date=NULL WHERE contract_id=? AND is_base=1 AND status<>"ended"')->execute([$id]);
     }
   } else {
-    $pdo->prepare('UPDATE contracts SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=?, service_location_id=? WHERE id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$serviceLocationId,$id]);
+    $pdo->prepare('UPDATE contracts SET client_id=?, project_id=?, organization_id=?, show_contact_on_document=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=?, service_location_id=? WHERE id=?')->execute([$client_id,$project_id,$organizationId,$showContactOnDocument,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$serviceLocationId,$id]);
   }
   
   // Sync changes to regular linked invoices. Long-term recurring invoices are historical billing records and must not be rewritten.
   if (!$isLongTermContract) {
     $invoiceDiscount=$discount_type==='percent'?max(0,min(100,$discount_value))*$invoiceSubtotal/100:($discount_type==='fixed'?min($invoiceSubtotal,max(0,$discount_value)):0);$invoiceTotal=max(0,$invoiceSubtotal-$invoiceDiscount+max(0,$tax_percent)*max(0,$invoiceSubtotal-$invoiceDiscount)/100);
-    $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=?, service_location_id=? WHERE contract_id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$invoiceSubtotal,$invoiceTotal,$estimated,$fulfillment_date,$weather,$scope,$serviceLocationId,$id]);
+    $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, organization_id=?, show_contact_on_document=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=?, service_location_id=? WHERE contract_id=?')->execute([$client_id,$project_id,$organizationId,$showContactOnDocument,$billing_mode,$discount_type,$discount_value,$tax_percent,$invoiceSubtotal,$invoiceTotal,$estimated,$fulfillment_date,$weather,$scope,$serviceLocationId,$id]);
   }
   $pdo->prepare('DELETE FROM project_documents WHERE document_type="contract" AND document_id=?')->execute([$id]);
   if ($project_id) {
@@ -231,7 +233,7 @@ try{
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?)');
   foreach($items as $it){$catalog=catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);$ins->execute([$id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$billing_mode==='hourly'?'estimate':'standard',$catalog['catalog_snapshot']]);}
   if($travelItem)$pdo->prepare('INSERT INTO contract_items (contract_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,?)')->execute([$id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit'],$travelItem['pricing_status']]);
-  mileage_save_document_rule($pdo,'contract',$id,($existingContract['organization_id']??null),$client_id,(int)($_SESSION['user']['id']??0),$travelRule);
+  mileage_save_document_rule($pdo,'contract',$id,$organizationId,$client_id,(int)($_SESSION['user']['id']??0),$travelRule);
   
   // Save contract signatures (non-critical; failures must not roll back contract update)
   try {

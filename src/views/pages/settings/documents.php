@@ -4,7 +4,7 @@
 $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab']) : 'quotes';
 ?>
 
-<div style="display:flex;gap:12px;margin-bottom:16px;border-bottom:2px solid #e5e7eb">
+<div class="settings-tab-list" style="display:flex;gap:12px;margin-bottom:16px;border-bottom:2px solid #e5e7eb">
   <a href="/?page=settings&tab=documents&doc_tab=quotes" data-skip-nav style="padding:10px 16px;font-weight:<?php echo $docTab === 'quotes' ? '600' : '400'; ?>;color:<?php echo $docTab === 'quotes' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $docTab === 'quotes' ? '2px solid var(--nav-accent)' : '2px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">Quotes</a>
   <a href="/?page=settings&tab=documents&doc_tab=contracts" data-skip-nav style="padding:10px 16px;font-weight:<?php echo $docTab === 'contracts' ? '600' : '400'; ?>;color:<?php echo $docTab === 'contracts' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $docTab === 'contracts' ? '2px solid var(--nav-accent)' : '2px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">Contracts</a>
   <a href="/?page=settings&tab=documents&doc_tab=invoices" data-skip-nav style="padding:10px 16px;font-weight:<?php echo $docTab === 'invoices' ? '600' : '400'; ?>;color:<?php echo $docTab === 'invoices' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $docTab === 'invoices' ? '2px solid var(--nav-accent)' : '2px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">Invoices</a>

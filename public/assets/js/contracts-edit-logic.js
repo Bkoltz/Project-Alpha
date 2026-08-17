@@ -71,7 +71,7 @@ function initContractEditClientSearch() {
             var meta = [];
             if (client.email) meta.push(client.email);
             if (client.org_name) meta.push(client.org_name);
-            return '<button type="button" data-client-id="' + escapeHtmlCo(client.id) + '" data-client-name="' + escapeHtmlCo(client.name) + '" style="display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-bottom:1px solid #eef2f7;background:#fff;cursor:pointer">' +
+            return '<button type="button" data-client-id="' + escapeHtmlCo(client.id) + '" data-client-name="' + escapeHtmlCo(client.name) + '" data-organization-id="' + escapeHtmlCo(client.organization_id || '') + '" data-organization-name="' + escapeHtmlCo(client.org_name || '') + '" style="display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-bottom:1px solid #eef2f7;background:#fff;cursor:pointer">' +
                 '<strong>' + escapeHtmlCo(client.name) + '</strong>' +
                 (meta.length ? '<span style="display:block;margin-top:2px;color:#6b7280;font-size:12px">' + escapeHtmlCo(meta.join(' - ')) + '</span>' : '') +
                 '</button>';
@@ -102,6 +102,8 @@ function initContractEditClientSearch() {
         var option = event.target.closest('[data-client-id]');
         if (!option) return;
         hidden.value = option.getAttribute('data-client-id') || '';
+        hidden.dataset.organizationId = option.getAttribute('data-organization-id') || '';
+        hidden.dataset.organizationName = option.getAttribute('data-organization-name') || '';
         hidden.dispatchEvent(new Event('change', { bubbles: true }));
         input.value = option.getAttribute('data-client-name') || '';
         input.setCustomValidity('');

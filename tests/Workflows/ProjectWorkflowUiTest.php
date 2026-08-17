@@ -213,7 +213,7 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("\$org['state'] ?: (\$appConfig['primary_state'] ?? '')", (string)$orgEdit);
         foreach ([$quoteDetail, $longQuoteDetail, $contractDetail, $longContractDetail, $invoiceDetail] as $documentView) {
             self::assertStringContainsString('address_line2', (string)$documentView);
-            self::assertStringContainsString('$toLines[] = (string)', (string)$documentView);
+            self::assertStringContainsString('pa_document_recipient(', (string)$documentView);
         }
         self::assertStringContainsString('organization_address_line2', (string)$projectInvoiceDetail);
         self::assertStringContainsString('$orgLines[] = (string)$pi[\'organization_address_line2\'];', (string)$projectInvoiceDetail);
@@ -538,6 +538,29 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("asset_url('/assets/js/payments-create-logic.js')", (string)$payments);
         self::assertStringContainsString("asset_url('/assets/js/project-form.js')", (string)$projectCreate);
         self::assertStringNotContainsString('<script src="/assets/js/payments-create-logic.js"', (string)$payments);
+    }
+
+    public function testSidebarFooterControlsShareInteractionStyles(): void
+    {
+        $header = (string)file_get_contents($this->root . '/src/views/partials/header.php');
+        $styles = (string)file_get_contents($this->root . '/public/assets/styles.css');
+
+        self::assertStringContainsString('class="nav-footer-form" method="post" action="/?page=logout"', $header);
+        self::assertStringContainsString('<button class="settings" type="submit">Logout</button>', $header);
+        self::assertStringNotContainsString('class="settings" type="submit" style=', $header);
+        foreach ([
+            '.nav-footer .settings{',
+            '.nav-footer .settings:hover',
+            '.nav-footer .settings:active',
+            '.nav-footer .settings:focus-visible',
+            '.nav-footer .settings.active',
+        ] as $selector) {
+            self::assertStringContainsString($selector, $styles);
+        }
+        self::assertStringContainsString('.nav-footer-form{margin:0;width:100%}', $styles);
+        self::assertStringContainsString('-webkit-appearance:none;', $styles);
+        self::assertStringContainsString('appearance:none;', $styles);
+        self::assertStringNotContainsString('style="margin-top:8px;display:block"', $header);
     }
 
     public function testFormsDocsRemainSeparateFromProjectDocuments(): void

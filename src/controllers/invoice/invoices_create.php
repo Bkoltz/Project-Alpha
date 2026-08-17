@@ -80,6 +80,7 @@ if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_i
     exit;
 }
 $__orgId = resolve_client_context_org_id($pdo, $client_id, $project_id, $__orgId);
+$showContactOnDocument = $__orgId && !empty($_POST['show_contact_on_document']) ? 1 : 0;
 
 $items = [];
 $subtotal = 0.0;
@@ -305,13 +306,13 @@ try {
     }
     $stmt = $pdo->prepare(
         'INSERT INTO invoices
-         (client_id,recipient_presentation_mode,project_id,billing_mode,discount_type,discount_value,tax_percent,
+         (client_id,recipient_presentation_mode,show_contact_on_document,project_id,billing_mode,discount_type,discount_value,tax_percent,
           subtotal,tax_amount,total,balance_due,status,due_date,payment_terms_days,due_date_source,
           custom_fields,organization_id,created_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     );
     $stmt->execute([
-        $client_id, $recipientPresentationMode, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent,
+        $client_id, $recipientPresentationMode, $showContactOnDocument, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent,
         $subtotal, $tax_amount, $total, $total, 'draft', $due_date ?: null,
         $paymentTermsDays, $dueDateSource, $customFieldsJson, $__orgId, $__creator,
     ]);

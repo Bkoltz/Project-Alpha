@@ -144,10 +144,10 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
 
         $insertInvoice = $pdo->prepare('
             INSERT INTO invoices (
-                contract_id, quote_id, client_id, project_id, job_id, service_location_id, project_code, organization_id, created_by, invoice_type, document_date,
+                contract_id, quote_id, client_id, project_id, job_id, service_location_id, project_code, organization_id, show_contact_on_document, created_by, invoice_type, document_date,
                 discount_type, discount_value, tax_percent,
                 subtotal, total, amount_paid, balance_due, status, due_date, payment_terms_days, due_date_source, finalized_at, finalization_source, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, "terms", NOW(), "recurring_schedule", NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, "terms", NOW(), "recurring_schedule", NOW())
         ');
 
         $insertInvoice->execute([
@@ -159,6 +159,7 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             !empty($contract['service_location_id']) ? (int)$contract['service_location_id'] : null,
             $projectCode,
             $organizationId,
+            (int)($contract['show_contact_on_document'] ?? 0),
             $createdBy,
             'long_term',
             $documentDate,
@@ -353,10 +354,10 @@ function generate_recurring_proration_invoice(
 
         $insert = $pdo->prepare('
             INSERT INTO invoices
-                (contract_id,quote_id,client_id,project_id,job_id,service_location_id,project_code,organization_id,created_by,invoice_type,
+                (contract_id,quote_id,client_id,project_id,job_id,service_location_id,project_code,organization_id,show_contact_on_document,created_by,invoice_type,
                  discount_type,discount_value,tax_percent,subtotal,total,balance_due,status,due_date,
                  finalized_at,finalization_source,generated_at,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),"amendment_proration",NOW(),NOW())
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),"amendment_proration",NOW(),NOW())
         ');
         $insert->execute([
             $contractId,
@@ -367,6 +368,7 @@ function generate_recurring_proration_invoice(
             !empty($contract['service_location_id']) ? (int)$contract['service_location_id'] : null,
             $contract['project_code'] ?? null,
             !empty($contract['organization_id']) ? (int)$contract['organization_id'] : null,
+            (int)($contract['show_contact_on_document'] ?? 0),
             !empty($contract['created_by']) ? (int)$contract['created_by'] : null,
             'long_term',
             $contract['discount_type'] ?? 'none',
