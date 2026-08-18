@@ -16,7 +16,7 @@ final class ClientOnboardingTest extends TestCase
     public function testOrganizationsPersistSeparateGeneralContactChannels(): void
     {
         $baseline = (string)file_get_contents($this->root . '/database/baseline.sql');
-        $migration = (string)file_get_contents($this->root . '/database/migrations/0070_organization_general_contacts.sql');
+        $migration = (string)file_get_contents($this->root . '/database/migrations/0071_organization_general_contacts.sql');
         $create = (string)file_get_contents($this->root . '/src/controllers/organization/organizations_create.php');
         $update = (string)file_get_contents($this->root . '/src/controllers/organization/organizations_update.php');
         $createView = (string)file_get_contents($this->root . '/src/views/pages/organization/organizations-create.php');

@@ -1,4 +1,4 @@
--- Migration 0069: decouple project-invoice delivery recipients from project
+-- Migration 0070: decouple project-invoice delivery recipients from project
 -- membership and support explicit manual email recipients.
 
 CREATE TABLE IF NOT EXISTS project_invoice_recipients (

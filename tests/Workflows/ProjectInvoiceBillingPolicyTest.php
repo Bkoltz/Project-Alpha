@@ -49,7 +49,7 @@ final class ProjectInvoiceBillingPolicyTest extends TestCase
 
     public function testRecipientTargetsAreIndependentAndManualRetriesHonorQueuedAddress(): void
     {
-        $migration = (string)file_get_contents($this->root . '/database/migrations/0069_project_invoice_recipients.sql');
+        $migration = (string)file_get_contents($this->root . '/database/migrations/0070_project_invoice_recipients.sql');
         $billing = (string)file_get_contents($this->root . '/src/utils/project_invoice_billing.php');
         $notifications = (string)file_get_contents($this->root . '/src/utils/project_invoice_notifications.php');
         $details = (string)file_get_contents($this->root . '/src/views/pages/project/project-invoice-details.php');
