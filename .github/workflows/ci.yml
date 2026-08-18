@@ -98,6 +98,12 @@ jobs:
       - name: PHPUnit
         run: docker compose exec -T web vendor/bin/phpunit --colors=always
 
+      - name: MySQL concurrent portal scope-lock regressions
+        shell: pwsh
+        env:
+          PORTAL_SCOPE_TEST_IMAGE: ghcr.io/ledgetoptechnologies/project-alpha:latest
+        run: ./tools/run-portal-scope-mysql-integration.ps1
+
       - name: Dump logs on failure
         if: failure()
         run: docker compose logs

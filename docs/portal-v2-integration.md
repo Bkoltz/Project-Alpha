@@ -1,5 +1,7 @@
 # Generic portal v2 integration
 
+For LTDS delivery-link provisioning through the Ops Worker, see [Managed delivery handoff](managed-delivery.md).
+
 Project Alpha remains the authoritative source for organizations, departments, clients, projects, portal-authority principals, entitlements, and the client-safe Service Library. This optional adapter is provider-neutral and disabled after migration. It contains no deployment domain, tenant key, or credential.
 
 ## Enablement order

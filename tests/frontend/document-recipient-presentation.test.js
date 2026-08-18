@@ -85,4 +85,3 @@ test('all document create and edit forms submit the shared presentation field', 
     assert.match(source, /document-recipient-presentation\.js/u, view);
   }
 });
-

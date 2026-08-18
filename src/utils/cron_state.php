@@ -77,6 +77,7 @@ function cron_state_ensure_schema(PDO $pdo): void {
             'process_workforce_deadlines',
             'stripe_reconciliation',
             'sync_merchant_rate',
+            'managed_delivery_intents',
         ];
         if (filter_var(getenv('NOTIFICATION_RELAY_ENABLED') ?: 'false', FILTER_VALIDATE_BOOLEAN)) {
             $jobs[] = 'process_notification_relay';
