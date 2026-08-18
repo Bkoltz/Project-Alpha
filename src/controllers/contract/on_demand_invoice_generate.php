@@ -85,8 +85,8 @@ try {
         INSERT INTO invoices (
             contract_id, client_id, project_id, project_code, invoice_type, billing_mode,
             discount_type, discount_value, tax_percent, 
-            subtotal, total, balance_due, status, due_date, payment_terms_days, due_date_source, created_at, organization_id, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "terms", ?, ?, ?)
+            subtotal, total, balance_due, status, due_date, payment_terms_days, due_date_source, created_at, organization_id, show_contact_on_document, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "terms", ?, ?, ?, ?)
     ');
     
     $insertInvoice->execute([
@@ -107,6 +107,7 @@ try {
         $paymentTermsDays,
         date('Y-m-d H:i:s'),
         $contractOrgId,
+        (int)($contract['show_contact_on_document'] ?? 0),
         $contractCreator
     ]);
     

@@ -1,0 +1,50 @@
+<?php
+
+declare(strict_types=1);
+
+/** Secrets are deployment configuration. No application key has a built-in value. */
+function portal_integration_hmac_secret(string $applicationKey, string $capability): string
+{
+    return portal_integration_hmac_secrets($applicationKey,$capability)[0]??'';
+}
+
+/**
+ * Current and, during its explicitly bounded overlap, previous inbound secret.
+ * The legacy string form remains valid as the current secret.
+ *
+ * @return list<string>
+ */
+function portal_integration_hmac_secrets(string $applicationKey,string $capability):array
+{
+    $raw = getenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON');
+    if (!is_string($raw) || trim($raw) === '') return [];
+    try {
+        $decoded = json_decode($raw, true, 32, JSON_THROW_ON_ERROR);
+    } catch (Throwable) {
+        return [];
+    }
+    if (!is_array($decoded) || !isset($decoded[$applicationKey]) || !is_array($decoded[$applicationKey])) return [];
+    $configured=$decoded[$applicationKey][$capability]??null;
+    if(is_string($configured))return strlen($configured)>=32?[$configured]:[];
+    if(!is_array($configured))return[];
+    $current=$configured['current']??'';$previous=$configured['previous']??'';$previousUntil=$configured['previousValidUntil']??null;$secrets=[];
+    if(is_string($current)&&strlen($current)>=32)$secrets[]=$current;
+    if(is_string($previous)&&strlen($previous)>=32&&is_string($previousUntil)){
+        $until=strtotime($previousUntil);if($until!==false&&$until>=time())$secrets[]=$previous;
+    }
+    return array_values(array_unique($secrets));
+}
+
+function portal_integration_flag_enabled(string $name): bool
+{
+    return getenv($name) === 'true';
+}
+
+function portal_integration_failure(int $status, string $code): never
+{
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+    http_response_code($status);
+    echo json_encode(['code' => $code], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    exit;
+}

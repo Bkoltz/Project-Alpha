@@ -2,6 +2,7 @@
 // src/controllers/organization/organization_add_client.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 $organization_id = (int)($_POST['organization_id'] ?? 0);
 $client_id = (int)($_POST['client_id'] ?? 0);
@@ -38,8 +39,7 @@ if (!$canAttachClient) {
 }
 
 // Update client to set organization_id
-$stmt = $pdo->prepare('UPDATE clients SET organization_id = ? WHERE id = ?');
-$stmt->execute([$organization_id, $client_id]);
+$projection=new App\Services\PortalProjectionMutationService();portal_projection_mutate($pdo,static fn():array=>$projection->lockedClientScopes($pdo,$client_id,$organization_id),static function()use($pdo,$organization_id,$client_id):void{$pdo->prepare('UPDATE clients SET organization_id=?,source_version=? WHERE id=?')->execute([$organization_id,portal_projection_source_version(),$client_id]);},static fn():array=>$projection->clientScopes($pdo,$client_id));
 
 header('Location: /?page=organization/organization-view&id=' . $organization_id . '&client_added=1');
 exit;

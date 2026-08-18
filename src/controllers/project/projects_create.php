@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../utils/project_invoice_billing.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/ScheduleService.php';
 require_once __DIR__ . '/../../utils/external_ops.php';
+require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -132,10 +133,12 @@ if ($estimated_start !== '' && $estimated_end !== '') {
 
 $hasAutoEmailColumn = project_invoice_table_has_column($pdo, 'projects', 'project_invoice_auto_email');
 $hasDepartmentColumn = project_invoice_table_has_column($pdo, 'projects', 'department_id');
+$pdo->beginTransaction();
+try {
 if ($hasAutoEmailColumn) {
 	$departmentColumn = $hasDepartmentColumn ? ', department_id' : '';
 	$departmentValue = $hasDepartmentColumn ? ', ?' : '';
-	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, business_unit_id, manager_user_id, invoice_billing_period, invoice_net_terms_days, project_invoice_auto_email, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,?,?,NOW())");
+	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, business_unit_id, manager_user_id, invoice_billing_period, invoice_net_terms_days, project_invoice_auto_email, estimated_start, estimated_end, notes, source_version, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,?,?,?,NOW())");
 	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
@@ -153,13 +156,14 @@ if ($hasAutoEmailColumn) {
 		$estimated_start !== '' ? $estimated_start : null,
 		$estimated_end !== '' ? $estimated_end : null,
 		$notes ?: null,
+		portal_projection_source_version(),
 		$__creator
 	]);
 	$ins->execute($params);
 } else {
 	$departmentColumn = $hasDepartmentColumn ? ', department_id' : '';
 	$departmentValue = $hasDepartmentColumn ? ', ?' : '';
-	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, business_unit_id, manager_user_id, invoice_billing_period, invoice_net_terms_days, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,?,NOW())");
+	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, business_unit_id, manager_user_id, invoice_billing_period, invoice_net_terms_days, estimated_start, estimated_end, notes, source_version, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,?,?,NOW())");
 	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
@@ -176,6 +180,7 @@ if ($hasAutoEmailColumn) {
 		$estimated_start !== '' ? $estimated_start : null,
 		$estimated_end !== '' ? $estimated_end : null,
 		$notes ?: null,
+		portal_projection_source_version(),
 		$__creator
 	]);
 	$ins->execute($params);
@@ -215,6 +220,14 @@ if(!empty($opsConfig['enabled'])){
 		$assignmentEvent->execute([$managerAssignmentId]);
 		$integration->enqueueProjectionChange($pdo,(string)$opsConfig['application_key'],'project_assignment',$managerAssignmentId,'upsert',$assignmentEvent->fetch(PDO::FETCH_ASSOC)?:[]);
 	}
+}
+(new \App\Services\PortalProjectionMutationService())->queueProject($pdo, $project_id);
+$pdo->commit();
+} catch (Throwable $error) {
+	if ($pdo->inTransaction()) {
+		$pdo->rollBack();
+	}
+	throw $error;
 }
 header('Location: /?page=project/projects-details&id=' . $project_id . '&created=1');
 exit;

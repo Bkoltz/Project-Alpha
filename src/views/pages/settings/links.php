@@ -54,7 +54,7 @@ try {
 
 // Make CSRF token available to JavaScript
 $csrfToken = session_status() === PHP_SESSION_ACTIVE ? ($_SESSION['csrf'] ?? '') : '';
-if (session_status() !== PHP_SESSION_ACTIVE) {
+if (session_status() !== PHP_SESSION_ACTIVE && !defined('PA_SESSION_READ_ONLY')) {
     session_start();
 }
 if (empty($_SESSION['csrf'])) {
@@ -75,6 +75,44 @@ if ($dropboxCallbackBase !== '' && !preg_match('#^https?://#i', $dropboxCallback
     $dropboxCallbackBase = 'https://' . preg_replace('#/.*$#', '', $dropboxCallbackBase);
 }
 $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbox-oauth&action=callback';
+
+// The LTDS-managed provider delegates link provisioning to the external Ops
+// service. Project Alpha stores only this profile selection and opaque IDs; the
+// existing storage-provider cards below remain available to standalone installs.
+$managedDelivery = ['enabled' => false, 'configured' => false, 'ready' => false, 'guest_links_enabled' => false, 'intent_url' => '', 'profile_id' => 0, 'issues' => []];
+$managedProfiles = [];
+$managedScopes = [];
+$managedAudiences = [];
+$managedDeliveries = [];
+try {
+    $managedDelivery = (new \App\Services\ManagedDeliveryService())->config($pdo);
+    $managedProfiles = $pdo->query("SELECT id,display_label,application_key FROM portal_integration_profiles WHERE enabled=1 AND delivery_enabled=1 ORDER BY display_label,id LIMIT 100")->fetchAll(PDO::FETCH_ASSOC);
+    $entitySources = [
+        'project' => ['projects', "CONCAT('Project: ',name)", "status<>'cancelled'"],
+        'client' => ['clients', "CONCAT('Client: ',name)", 'archived=0 AND deleted_at IS NULL'],
+        'organization' => ['organizations', "CONCAT('Organization: ',name)", '1=1'],
+        'department' => ['organization_departments', "CONCAT('Department: ',name)", '1=1'],
+    ];
+    foreach ($entitySources as $type => [$table, $labelSql, $where]) {
+        $rows = $pdo->query("SELECT public_id,{$labelSql} AS label FROM {$table} WHERE {$where} AND public_id IS NOT NULL ORDER BY name LIMIT 100")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $row) {
+            if (count($managedScopes) < 250) $managedScopes[] = ['type' => $type, 'public_id' => (string)$row['public_id'], 'label' => (string)$row['label']];
+        }
+    }
+    $principalRows = $pdo->query("SELECT pp.public_id,GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS client_names FROM portal_principals pp LEFT JOIN portal_principal_clients ppc ON ppc.portal_principal_id=pp.id LEFT JOIN clients c ON c.id=ppc.client_id AND c.archived=0 AND c.deleted_at IS NULL WHERE pp.enabled=1 AND pp.revoked_at IS NULL GROUP BY pp.id,pp.public_id ORDER BY client_names,pp.public_id LIMIT 250")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($principalRows as $row) {
+        $names = trim((string)($row['client_names'] ?? ''));
+        $managedAudiences[] = ['type' => 'principal', 'public_id' => (string)$row['public_id'], 'label' => $names !== '' ? 'Portal account: ' . $names : 'Portal account ' . substr((string)$row['public_id'], 0, 12) . '…'];
+    }
+    $managedDeliveries = $pdo->query("SELECT provision.delivery_id,provision.scope_type,provision.scope_public_id,provision.access_mode,provision.attempts,provision.delivered_at,provision.dead_lettered_at,provision.revoked_at,provision.receipt_id,provision.created_at,revocation.delivery_id AS revocation_delivery_id,revocation.delivered_at AS revocation_delivered_at,revocation.dead_lettered_at AS revocation_dead_lettered_at FROM managed_delivery_intent_outbox provision LEFT JOIN managed_delivery_intent_outbox revocation ON revocation.target_delivery_id=provision.delivery_id AND revocation.intent_type='revoke' WHERE provision.intent_type='provision' ORDER BY provision.id DESC LIMIT 25")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    @error_log('[links] Managed delivery settings unavailable: ' . get_class($e));
+    $managedDelivery['issues'] = ['required managed-delivery migration or portal integration profile'];
+}
+$managedDeliveryId = static function (): string {
+    $hex = bin2hex(random_bytes(16));
+    return substr($hex, 0, 8) . '-' . substr($hex, 8, 4) . '-4' . substr($hex, 13, 3) . '-' . dechex((hexdec($hex[16]) & 3) | 8) . substr($hex, 17, 3) . '-' . substr($hex, 20);
+};
 ?>
 <div style="max-width:1000px">
     <!-- CSRF token for JavaScript -->
@@ -224,8 +262,44 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
         </div>
     </fieldset>
 
+    <!-- External managed delivery provider (no direct storage credentials). -->
+    <fieldset style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:16px;margin-bottom:20px">
+        <legend style="padding:0 8px;font-weight:700;color:#9a3412">LTDS Managed Delivery</legend>
+        <div style="display:grid;gap:14px">
+            <div class="pa-provider-note">Recommended for LTDS. Project Alpha sends a signed delivery intent to the Ops Worker; Ops owns R2, portal grants, guest links, and notifications. No R2 key or client-facing URL is stored here.</div>
+            <label style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" name="managed_delivery_enabled" value="1" <?php echo !empty($managedDelivery['enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+                <span><span class="font-600">Enable LTDS managed delivery</span><span class="pa-setting-note">Default off. Saving this does not send any delivery automatically.</span></span>
+            </label>
+            <label>
+                <div style="font-weight:600;margin-bottom:4px">Ops delivery-intent URL</div>
+                <input type="url" name="managed_delivery_intent_url" maxlength="500" value="<?php echo e((string)$managedDelivery['intent_url']); ?>" placeholder="https://incoming.ledgetopdroneservices.com/api/internal/project-alpha/delivery-intents" autocomplete="off" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px">
+                <div class="pa-setting-note">Must be the exact HTTPS <code>/api/internal/project-alpha/delivery-intents</code> route.</div>
+            </label>
+            <label>
+                <div style="font-weight:600;margin-bottom:4px">External Ops Access profile</div>
+                <select name="managed_delivery_profile_id" style="max-width:520px;width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
+                    <option value="0">Select an enabled delivery profile</option>
+                    <?php foreach ($managedProfiles as $profile): ?>
+                        <option value="<?php echo (int)$profile['id']; ?>" <?php echo (int)$managedDelivery['profile_id'] === (int)$profile['id'] ? 'selected' : ''; ?>><?php echo e((string)$profile['display_label'] . ' (' . (string)$profile['application_key'] . ')'); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="pa-setting-note">Uses that profile's encrypted HMAC and Access headers. This page never reveals or duplicates them.</div>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" name="managed_delivery_guest_links_enabled" value="1" <?php echo !empty($managedDelivery['guest_links_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+                <span><span class="font-600">Allow explicitly selected guest/public links</span><span class="pa-setting-note">Portal is always the default. A failed portal request never falls back to a public link.</span></span>
+            </label>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <button type="button" onclick="testManagedDelivery(event)" style="padding:8px 16px;border-radius:6px;border:1px solid #fdba74;background:#fff;font-size:13px;cursor:pointer">Test Ops Capability</button>
+                <span style="font-size:12px;color:var(--muted)"><?php echo !empty($managedDelivery['configured']) ? 'Connection settings complete.' : 'Connection settings incomplete.'; ?></span>
+            </div>
+        </div>
+    </fieldset>
+
     <!-- Provider Configurations -->
-    <h3 style="margin:0 0 12px 0;font-size:16px">Storage Providers</h3>
+    <h3 style="margin:0 0 12px 0;font-size:16px">Standalone Storage Providers</h3>
+    <div class="pa-provider-note" style="margin-bottom:12px">These generic direct-storage adapters remain available for standalone/open-source deployments. LTDS installations normally use Managed Delivery above instead of entering R2 credentials in Project Alpha.</div>
     
     <?php foreach ($providers as $provider): 
         $config = $linkConfigs[$provider] ?? null;
@@ -500,6 +574,30 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
         <?php endif; ?>
     </div>
     </form>
+
+    <fieldset style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:16px;margin-top:20px">
+        <legend style="padding:0 8px;font-weight:700;color:#9a3412">Generate / Send Delivery</legend>
+        <form method="POST" action="/?page=settings/managed-delivery-send" style="display:grid;gap:14px">
+            <input type="hidden" name="csrf" value="<?php echo e($csrfToken); ?>">
+            <input type="hidden" name="delivery_id" value="<?php echo e($managedDeliveryId()); ?>">
+            <div class="pa-provider-note">Manual only. This sends one intent to Ops and stores only its neutral receipt/status. It does not run when an invoice is finalized.</div>
+            <label><div style="font-weight:600;margin-bottom:4px">Content scope</div><select name="scope_ref" required style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd"><option value="">Select a project, client, department, or organization</option><?php foreach ($managedScopes as $item): ?><option value="<?php echo e($item['type'] . ':' . $item['public_id']); ?>"><?php echo e($item['label']); ?></option><?php endforeach; ?></select></label>
+            <label><div style="font-weight:600;margin-bottom:4px">Portal audience</div><select name="audience_ref" required style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd"><option value="">Select a Client Portal account</option><?php foreach ($managedAudiences as $item): ?><option value="<?php echo e($item['type'] . ':' . $item['public_id']); ?>"><?php echo e($item['label']); ?></option><?php endforeach; ?></select></label>
+            <label><div style="font-weight:600;margin-bottom:4px">Access mode</div><select name="access_mode" style="max-width:420px;width:100%;padding:8px;border-radius:6px;border:1px solid #ddd"><option value="portal" selected>Client Portal (recommended)</option><?php if (!empty($managedDelivery['guest_links_enabled'])): ?><option value="guest">Guest/public link (explicit)</option><?php endif; ?></select><div class="pa-setting-note">Portal access is the default and does not reveal whether a specific account exists.</div></label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><label><div style="font-weight:600;margin-bottom:4px">Label (optional)</div><input type="text" name="label" maxlength="160" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd"></label><label><div style="font-weight:600;margin-bottom:4px">Expires (optional)</div><input type="datetime-local" name="expires_at" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd"></label></div>
+            <div><button type="submit" <?php echo empty($managedDelivery['ready']) ? 'disabled' : ''; ?> style="padding:10px 20px;border:0;border-radius:8px;background:#ea580c;color:#fff;font-weight:700;cursor:pointer;opacity:<?php echo empty($managedDelivery['ready']) ? '.55' : '1'; ?>">Generate / Send Delivery</button>
+                <?php if (($_GET['delivery'] ?? '') === 'accepted'): ?><span style="margin-left:12px;color:#047857;font-weight:600">Accepted by Ops.</span><?php elseif (($_GET['delivery'] ?? '') === 'queued'): ?><span style="margin-left:12px;color:#92400e;font-weight:600">Queued for retry.</span><?php elseif (($_GET['delivery'] ?? '') === 'failed'): ?><span style="margin-left:12px;color:#b91c1c;font-weight:600">Could not send. The request was not changed to public access.</span><?php endif; ?>
+            </div>
+        </form>
+        <?php if ($managedDeliveries !== []): ?>
+            <div style="margin-top:20px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:7px;border-bottom:1px solid #fed7aa">Created</th><th style="text-align:left;padding:7px;border-bottom:1px solid #fed7aa">Scope</th><th style="text-align:left;padding:7px;border-bottom:1px solid #fed7aa">Mode</th><th style="text-align:left;padding:7px;border-bottom:1px solid #fed7aa">Status</th><th style="padding:7px;border-bottom:1px solid #fed7aa">Action</th></tr></thead><tbody>
+            <?php foreach ($managedDeliveries as $delivery): $status = !empty($delivery['revoked_at']) ? 'Revoked' : (!empty($delivery['revocation_dead_lettered_at']) ? 'Revocation failed' : (!empty($delivery['revocation_delivery_id']) && empty($delivery['revocation_delivered_at']) ? 'Revocation queued' : (!empty($delivery['delivered_at']) ? 'Accepted' : (!empty($delivery['dead_lettered_at']) ? 'Failed' : 'Queued')))); ?>
+                <tr><td style="padding:7px;border-bottom:1px solid #ffedd5"><?php echo e((string)$delivery['created_at']); ?></td><td style="padding:7px;border-bottom:1px solid #ffedd5"><?php echo e(ucfirst((string)$delivery['scope_type']) . ' ' . substr((string)$delivery['scope_public_id'], 0, 12)); ?>…</td><td style="padding:7px;border-bottom:1px solid #ffedd5"><?php echo e((string)$delivery['access_mode']); ?></td><td style="padding:7px;border-bottom:1px solid #ffedd5"><?php echo e($status); ?></td><td style="padding:7px;border-bottom:1px solid #ffedd5;text-align:center">
+                    <?php if ($status === 'Accepted'): ?><form method="POST" action="/?page=settings/managed-delivery-revoke" onsubmit="return confirm('Revoke this managed delivery in Ops?');"><input type="hidden" name="csrf" value="<?php echo e($csrfToken); ?>"><input type="hidden" name="target_delivery_id" value="<?php echo e((string)$delivery['delivery_id']); ?>"><input type="hidden" name="delivery_id" value="<?php echo e($managedDeliveryId()); ?>"><button type="submit" style="padding:5px 9px;border:1px solid #fca5a5;background:#fff;color:#b91c1c;border-radius:6px;cursor:pointer">Revoke</button></form><?php elseif ($status === 'Revocation failed'): ?><form method="POST" action="/?page=settings/managed-delivery-retry" onsubmit="return confirm('Retry this failed revocation in Ops?');"><input type="hidden" name="csrf" value="<?php echo e($csrfToken); ?>"><input type="hidden" name="delivery_id" value="<?php echo e((string)$delivery['revocation_delivery_id']); ?>"><button type="submit" style="padding:5px 9px;border:1px solid #fdba74;background:#fff;color:#9a3412;border-radius:6px;cursor:pointer">Retry revocation</button></form><?php else: ?>—<?php endif; ?>
+                </td></tr>
+            <?php endforeach; ?></tbody></table></div>
+        <?php endif; ?>
+    </fieldset>
 </div>
 
 <!-- toggleProviderFields / testConnection / runProviderScan are handled globally by settings-links.js (loaded from footer.php) -->

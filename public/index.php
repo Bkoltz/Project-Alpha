@@ -49,8 +49,30 @@ $moduleRoutes = [
     '/api/v1/catalog' => 'api/catalog-v1',
     '/api/v1/ops/snapshot' => 'api-ops-snapshot',
 ];
+require_once __DIR__ . '/../src/utils/portal_integration_security.php';
+$portalIntegrationMatch = [];
+if (preg_match('#^/api/v2/integrations/([a-z0-9][a-z0-9_-]{1,63})/(pricing-hints|draft-quotes)/?$#D', $requestPath, $portalIntegrationMatch) === 1) {
+    $isPricingIntegration = $portalIntegrationMatch[2] === 'pricing-hints';
+    $integrationFlag = $isPricingIntegration
+        ? 'APP_PORTAL_PRICING_PREVIEW_ENABLED'
+        : 'APP_PORTAL_DRAFT_QUOTES_ENABLED';
+    if (!portal_integration_flag_enabled($integrationFlag)) {
+        header('Content-Type: application/json; charset=UTF-8');
+        http_response_code(404);
+        echo json_encode(['code' => 'NOT_FOUND']);
+        exit;
+    }
+    $_GET['_integration_key'] = $portalIntegrationMatch[1];
+    $moduleRoutes[$requestPath] = $isPricingIntegration
+        ? 'api-integration-pricing-hints'
+        : 'api-integration-draft-quotes';
+}
 if ($syncContractV2Enabled) {
     $moduleRoutes['/api/v2/ops/snapshot'] = 'api-ops-snapshot-v2';
+}
+if (preg_match('#^/quotes/([a-f0-9]{32})/edit/?$#D', $requestPath, $quotePublicRoute) === 1) {
+    $_GET['_quote_public_id'] = $quotePublicRoute[1];
+    $moduleRoutes[$requestPath] = 'quote/quotes-edit-public';
 }
 if ($requestPath === '/api/v1/ops/snapshot') {
     // The legacy front controller reserves `page` for routing, while this
@@ -224,7 +246,18 @@ require_once __DIR__ . '/../src/config/bootstrap.php';
 // CORS for API endpoints. Note: stateless API routes use the 'api-' prefix
 // (e.g. api-clients-search); 'api-keys' is a UI page, not an API endpoint.
 // Slash-prefixed 'settings/' routes are AJAX/JSON handlers.
-$isApiEndpoint = (str_starts_with($page, 'api-') && !str_starts_with($page, 'api-keys'))
+$isServerOnlyIntegration = in_array($page, ['api-integration-pricing-hints','api-integration-draft-quotes'], true);
+if ($isServerOnlyIntegration && trim((string)($_SERVER['HTTP_ORIGIN'] ?? '')) !== '') {
+    require_once __DIR__.'/../src/utils/api_response.php';
+    try{(new App\Services\PortalIntegrationAuditService())->recordCommand($pdo,(string)($_GET['_integration_key']??''),0,$page==='api-integration-pricing-hints'?App\Services\PortalIntegrationContract::PRICING_SCOPE:App\Services\PortalIntegrationContract::DRAFT_SCOPE,'denied',api_request_id(),'BROWSER_ORIGIN_DENIED');}
+    catch(Throwable$error){error_log('[PortalIntegrationOrigin]['.api_request_id().'] audit='.get_class($error));header('Content-Type: application/json; charset=UTF-8');header('Cache-Control: no-store');http_response_code(503);echo json_encode(['code'=>'AUDIT_UNAVAILABLE']);exit;}
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+    http_response_code(403);
+    echo json_encode(['code' => 'BROWSER_ORIGIN_DENIED']);
+    exit;
+}
+$isApiEndpoint = !$isServerOnlyIntegration && (str_starts_with($page, 'api-') && !str_starts_with($page, 'api-keys'))
     || str_starts_with($page, 'settings/');
 if ($isApiEndpoint) {
     $allowedOrigins = getenv('ALLOWED_ORIGINS') ? explode(',', getenv('ALLOWED_ORIGINS')) : [];
@@ -253,10 +286,12 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
         echo json_encode(['error' => 'Unknown API endpoint']);
         exit;
     }
-    $apiKey = api_require_key([$requiredApiScope]);
+    $apiKey = $isServerOnlyIntegration
+        ? api_require_key([$requiredApiScope],false,['application_key'=>(string)($_GET['_integration_key']??''),'capability'=>(string)$requiredApiScope])
+        : api_require_key([$requiredApiScope]);
 
     // Map API endpoints
-    $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients', 'api-ops-snapshot', 'api-ops-snapshot-v2'];
+    $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients', 'api-ops-snapshot', 'api-ops-snapshot-v2', 'api-integration-pricing-hints', 'api-integration-draft-quotes'];
     if (in_array($page, $dashboardPages, true)) {
         $map = [
             'api-dashboard-summary'   => __DIR__ . '/../src/controllers/api/dashboard_summary.php',
@@ -267,6 +302,8 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
             'api-clients'               => __DIR__ . '/../src/controllers/api/clients_list.php',
             'api-ops-snapshot'           => __DIR__ . '/../src/controllers/api/ops_snapshot.php',
             'api-ops-snapshot-v2'        => __DIR__ . '/../src/controllers/api/ops_snapshot_v2.php',
+            'api-integration-pricing-hints' => __DIR__ . '/../src/controllers/api/integration_pricing_hints.php',
+            'api-integration-draft-quotes' => __DIR__ . '/../src/controllers/api/integration_draft_quotes.php',
         ];
         require_once $map[$page];
         exit;
@@ -832,6 +869,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'settings/document-customization-save',
         'settings/document-custom-fields-handler',
         'settings/link-test-connection',
+        'settings/managed-delivery-test',
+        'settings/managed-delivery-send',
+        'settings/managed-delivery-revoke',
+        'settings/managed-delivery-retry',
         'settings/stripe-net-backfill',
         'settings/stripe-import-payments',
         'settings/dropbox-oauth',
@@ -1013,7 +1054,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //   settings/link-test-connection - controller validates CSRF (csrf_validate)
     //   settings/link-resolver-run    - controller validates CSRF (csrf_validate)
     //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', '2fa-setup-action', '2fa-verify-action', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'legal/tos-accept'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', '2fa-setup-action', '2fa-verify-action', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'settings/managed-delivery-test', 'settings/managed-delivery-send', 'settings/managed-delivery-revoke', 'settings/managed-delivery-retry', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -1466,6 +1507,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings/link_test_connection.php';
         exit;
     }
+    if ($page === 'settings/managed-delivery-test') {
+        require_once __DIR__ . '/../src/controllers/settings/managed_delivery_test.php';
+        exit;
+    }
+    if ($page === 'settings/managed-delivery-send') {
+        require_once __DIR__ . '/../src/controllers/settings/managed_delivery_send.php';
+        exit;
+    }
+    if ($page === 'settings/managed-delivery-revoke') {
+        require_once __DIR__ . '/../src/controllers/settings/managed_delivery_revoke.php';
+        exit;
+    }
+    if ($page === 'settings/managed-delivery-retry') {
+        require_once __DIR__ . '/../src/controllers/settings/managed_delivery_retry.php';
+        exit;
+    }
     if ($page === 'settings/link-resolver-run') {
         require_once __DIR__ . '/../src/controllers/settings/link_resolver_run.php';
         exit;
@@ -1671,6 +1728,20 @@ if ($page === '2fa-setup') {
 
 //Load header
 require_once __DIR__ . '/../src/views/partials/header.php';
+
+// The database session handler serializes requests for one authenticated
+// browser session. Common auth/activity mutations are complete at this point,
+// so ordinary read-only views should not retain that lock while running their
+// page queries and rendering HTML. One-time flash consumers deliberately keep
+// the session open via SessionPolicy::canReleaseBeforeViewRendering().
+if (App\Security\SessionPolicy::canReleaseBeforeViewRendering(
+    (string)($_SERVER['REQUEST_METHOD'] ?? 'GET'),
+    $page,
+    $_SESSION
+) && session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+    define('PA_SESSION_READ_ONLY', true);
+}
 
 //Load page content
 $view = resolve_view_path($page);

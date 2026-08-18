@@ -105,9 +105,10 @@ final class OpsSnapshotApiTest extends TestCase
 
         $auth = (string)file_get_contents($this->root . '/src/utils/api_auth.php');
         self::assertStringContainsString("\$_SERVER['HTTP_AUTHORIZATION']", $auth);
-        self::assertStringContainsString("api_json_error(401, 'Missing API key')", $auth);
-        self::assertStringContainsString("api_json_error(401, 'Invalid API key')", $auth);
-        self::assertStringContainsString("api_json_error(403, 'Insufficient API scope: '", $auth);
+        self::assertStringContainsString("\$auditDeny(401,'AUTHENTICATION_DENIED','Missing API key')", $auth);
+        self::assertStringContainsString("\$auditDeny(401,'AUTHENTICATION_DENIED','Invalid API key')", $auth);
+        self::assertStringContainsString("\$auditDeny(403,'SCOPE_DENIED','Insufficient API scope: '", $auth);
+        self::assertStringContainsString('api_json_error($status,$message)', $auth);
         self::assertStringNotContainsString('CF-Access-', $auth);
     }
 

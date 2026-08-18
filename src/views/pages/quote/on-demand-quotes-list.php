@@ -16,7 +16,7 @@ $max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_G
 
 $where=['q.quote_type = "on_demand"'];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
-elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
+elseif($client_name!==''){ $where[]='(c.name LIKE ? OR o.name LIKE ?)'; $p[]='%'.$client_name.'%'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='q.status=?'; $p[] = $status; }
 if($start!==''){$where[]='q.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='q.created_at<=?';$p[]=$end.' 23:59:59';}
@@ -37,10 +37,11 @@ if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$sqlCount = 'SELECT COUNT(*) FROM quotes q LEFT JOIN clients c ON c.id=q.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
+$documentJoins = ' LEFT JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=COALESCE(q.organization_id,c.organization_id)';
+$sqlCount = 'SELECT COUNT(*) FROM quotes q'.$documentJoins.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT q.id, q.doc_number, q.project_code, q.status, q.total, q.start_date, q.end_date, q.price_per_invoice, q.created_at, c.name client, c.id AS client_id FROM quotes q LEFT JOIN clients c ON c.id=q.client_id";
+$sql="SELECT q.id, q.doc_number, q.project_code, q.status, q.total, q.start_date, q.end_date, q.price_per_invoice, q.created_at, c.name client, c.id AS client_id, o.name organization_name FROM quotes q{$documentJoins}";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY q.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -134,7 +135,8 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
         <tr style="text-align:left;border-bottom:1px solid #eee">
           <th style="padding:10px">No.</th>
           <th style="padding:10px">Project</th>
-          <th style="padding:10px">Client</th>
+          <th style="padding:10px">Customer</th>
+          <th style="padding:10px">Contact</th>
           <th style="padding:10px">Status</th>
           <th style="padding:10px">Price/Invoice</th>
           <th style="padding:10px">Start Date</th>
@@ -150,7 +152,8 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px"><a href="/?page=quote/quote-print&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">ODQ-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
-            <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
+            <td style="padding:10px"><?php echo htmlspecialchars($r['organization_name'] ?: $r['client']); ?></td>
+            <td style="padding:10px"><?php if (!empty($r['organization_name'])): ?><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a><?php endif; ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px">$<?php echo number_format((float)$r['price_per_invoice'], 2); ?></td>
             <td style="padding:10px"><?php echo $r['start_date'] ? date('M j, Y', strtotime($r['start_date'])) : '—'; ?></td>

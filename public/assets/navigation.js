@@ -140,16 +140,16 @@ window.ProjectAlpha.cleanupPage = runPageCleanups;
     Updates the navigation sidebar 
 */
 function updateActiveNavigation(page) {
-    // Remove active class from all nav links
-    document.querySelectorAll('.primary-nav a').forEach(link => {
-        link.classList.remove('active');
+    const normalizedPage = normalizePageName(page);
+    document.querySelectorAll('.side-nav [data-page]').forEach(link => {
+        const isActive = link.dataset.page === normalizedPage;
+        link.classList.toggle('active', isActive);
+        if (isActive) {
+            link.setAttribute('aria-current', 'page');
+        } else {
+            link.removeAttribute('aria-current');
+        }
     });
-
-    // Add active class to current page link
-    const activeLink = document.querySelector(`[data-page="${page}"]`);
-    if (activeLink) {
-        activeLink.classList.add('active');
-    }
 }
 
 // Build a canonical URL from a "page" string which may include additional

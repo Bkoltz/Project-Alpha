@@ -100,4 +100,35 @@
         alert('Scan failed: ' + err.message);
       });
   };
+
+  window.testManagedDelivery = function (event) {
+    var btn = event.currentTarget;
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Testing...';
+    var formData = new FormData();
+    formData.append('csrf', csrfToken());
+    fetch('/?page=settings/managed-delivery-test', { method: 'POST', body: formData, redirect: 'error' })
+      .then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok) throw new Error(data.error || 'Capability test failed');
+          return data;
+        });
+      })
+      .then(function (data) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        var guest = data.guestSupported ? 'available when explicitly selected' : 'disabled';
+        if (data.integrationEnabled === true) {
+          alert('Ops is ready. Portal delivery is supported; guest/public delivery is ' + guest + '.');
+        } else {
+          alert('Ops authenticated successfully, but delivery intents are currently disabled in Ops. Portal delivery is supported when enabled; guest/public delivery is ' + guest + '.');
+        }
+      })
+      .catch(function (error) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        alert('Ops capability test failed: ' + error.message);
+      });
+  };
 })();

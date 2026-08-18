@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../../utils/general_recipient_invoices.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
+require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 require_once __DIR__ . '/../../services/WorkTimeBillingContextService.php';
@@ -137,6 +138,8 @@ $total = max(0, $subtotal - $discount_amount + $tax);
 // Extract custom field values from POST
 $customFieldValues = extractCustomFieldValues($_POST);
 $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues) : null;
+$organizationId = $isGeneralRecipientInvoice ? null : resolve_client_context_org_id($pdo, $client_id, !empty($invoiceState['project_id']) ? (int)$invoiceState['project_id'] : null, request_client_org_id() ?: null);
+$showContactOnDocument = $organizationId && !empty($_POST['show_contact_on_document']) ? 1 : 0;
 
 $pdo->beginTransaction();
 try {
@@ -144,12 +147,12 @@ try {
     ? null
     : document_resolve_service_location($pdo,$client_id,!empty($invoiceState['project_id'])?(int)$invoiceState['project_id']:null,!empty($invoiceState['job_id'])?(int)$invoiceState['job_id']:null,$requestedServiceLocationId);
   $pdo->prepare('UPDATE invoices
-    SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?,
+    SET client_id=?, organization_id=?, show_contact_on_document=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?,
         subtotal=?, tax_amount=?, total=?, balance_due=GREATEST(0,?-COALESCE(amount_paid,0)),
         due_date=?, due_date_source=?, fulfillment_date=?, custom_fields=?, service_location_id=?
     WHERE id=?')
     ->execute([
-      $client_id, $billing_mode, $discount_type, $discount_value, $tax_percent,
+      $client_id, $organizationId, $showContactOnDocument, $billing_mode, $discount_type, $discount_value, $tax_percent,
       $subtotal, $tax, $total, $total,
       $normalizedDueDate, $dueDateSource, $fulfillment_date, $customFieldsJson, $serviceLocationId, $id,
     ]);

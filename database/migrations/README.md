@@ -36,3 +36,9 @@ docker compose run --rm migrate \
 ```
 
 Fix forward after a migration ships. MySQL DDL can auto-commit, so a failed change may require restoring the required pre-migration backup before deploying a corrected migration.
+
+Migration `0068_portal_contract_completeness.sql` is additive and leaves every
+portal capability disabled. It adds durable command correlation/outcomes,
+incremental projection checkpoints, per-scope manager recovery state, and
+optional private pricing-range policy fields. It also permits the distinct
+`viewer.share.create` entitlement value without creating or enabling any grant.

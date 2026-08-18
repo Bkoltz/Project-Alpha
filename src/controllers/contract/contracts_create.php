@@ -83,6 +83,7 @@ if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_i
     exit;
 }
 $__orgId = resolve_client_context_org_id($pdo, $client_id, $project_id, $__orgId);
+$showContactOnDocument = $__orgId && !empty($_POST['show_contact_on_document']) ? 1 : 0;
 
 $items=[];$subtotal=0.0;
 for($i=0;$i<count($item);$i++){
@@ -118,8 +119,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields, organization_id, created_by) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      ->execute([$client_id, $project_id, 'draft', $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson, $__orgId, $__creator]);
+  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields, organization_id, show_contact_on_document, created_by) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      ->execute([$client_id, $project_id, 'draft', $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson, $__orgId, $showContactOnDocument, $__creator]);
   $co_id = (int)$pdo->lastInsertId();
 
   // Assign Project ID and doc number (fallback if unavailable)
@@ -151,8 +152,8 @@ try{
 
   // Auto-create an invoice for this contract (invoice total is balance after deposit)
   $dueDate = null;
-  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, job_id, service_location_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$co_id, null, $client_id, $project_id, $jobId, $serviceLocationId, $billing_mode, $discount_type, $discount_value, $tax_percent, $invoice_subtotal, $invoice_total, 'draft', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
+  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, job_id, service_location_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, show_contact_on_document, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      ->execute([$co_id, null, $client_id, $project_id, $jobId, $serviceLocationId, $billing_mode, $discount_type, $discount_value, $tax_percent, $invoice_subtotal, $invoice_total, 'draft', $dueDate, $projectCode, $fulfillment_date, $__orgId, $showContactOnDocument, $__creator]);
   $invoice_id = (int)$pdo->lastInsertId();
   if ($project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {
     $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
