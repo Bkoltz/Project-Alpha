@@ -142,7 +142,7 @@ final class ProcessorImportTest extends TestCase
         self::assertStringContainsString('LEFT JOIN clients c ON c.id=p.client_id', $paymentsList);
         self::assertStringContainsString('Processor income', $paymentsList);
         self::assertStringContainsString('LEFT JOIN clients c ON c.id=p.client_id', $receipts);
-        self::assertStringContainsString('COALESCE(c.email,ppt.payer_email)', $receipts);
+        self::assertStringContainsString('COALESCE(NULLIF(c.email,""),NULLIF(ppt.payer_email,""))', $receipts);
         self::assertStringContainsString('empty($payment[\'invoice_id\']) && !empty($payment[\'processor_transaction_id\'])', $receipts);
         self::assertStringContainsString('LEFT JOIN clients c ON c.id=p.client_id', $publicReceipt);
     }

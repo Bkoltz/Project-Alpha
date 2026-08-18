@@ -36,8 +36,8 @@ final class DocumentRecipientPresentationTest extends TestCase
         $recipient = pa_document_recipient($this->organizationDocument());
 
         self::assertSame(['Company ABC', '456 Company Avenue', 'Appleton, WI 54911'], $recipient['lines']);
-        self::assertNull($recipient['email']);
-        self::assertNull($recipient['phone']);
+        self::assertSame('billing@company.example', $recipient['email']);
+        self::assertSame('9205550199', $recipient['phone']);
         self::assertTrue($recipient['organization_addressed']);
         self::assertFalse($recipient['contact_included']);
     }
@@ -53,6 +53,7 @@ final class DocumentRecipientPresentationTest extends TestCase
             $recipient['lines']
         );
         self::assertSame('kevin@example.test', $recipient['email']);
+        self::assertSame('9205550100', $recipient['phone']);
         self::assertTrue($recipient['contact_included']);
     }
 
@@ -100,11 +101,40 @@ final class DocumentRecipientPresentationTest extends TestCase
         self::assertStringContainsString("address_book_default_for_entity(\$pdo, 'client'", $source);
     }
 
+    public function testEveryDocumentRendererSelectsOrganizationGeneralContactChannels(): void
+    {
+        foreach ([
+            'src/views/pages/invoice/invoice-details.php',
+            'src/views/pages/quote/quote-details.php',
+            'src/views/pages/quote/long-term-quote-details.php',
+            'src/views/pages/contract/contract-details.php',
+            'src/views/pages/contract/long-term-contract-details.php',
+        ] as $path) {
+            $source = (string)file_get_contents($this->root . '/' . $path);
+            self::assertStringContainsString('o.general_email organization_email', $source, $path);
+            self::assertStringContainsString('o.general_phone organization_phone', $source, $path);
+            self::assertStringContainsString('pa_document_recipient(', $source, $path);
+        }
+    }
+
+    public function testProjectInvoiceSeparatesDisplayedCustomerFromDeliveryRecipients(): void
+    {
+        $source = (string)file_get_contents($this->root . '/src/views/pages/project/project-invoice-details.php');
+
+        self::assertStringContainsString('o.general_email AS organization_email', $source);
+        self::assertStringContainsString('o.general_phone AS organization_phone', $source);
+        self::assertStringContainsString('$billingRecipient = pa_document_recipient($pi);', $source);
+        self::assertStringContainsString('name="recipient_keys[]"', $source, 'Saved recipients remain available in the admin-only email panel.');
+        self::assertStringNotContainsString("htmlspecialchars(\$r['name'] ?? 'Client')", $source, 'Delivery recipients must not be printed in Bill To.');
+    }
+
     private function organizationDocument(): array
     {
         return [
             'organization_id' => 7,
             'organization_name' => 'Company ABC',
+            'organization_email' => 'billing@company.example',
+            'organization_phone' => '9205550199',
             'organization_address_line1' => '456 Company Avenue',
             'organization_city' => 'Appleton',
             'organization_state' => 'WI',

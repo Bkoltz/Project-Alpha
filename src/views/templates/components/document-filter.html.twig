@@ -101,7 +101,16 @@
 {% set advancedFilters = filters|slice(primaryCount) %}
 {% set storageKey = 'document-filter:' ~ page %}
 
-<form method="get" action="/" style="display:flex;flex-wrap:wrap;gap:12px 14px;align-items:flex-end;margin:16px 0 22px;position:relative">
+<form
+    method="get"
+    action="/"
+    style="display:flex;flex-wrap:wrap;gap:12px 14px;align-items:flex-end;margin:16px 0 22px;position:relative"
+    {% if live_filter_fields is defined and live_filter_fields|length > 0 %}
+        data-live-filter-id="{{ live_filter_id|default(page) }}"
+        data-live-filter-fields="{{ live_filter_fields|join(',') }}"
+        data-live-filter-debounce="{{ live_filter_debounce|default(300) }}"
+    {% endif %}
+>
     <input type="hidden" name="page" value="{{ page }}">
 
     {% for filterName, config in filters %}
@@ -149,6 +158,15 @@
                 {% endfor %}
             </div>
         </div>
+    {% endif %}
+
+    {% if live_filter_fields is defined and live_filter_fields|length > 0 %}
+        <div
+            data-live-filter-status
+            role="status"
+            aria-live="polite"
+            style="flex-basis:100%;min-height:18px;color:var(--muted);font-size:13px"
+        >{{ live_filter_help|default('Results update automatically as you type.') }}</div>
     {% endif %}
 </form>
 

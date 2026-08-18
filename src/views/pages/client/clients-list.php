@@ -82,7 +82,11 @@ function client_list_email_html(?string $email): string
               'placeholder' => 'Type to search...'
           ]
       ],
-      'columns' => 4
+      'columns' => 4,
+      'live_filter_id' => 'client-list',
+      'live_filter_fields' => ['q', 'org'],
+      'live_filter_debounce' => 300,
+      'live_filter_help' => 'Results update automatically as you type.'
   ];
   echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
@@ -201,3 +205,4 @@ function client_list_email_html(?string $email): string
     <?php endif; ?>
   </div>
 </section>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/client-list-live-filter.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

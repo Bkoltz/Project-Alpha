@@ -240,7 +240,7 @@ function migration_schema_health(PDO $pdo): void
     $requiredTables = [
         'users', 'organizations', 'roles', 'role_permissions',
         'clients', 'organization_departments', 'organization_department_contacts',
-        'projects', 'quotes', 'contracts', 'invoices', 'payments',
+        'projects', 'quotes', 'contracts', 'invoices', 'payments', 'project_invoice_recipients',
         'api_keys', 'client_onboarding_invitations', 'client_onboarding_submissions',
         'business_settings', 'employee_profiles', 'project_assignments',
         'work_time_entries', 'work_time_breaks', 'work_timer_locks', 'work_break_locks',
@@ -308,13 +308,14 @@ function migration_schema_health(PDO $pdo): void
 
     $requiredColumns = [
         'users' => ['email', 'password_hash', 'role', 'force_password_reset', 'auth_version', 'totp_reenroll_required'],
-        'organizations' => ['public_id', 'source_version'],
+        'organizations' => ['public_id', 'source_version', 'general_email', 'general_phone'],
         'organization_departments' => ['public_id', 'source_version'],
         'clients' => ['public_id', 'source_version', 'organization_id', 'created_by'],
         'projects' => ['public_id', 'source_version', 'completed_at', 'organization_id', 'department_id', 'business_unit_id', 'manager_user_id', 'created_by'],
         'portal_principals' => ['public_id', 'email_hint', 'display_name', 'source_version', 'enabled', 'authorization_version', 'revoked_at'],
         'portal_identity_bindings' => ['portal_principal_id', 'issuer', 'subject_hash', 'enabled', 'revoked_at'],
         'project_clients' => ['client_id', 'send_project_invoices', 'can_view_invoice_links'],
+        'project_invoice_recipients' => ['project_id', 'client_id', 'organization_id', 'manual_email', 'recipient_key', 'sort_order'],
         'entity_links' => ['include_on_invoices', 'resolver_mode', 'visibility_scope'],
         'contracts' => ['organization_id', 'show_contact_on_document', 'created_by', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision', 'signed_revision_number', 'signed_pdf_sha256'],
         'invoices' => ['organization_id', 'show_contact_on_document', 'created_by', 'collection_mode', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision', 'credit_due', 'credit_applied'],

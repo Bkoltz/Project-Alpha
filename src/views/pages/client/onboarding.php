@@ -223,7 +223,8 @@ $notifyOnSubmitDefault = !array_key_exists('notify_client_onboarding_submit', $a
                 $clientMatches = client_onboarding_find_client_matches($pdo, $proposal, $organizationId > 0 ? $organizationId : null);
                 $orgMatches = client_onboarding_find_organization_matches($pdo, (string)($proposal['organization_name'] ?? ''));
                 $modalId = 'onboardingReview' . (int)$invitation['submission_id'];
-                $reviewFields = ['name' => 'Name', 'email' => 'Email', 'phone' => 'Phone', 'address_line1' => 'Address', 'address_line2' => 'Apartment / Suite', 'city' => 'City', 'state' => 'State', 'postal_code' => 'Postal code', 'country' => 'Country', 'client_type' => 'Client type'];
+                $reviewFields = ['name' => 'Name', 'email' => 'Email', 'phone' => 'Phone', 'address_line1' => 'Address', 'address_line2' => 'Apartment / Suite / PO box', 'city' => 'City', 'state' => 'State', 'postal_code' => 'Postal code', 'country' => 'Country', 'client_type' => 'Client type'];
+                $proposalClientType = in_array((string)($proposal['client_type'] ?? ''), ['business', 'consumer'], true) ? (string)$proposal['client_type'] : 'consumer';
               ?>
               <button type="button" class="btn btn-sm btn-primary" data-open-onboarding-review="<?php echo htmlspecialchars($modalId); ?>">Review</button>
               <div id="<?php echo htmlspecialchars($modalId); ?>" class="onboarding-review-modal" aria-hidden="true">
@@ -275,12 +276,28 @@ $notifyOnSubmitDefault = !array_key_exists('notify_client_onboarding_submit', $a
                     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                     <input type="hidden" name="submission_id" value="<?php echo (int)$invitation['submission_id']; ?>">
                     <div class="onboarding-review-box">
+                      <strong>Review and edit submitted values</strong>
+                      <div class="onboarding-review-fields" style="margin-top:10px">
+                        <label><span class="label-muted">Client type</span><select class="input" name="review_data[client_type]"><option value="consumer" <?php echo $proposalClientType === 'consumer' ? 'selected' : ''; ?>>Individual</option><option value="business" <?php echo $proposalClientType === 'business' ? 'selected' : ''; ?>>Organization</option></select></label>
+                        <label><span class="label-muted">Contact name</span><input required class="input" name="review_data[name]" maxlength="150" value="<?php echo htmlspecialchars((string)($proposal['name'] ?? '')); ?>"></label>
+                        <label><span class="label-muted">Contact email</span><input type="email" class="input" name="review_data[email]" maxlength="255" value="<?php echo htmlspecialchars((string)($proposal['email'] ?? '')); ?>"></label>
+                        <label><span class="label-muted">Contact phone</span><input class="input" name="review_data[phone]" maxlength="50" value="<?php echo htmlspecialchars((string)($proposal['phone'] ?? '')); ?>"></label>
+                        <label><span class="label-muted">Organization name</span><input class="input" name="review_data[organization_name]" maxlength="150" value="<?php echo htmlspecialchars((string)($proposal['organization_name'] ?? '')); ?>"></label>
+                        <label><span class="label-muted">General company email</span><input type="email" class="input" name="review_data[organization_email]" maxlength="255" value="<?php echo htmlspecialchars((string)($proposal['organization_email'] ?? '')); ?>"></label>
+                        <label><span class="label-muted">General company phone</span><input class="input" name="review_data[organization_phone]" maxlength="50" value="<?php echo htmlspecialchars((string)($proposal['organization_phone'] ?? '')); ?>"></label>
+                        <?php foreach (['address_line1' => 'Address', 'address_line2' => 'Apartment / Suite / PO box', 'city' => 'City', 'state' => 'State', 'postal_code' => 'Postal code', 'country' => 'Country'] as $field => $label): ?>
+                          <label><span class="label-muted"><?php echo htmlspecialchars($label); ?></span><input class="input" name="review_data[<?php echo htmlspecialchars($field); ?>]" maxlength="<?php echo in_array($field, ['address_line1','address_line2'], true) ? '255' : '100'; ?>" value="<?php echo htmlspecialchars((string)($proposal[$field] ?? '')); ?>"></label>
+                        <?php endforeach; ?>
+                      </div>
+                      <div class="muted" style="font-size:12px;margin-top:8px">For organization onboarding, this one reviewed address is always saved to both the organization and its contact.</div>
+                    </div>
+                    <div class="onboarding-review-box">
                       <strong>Organization decision</strong>
                       <div style="display:grid;gap:8px;margin-top:8px;font-size:13px">
                         <?php if (!empty($invitation['target_organization_name'])): ?>
                           <label><input type="radio" name="organization_resolution" value="" checked> Keep invited organization "<?php echo htmlspecialchars((string)$invitation['target_organization_name']); ?>"</label>
-                        <?php else: ?>
-                          <label><input type="radio" name="organization_resolution" value="" checked> Leave organization blank (do not assign one)</label>
+                        <?php elseif ($proposalClientType === 'consumer'): ?>
+                          <label><input type="radio" name="organization_resolution" value="" checked> Keep this as an individual client</label>
                         <?php endif; ?>
                         <?php if ($orgMatches): ?>
                           <label>Match typed organization to
@@ -291,7 +308,7 @@ $notifyOnSubmitDefault = !array_key_exists('notify_client_onboarding_submit', $a
                           </label>
                           <label><input type="radio" name="organization_resolution" value="match"> Use selected organization match</label>
                         <?php endif; ?>
-                        <?php if (!empty($proposal['organization_name'])): ?><label><input type="radio" name="organization_resolution" value="create"> Create new organization "<?php echo htmlspecialchars((string)$proposal['organization_name']); ?>"</label><?php endif; ?>
+                        <?php if (!empty($proposal['organization_name'])): ?><label><input type="radio" name="organization_resolution" value="create" <?php echo empty($invitation['target_organization_name']) && $proposalClientType === 'business' ? 'checked' : ''; ?>> Create or update organization from the reviewed values</label><?php endif; ?>
                       </div>
                     </div>
 
@@ -314,7 +331,7 @@ $notifyOnSubmitDefault = !array_key_exists('notify_client_onboarding_submit', $a
                       <?php endif; ?>
                       <label style="display:block;margin-top:10px"><span class="label-muted">Review notes</span><textarea class="input" name="review_notes" rows="2"></textarea></label>
                       <div class="onboarding-review-actions">
-                        <button class="btn btn-danger" name="decision" value="reject">Reject</button>
+                        <button class="btn btn-danger" name="decision" value="reject" formnovalidate>Reject</button>
                         <button class="btn btn-primary" name="decision" value="approve" onclick="this.form.resolution.value='create'">Approve as New Client</button>
                         <?php if ($clientMatches): ?>
                           <button class="btn" name="decision" value="approve" onclick="this.form.resolution.value='keep_existing'">Keep Existing Client</button>

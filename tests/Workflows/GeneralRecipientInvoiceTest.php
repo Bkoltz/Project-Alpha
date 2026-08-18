@@ -71,6 +71,19 @@ final class GeneralRecipientInvoiceTest extends TestCase
         self::assertStringContainsString('pa_document_recipient($inv, $isGeneralRecipientInvoice)', $pdf);
     }
 
+    public function testNormalCreateFlowDoesNotExposeAnonymousRecipientMode(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $view = (string)file_get_contents($root . '/src/views/pages/invoice/invoices-create.php');
+        $controller = (string)file_get_contents($root . '/src/controllers/invoice/invoices_create.php');
+
+        self::assertStringNotContainsString('id="generalRecipientInvoice"', $view);
+        self::assertStringNotContainsString('General-recipient invoice', $view);
+        self::assertStringNotContainsString("getElementById('generalRecipientInvoice')", $view);
+        self::assertStringContainsString('recipient_presentation_mode', $controller);
+        self::assertStringContainsString('PA_GENERAL_RECIPIENT_MODE', $controller);
+    }
+
     public function testFinalizeAndLinkFlowIsAtomicAndIdempotent(): void
     {
         $root = dirname(__DIR__, 2);
@@ -109,14 +122,16 @@ final class GeneralRecipientInvoiceTest extends TestCase
         self::assertFileDoesNotExist($root . '/database/migrations/0060_client_portal_foundation.sql');
     }
 
-    public function testCreateScreenRestoresNormalProjectSelectionAndNeverOffersEmailForGeneralMode(): void
+    public function testCreateScreenUsesOnlyNormalProjectSelectionWhileHistoricalGeneralInvoicesRemainSupported(): void
     {
         $root = dirname(__DIR__, 2);
         $createView = (string)file_get_contents($root . '/src/views/pages/invoice/invoices-create.php');
+        $createScript = (string)file_get_contents($root . '/public/assets/js/invoices-create-logic.js');
         $detailView = (string)file_get_contents($root . '/src/views/pages/invoice/invoice-details.php');
 
-        self::assertStringContainsString('loadProjectsForClientInv(clientId.value)', $createView);
-        self::assertStringContainsString('Finalize &amp; Create Link', $createView);
+        self::assertStringContainsString('function loadProjectsForClientInv(clientId)', $createScript);
+        self::assertStringNotContainsString('generalRecipientInvoice', $createView);
+        self::assertStringNotContainsString('Finalize &amp; Create Link', $createView);
         self::assertStringContainsString('Finalize &amp; Create Link', $detailView);
         self::assertStringContainsString('!$isGeneralRecipientInvoice', $detailView);
         self::assertStringContainsString('flash_general_recipient_link', $detailView);
@@ -128,7 +143,7 @@ final class GeneralRecipientInvoiceTest extends TestCase
             'if (!$isGeneralRecipientInvoice)',
             substr($detailView, max(0, (int)$contentLinkOffset - 160), 160)
         );
-        self::assertStringContainsString("querySelectorAll('input[name^=\"time_entry_ids[\"], input[name^=\"mileage_allocation_ids[\"]')", $createView);
+        self::assertStringNotContainsString("querySelectorAll('input[name^=\"time_entry_ids[\"], input[name^=\"mileage_allocation_ids[\"]')", $createView);
     }
 
     public function testGeneralRecipientPaymentsCannotCreateASeparateClientReceipt(): void

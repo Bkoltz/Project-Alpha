@@ -50,8 +50,12 @@ function pa_document_recipient(array $document, bool $generalRecipient = false):
 
     return [
         'lines' => $lines,
-        'phone' => $contactIncluded ? pa_document_recipient_value($document, 'client_phone') : null,
-        'email' => $contactIncluded ? pa_document_recipient_value($document, 'client_email') : null,
+        'phone' => $contactIncluded
+            ? pa_document_recipient_value($document, 'client_phone')
+            : pa_document_recipient_value($document, 'organization_phone'),
+        'email' => $contactIncluded
+            ? pa_document_recipient_value($document, 'client_email')
+            : pa_document_recipient_value($document, 'organization_email'),
         'organization_addressed' => $organizationAddressed,
         'contact_included' => $contactIncluded,
     ];

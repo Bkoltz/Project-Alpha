@@ -26,9 +26,16 @@ if ($period === 'previous') {
     $end = date('Y-m-d');
 }
 
-$projectInvoiceId = project_invoice_create_for_period($pdo, $projectId, $start, $end, $appConfig, $sendEmail, $sendEmail);
+$projectInvoiceId = project_invoice_create_for_period($pdo, $projectId, $start, $end, $appConfig, false, false);
 if ($projectInvoiceId) {
-    header('Location: /?page=project/project-invoice-details&id=' . $projectInvoiceId . '&generated=1' . ($sendEmail ? '&emailed=1' : ''));
+    $emailResult = '';
+    if ($sendEmail) {
+        $sent = project_invoice_send_email($pdo, $projectInvoiceId, $appConfig);
+        $emailResult = $sent > 0
+            ? '&emailed=1'
+            : '&email_err=' . urlencode('No project invoice emails were sent. Check the saved recipients and delivery status.');
+    }
+    header('Location: /?page=project/project-invoice-details&id=' . $projectInvoiceId . '&generated=1' . $emailResult);
     exit;
 }
 

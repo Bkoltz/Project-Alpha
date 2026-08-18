@@ -2,6 +2,7 @@
     'use strict';
 
     var clients = [];
+    var invoiceClients = [];
     var selected = {
         project: new Set(),
         invoice: new Set()
@@ -22,9 +23,10 @@
         return client.name + (client.email ? ' - ' + client.email : '');
     }
 
-    function clientById(id) {
+    function clientById(id, type) {
         id = String(id);
-        return clients.find(function (client) { return String(client.id) === id; }) || null;
+        var source = type === 'invoice' ? invoiceClients : clients;
+        return source.find(function (client) { return String(client.id) === id; }) || null;
     }
 
     function pickerName(type) {
@@ -50,7 +52,7 @@
     function renderPicker(type) {
         var picker = getPicker(type);
         if (!picker) return;
-        var ids = Array.from(selected[type]).filter(function (id) { return clientById(id); });
+        var ids = Array.from(selected[type]).filter(function (id) { return clientById(id, type); });
         selected[type] = new Set(ids);
 
         picker.selected.innerHTML = '';
@@ -59,7 +61,7 @@
             picker.selected.innerHTML = '<div class="project-client-picker__empty">' + escapeHtml(picker.root.dataset.emptyText || pickerEmpty(type)) + '</div>';
         }
         ids.forEach(function (id) {
-            var client = clientById(id);
+            var client = clientById(id, type);
             var row = document.createElement('div');
             row.className = 'project-client-picker__item';
             row.innerHTML =
@@ -81,10 +83,6 @@
             button.addEventListener('click', function () {
                 var id = String(button.getAttribute('data-remove-id') || '');
                 selected[type].delete(id);
-                if (type === 'project') {
-                    selected.invoice.delete(id);
-                    renderPicker('invoice');
-                }
                 renderPicker(type);
             });
         });
@@ -99,7 +97,8 @@
             picker.suggestions.style.display = 'none';
             return;
         }
-        var list = clients.filter(function (client) {
+        var source = type === 'invoice' ? invoiceClients : clients;
+        var list = source.filter(function (client) {
             if (selected[type].has(String(client.id))) return false;
             var haystack = (client.name + ' ' + (client.email || '')).toLowerCase();
             return haystack.indexOf(query) !== -1;
@@ -125,12 +124,8 @@
 
     function addClient(type, id) {
         id = String(id);
-        if (!clientById(id)) return;
+        if (!clientById(id, type)) return;
         selected[type].add(id);
-        if (type === 'invoice') {
-            selected.project.add(id);
-            renderPicker('project');
-        }
         renderPicker(type);
     }
 
@@ -138,22 +133,25 @@
         ['project', 'invoice'].forEach(function (type) {
             var picker = getPicker(type);
             if (!picker || !picker.search) return;
-            picker.search.disabled = !enabled;
-            picker.search.placeholder = enabled ? 'Type a client name or email...' : 'Select an organization first';
-            if (!enabled) {
+            var pickerEnabled = type === 'invoice' ? true : enabled;
+            picker.search.disabled = !pickerEnabled;
+            picker.search.placeholder = pickerEnabled ? 'Type a client name or email...' : 'Select an organization first';
+            if (!pickerEnabled) {
                 picker.suggestions.style.display = 'none';
             }
         });
     }
 
     function pruneSelections() {
-        ['project', 'invoice'].forEach(function (type) {
-            selected[type] = new Set(Array.from(selected[type]).filter(function (id) { return clientById(id); }));
-        });
+        selected.project = new Set(Array.from(selected.project).filter(function (id) { return clientById(id, 'project'); }));
+        selected.invoice = new Set(Array.from(selected.invoice).filter(function (id) { return clientById(id, 'invoice'); }));
     }
 
     function applyDepartmentDefaults() {
         clients.forEach(function (client) {
+            if (!invoiceClients.some(function (candidate) { return candidate.id === client.id; })) {
+                invoiceClients.push(client);
+            }
             if (Number(client.is_primary_department_contact || 0) === 1) {
                 selected.invoice.add(String(client.id));
                 selected.project.add(String(client.id));
@@ -166,14 +164,27 @@
         renderPicker('invoice');
     }
 
+    function renderOrganizationRecipient(organization) {
+        var checkbox = byId('projectOrganizationInvoiceEmail');
+        var help = byId('projectOrganizationInvoiceEmailHelp');
+        if (!checkbox || !help) return;
+        var email = organization && organization.email ? String(organization.email) : '';
+        var name = organization && organization.name ? String(organization.name) : 'Organization';
+        checkbox.disabled = !email;
+        if (!email) checkbox.checked = false;
+        help.textContent = email
+            ? name + ' company email: ' + email + '. Select explicitly to include it.'
+            : 'This organization has no company email saved.';
+    }
+
     function loadClientOptions() {
         var orgId = byId('organization_id_create') ? byId('organization_id_create').value : '';
         var departmentId = byId('projectDepartmentSelect') ? byId('projectDepartmentSelect').value : '';
         if (!orgId) {
             clients = [];
             selected.project.clear();
-            selected.invoice.clear();
             setPickerEnabled(false);
+            renderOrganizationRecipient(null);
             renderAll();
             return;
         }
@@ -182,6 +193,7 @@
         if (orgChanged) {
             selected.project.clear();
             selected.invoice.clear();
+            invoiceClients = [];
         }
         fetch('/?page=project/client-options&organization_id=' + encodeURIComponent(orgId) + '&department_id=' + encodeURIComponent(departmentId), {
             credentials: 'same-origin'
@@ -194,6 +206,8 @@
                     client.is_primary_department_contact = Number(client.is_primary_department_contact || 0);
                     return client;
                 }) : [];
+                invoiceClients = clients.slice();
+                renderOrganizationRecipient(data.organization_recipient || null);
                 pruneSelections();
                 applyDepartmentDefaults();
                 setPickerEnabled(true);
@@ -201,6 +215,7 @@
             })
             .catch(function () {
                 clients = [];
+                renderOrganizationRecipient(null);
                 setPickerEnabled(false);
                 renderAll();
             });
@@ -215,6 +230,20 @@
             initializedNewPicker = true;
             picker.search.addEventListener('input', function () {
                 renderSuggestions(type, picker.search.value);
+                if (type === 'invoice' && picker.search.value.trim().length >= 2) {
+                    fetch('/?page=clients-search&term=' + encodeURIComponent(picker.search.value.trim()), { credentials: 'same-origin' })
+                        .then(function (response) { return response.ok ? response.json() : []; })
+                        .then(function (rows) {
+                            (Array.isArray(rows) ? rows : []).forEach(function (client) {
+                                client.id = String(client.id);
+                                if (!invoiceClients.some(function (candidate) { return candidate.id === client.id; })) {
+                                    invoiceClients.push(client);
+                                }
+                            });
+                            renderSuggestions(type, picker.search.value);
+                        })
+                        .catch(function () { /* keep local organization matches */ });
+                }
             });
             picker.search.addEventListener('focus', function () {
                 renderSuggestions(type, picker.search.value);
@@ -229,6 +258,7 @@
         });
         if (initializedNewPicker) {
             clients = [];
+            invoiceClients = [];
             selected.project.clear();
             selected.invoice.clear();
             lastOrgId = '';

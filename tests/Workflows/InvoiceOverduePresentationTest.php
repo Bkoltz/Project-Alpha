@@ -21,7 +21,9 @@ final class InvoiceOverduePresentationTest extends TestCase
         self::assertFalse(invoice_is_past_due(['status' => 'draft', 'due_date' => null], $this->today));
         self::assertFalse(invoice_is_past_due(['status' => 'unpaid', 'due_date' => null], $this->today));
         self::assertFalse(invoice_is_past_due(['status' => 'unpaid', 'due_date' => '2026-08-12'], $this->today));
+        self::assertFalse(invoice_is_past_due(['status' => 'unpaid', 'due_date' => '2026-08-11', 'collection_mode' => 'project_aggregate'], $this->today));
         self::assertTrue(invoice_is_past_due(['status' => 'sent', 'due_date' => '2026-08-11'], $this->today));
+        self::assertTrue(invoice_is_past_due(['status' => 'sent', 'due_date' => '2026-08-11', 'collection_mode' => 'direct'], $this->today));
         self::assertTrue(invoice_is_past_due(['status' => 'partial', 'due_date' => '2026-08-11'], $this->today));
     }
 
@@ -36,5 +38,11 @@ final class InvoiceOverduePresentationTest extends TestCase
         self::assertStringNotContainsString("strtotime('+'.\$netDays.' days', strtotime(\$r['created_at']))", $regular);
         self::assertStringContainsString('invoice_is_past_due($r)', $onDemand);
         self::assertStringContainsString('invoice_is_past_due($r)', $contractOnDemand);
+
+        $dashboard = (string) file_get_contents($root . '/src/views/pages/home.php');
+        $autoCharge = (string) file_get_contents($root . '/src/cron/auto_charge_recurring.php');
+        self::assertStringContainsString("COALESCE(collection_mode, 'direct') = 'direct'", $dashboard);
+        self::assertStringContainsString("i.collection_mode='direct'", $regular);
+        self::assertStringContainsString("COALESCE(i.collection_mode, 'direct') = 'direct'", $autoCharge);
     }
 }

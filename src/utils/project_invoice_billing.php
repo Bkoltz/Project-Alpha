@@ -10,7 +10,7 @@ require_once __DIR__ . '/project_invoice_notifications.php';
 function project_invoice_table_has_column(PDO $pdo, string $table, string $column): bool
 {
     static $cache = [];
-    $key = $table . ':' . $column;
+    $key = spl_object_id($pdo) . ':' . $table . ':' . $column;
     if (isset($cache[$key])) {
         return $cache[$key];
     }
@@ -18,6 +18,15 @@ function project_invoice_table_has_column(PDO $pdo, string $table, string $colum
         return $cache[$key] = false;
     }
     try {
+        if ((string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+            $rows = $pdo->query('PRAGMA table_info("' . $table . '")')->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $row) {
+                if ((string)($row['name'] ?? '') === $column) {
+                    return $cache[$key] = true;
+                }
+            }
+            return $cache[$key] = false;
+        }
         $stmt = $pdo->prepare('
             SELECT 1 FROM information_schema.columns
             WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
@@ -104,9 +113,138 @@ function project_invoice_sync_clients(PDO $pdo, int $projectId, ?int $primaryCli
     }
 }
 
+function project_invoice_normalize_manual_recipient_emails($value): array
+{
+    $values = is_array($value) ? $value : preg_split('/[\s,;]+/', (string)$value, -1, PREG_SPLIT_NO_EMPTY);
+    $emails = [];
+    foreach ($values ?: [] as $candidate) {
+        $email = strtolower(trim((string)$candidate));
+        if ($email === '') {
+            continue;
+        }
+        if (strlen($email) > 254 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new InvalidArgumentException('Enter valid manual project invoice recipient email addresses.');
+        }
+        $emails[$email] = $email;
+    }
+    return array_values($emails);
+}
+
+function project_invoice_has_deliverable_recipient_config(
+    PDO $pdo,
+    array $clientIds,
+    array $manualEmails = [],
+    array $organizationIds = []
+): bool {
+    if (project_invoice_normalize_manual_recipient_emails($manualEmails)) {
+        return true;
+    }
+
+    $clientIds = array_values(array_unique(array_filter(array_map('intval', $clientIds), static fn($id) => $id > 0)));
+    if ($clientIds) {
+        $placeholders = implode(',', array_fill(0, count($clientIds), '?'));
+        $stmt = $pdo->prepare("SELECT email FROM clients WHERE archived=0 AND id IN ({$placeholders})");
+        $stmt->execute($clientIds);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $email) {
+            if (filter_var(trim((string)$email), FILTER_VALIDATE_EMAIL)) {
+                return true;
+            }
+        }
+    }
+
+    $organizationIds = array_values(array_unique(array_filter(array_map('intval', $organizationIds), static fn($id) => $id > 0)));
+    if ($organizationIds) {
+        $placeholders = implode(',', array_fill(0, count($organizationIds), '?'));
+        $stmt = $pdo->prepare("SELECT general_email FROM organizations WHERE id IN ({$placeholders})");
+        $stmt->execute($organizationIds);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $email) {
+            if (filter_var(trim((string)$email), FILTER_VALIDATE_EMAIL)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function project_invoice_has_saved_deliverable_recipient(PDO $pdo, int $projectId): bool
+{
+    foreach (project_invoice_saved_recipients($pdo, $projectId) as $recipient) {
+        if (filter_var(trim((string)($recipient['email'] ?? '')), FILTER_VALIDATE_EMAIL)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function project_invoice_sync_recipients(PDO $pdo, int $projectId, array $clientIds, array $manualEmails = [], array $organizationIds = []): void
+{
+    if (!project_invoice_table_has_column($pdo, 'project_invoice_recipients', 'recipient_key')) {
+        return;
+    }
+
+    $clientIds = array_values(array_unique(array_filter(array_map('intval', $clientIds), static fn($id) => $id > 0)));
+    $organizationIds = array_values(array_unique(array_filter(array_map('intval', $organizationIds), static fn($id) => $id > 0)));
+    $manualEmails = project_invoice_normalize_manual_recipient_emails($manualEmails);
+    $pdo->prepare('DELETE FROM project_invoice_recipients WHERE project_id = ?')->execute([$projectId]);
+    $insert = $pdo->prepare(
+        'INSERT INTO project_invoice_recipients
+            (project_id, client_id, organization_id, manual_email, recipient_key, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    $sortOrder = 0;
+    foreach ($clientIds as $clientId) {
+        $insert->execute([$projectId, $clientId, null, null, 'client:' . $clientId, $sortOrder++]);
+    }
+    foreach ($organizationIds as $organizationId) {
+        $insert->execute([$projectId, null, $organizationId, null, 'organization:' . $organizationId, $sortOrder++]);
+    }
+    foreach ($manualEmails as $email) {
+        $insert->execute([$projectId, null, null, $email, 'email:' . $email, $sortOrder++]);
+    }
+}
+
+function project_invoice_saved_recipients(PDO $pdo, int $projectId): array
+{
+    if (!project_invoice_table_has_column($pdo, 'project_invoice_recipients', 'recipient_key')) {
+        return [];
+    }
+    $organizationLabel = (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
+        ? 'o.name || " (Company email)"'
+        : 'CONCAT(o.name, " (Company email)")';
+    $stmt = $pdo->prepare(
+        'SELECT pir.client_id AS id,
+                pir.organization_id,
+                pir.recipient_key,
+                CASE
+                    WHEN pir.organization_id IS NOT NULL THEN ' . $organizationLabel . '
+                    ELSE COALESCE(NULLIF(c.name, ""), NULLIF(pir.manual_name, ""), pir.manual_email)
+                END AS name,
+                CASE
+                    WHEN pir.organization_id IS NOT NULL THEN NULLIF(o.general_email, "")
+                    ELSE COALESCE(NULLIF(c.email, ""), pir.manual_email)
+                END AS email,
+                pir.manual_email
+         FROM project_invoice_recipients pir
+         LEFT JOIN clients c ON c.id = pir.client_id AND c.archived = 0
+         LEFT JOIN organizations o ON o.id = pir.organization_id
+         WHERE pir.project_id = ?
+         ORDER BY pir.sort_order ASC, pir.id ASC'
+    );
+    $stmt->execute([$projectId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 function project_invoice_client_recipients(PDO $pdo, int $projectInvoiceId, ?array $clientIds = null): array
 {
     $selectedClientIds = $clientIds === null ? null : array_values(array_unique(array_filter(array_map('intval', $clientIds), static fn($id) => $id > 0)));
+    if ($selectedClientIds === null && project_invoice_table_has_column($pdo, 'project_invoice_recipients', 'recipient_key')) {
+        $projectIdStmt = $pdo->prepare('SELECT project_id FROM project_invoices WHERE id = ?');
+        $projectIdStmt->execute([$projectInvoiceId]);
+        $projectId = (int)($projectIdStmt->fetchColumn() ?: 0);
+        return $projectId > 0 ? project_invoice_saved_recipients($pdo, $projectId) : [];
+    }
+
     $params = [$projectInvoiceId];
     $sendFilter = project_invoice_table_has_column($pdo, 'project_clients', 'send_project_invoices')
         ? 'AND pc.send_project_invoices = 1'
@@ -154,14 +292,6 @@ function project_invoice_client_recipients(PDO $pdo, int $projectInvoiceId, ?arr
 function project_invoice_create_public_link(PDO $pdo, int $projectInvoiceId, array $appConfig): string
 {
     $token = bin2hex(random_bytes(16));
-    try {
-        $pdo->exec('ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL');
-    } catch (Throwable $e) {
-    }
-    try {
-        $pdo->exec('ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0');
-    } catch (Throwable $e) {
-    }
     $stmt = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, expire_when_paid, revoked) VALUES ("project_invoice", ?, ?, NULL, 1, 0)');
     $stmt->execute([$projectInvoiceId, $token]);
     return $token;
@@ -221,7 +351,10 @@ function project_invoice_refresh_status(PDO $pdo, int $projectInvoiceId): void
 function project_invoice_create_for_period(PDO $pdo, int $projectId, string $periodStart, string $periodEnd, array $appConfig, bool $sendEmail = false, bool $finalize = false): ?int
 {
     $createdBy = (int)($_SESSION['user']['id'] ?? 0) ?: null;
-    $shouldFinalize = $sendEmail || $finalize;
+    // Email delivery finalizes only after a usable recipient is confirmed by
+    // project_invoice_send_email(). This prevents an undeliverable monthly
+    // statement from silently entering receivables aging.
+    $shouldFinalize = $finalize;
 
     try {
         $pdo->beginTransaction();
@@ -263,6 +396,7 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
             LEFT JOIN project_invoice_items pii ON pii.invoice_id = i.id
             WHERE i.project_id = ?
               AND i.status IN ("unpaid", "partial")
+              AND COALESCE(i.collection_mode, "direct") = "project_aggregate"
               AND DATE(COALESCE(i.fulfillment_date, i.document_date, i.created_at)) BETWEEN ? AND ?
               AND pii.id IS NULL
             ORDER BY invoice_date ASC, i.doc_number ASC, i.id ASC
@@ -358,7 +492,7 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
     }
 }
 
-function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appConfig, ?array $clientIds = null, bool $allowResend = false): int
+function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appConfig, ?array $clientIds = null, bool $allowResend = false, ?array $recipientKeys = null): int
 {
     $stmt = $pdo->prepare('SELECT status,finalized_at FROM project_invoices WHERE id=?');
     $stmt->execute([$projectInvoiceId]);
@@ -366,6 +500,20 @@ function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appC
     if (!$projectInvoice || ($projectInvoice['status'] ?? '') === 'void') {
         return 0;
     }
+    $recipients = project_invoice_client_recipients($pdo, $projectInvoiceId, $clientIds);
+    if ($recipientKeys !== null) {
+        $selectedKeys = array_fill_keys(array_map('strval', $recipientKeys), true);
+        $recipients = array_values(array_filter($recipients, static function (array $recipient) use ($selectedKeys): bool {
+            return isset($selectedKeys[(string)($recipient['recipient_key'] ?? '')]);
+        }));
+    }
+    $validRecipientCount = count(array_filter($recipients, static function (array $recipient): bool {
+        return filter_var(trim((string)($recipient['email'] ?? '')), FILTER_VALIDATE_EMAIL) !== false;
+    }));
+    if ($validRecipientCount === 0) {
+        return 0;
+    }
+
     if (($projectInvoice['status'] ?? '') === 'draft' || empty($projectInvoice['finalized_at'])) {
         $pdo->prepare(
             'UPDATE project_invoices
@@ -375,7 +523,6 @@ function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appC
         )->execute([$projectInvoiceId]);
     }
 
-    $recipients = project_invoice_client_recipients($pdo, $projectInvoiceId, $clientIds);
     $notificationType = $allowResend ? 'manual' : 'on_generate';
     foreach ($recipients as $recipient) {
         $email = trim((string)($recipient['email'] ?? ''));
@@ -578,6 +725,21 @@ function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): b
     $projectPaymentId = (int)$projectPayment['id'];
     if (($projectPayment['status'] ?? '') === 'succeeded') {
         stripe_update_project_payment_processor_fields($pdo, $projectPaymentId, $processorTx, $GLOBALS['appConfig'] ?? []);
+        require_once __DIR__ . '/notifications.php';
+        require_once __DIR__ . '/payment_receipts.php';
+        $status = $pdo->prepare('SELECT status FROM project_invoices WHERE id=?');
+        $status->execute([$projectInvoiceId]);
+        $statusValue = (string)$status->fetchColumn();
+        payment_email_attempt_all(
+            static fn() => notify_admin_project_invoice_paid(
+                $pdo, $GLOBALS['appConfig'] ?? [], $projectInvoiceId, $amount,
+                $statusValue === 'paid' ? 'paid' : 'partial', false, true, null,
+                'project-payment:' . $projectPaymentId
+            ),
+            static fn() => project_payment_receipt_email_issue(
+                $pdo, $projectPaymentId, $GLOBALS['appConfig'] ?? [], null, true
+            )
+        );
         return true;
     }
     $pdo->prepare('UPDATE project_invoice_payments SET stripe_session_id=COALESCE(stripe_session_id,?),stripe_payment_intent_id=COALESCE(stripe_payment_intent_id,?),amount=? WHERE id=?')
@@ -608,24 +770,102 @@ function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): b
         if ($statusValue === 'paid') {
             pa_public_link_terminalize($pdo, 'project_invoice', $projectInvoiceId, 'paid');
         }
-        notify_admin_project_invoice_paid($pdo, $GLOBALS['appConfig'] ?? [], $projectInvoiceId, $amount, $statusValue === 'paid' ? 'paid' : 'partial');
+        require_once __DIR__ . '/payment_receipts.php';
+        payment_email_attempt_all(
+            static fn() => notify_admin_project_invoice_paid(
+                $pdo, $GLOBALS['appConfig'] ?? [], $projectInvoiceId, $amount,
+                $statusValue === 'paid' ? 'paid' : 'partial', true, true, null,
+                'project-payment:' . $projectPaymentId
+            ),
+            static fn() => project_payment_receipt_email_issue(
+                $pdo, $projectPaymentId, $GLOBALS['appConfig'] ?? [], null, true
+            )
+        );
     }
     return $ok;
 }
 
-function project_invoice_generate_due_monthly(PDO $pdo, array $appConfig): int
+/** @return array{processed:int,generated:int,existing:int,drafted:int,delivered:int,already_delivered:int,delivery_pending:int,delivery_failed:int} */
+function project_invoice_generate_due_monthly_result(PDO $pdo, array $appConfig): array
 {
     [$start, $end] = project_invoice_period_for_date(date('Y-m-d'), true);
     $hasAutoEmail = project_invoice_table_has_column($pdo, 'projects', 'project_invoice_auto_email');
     $selectAuto = $hasAutoEmail ? ', project_invoice_auto_email' : '';
     $stmt = $pdo->query('SELECT id' . $selectAuto . ' FROM projects WHERE status IN ("active","not_started") AND invoice_billing_period = "monthly"');
-    $count = 0;
+    $stats = [
+        'processed' => 0,
+        'generated' => 0,
+        'existing' => 0,
+        'drafted' => 0,
+        'delivered' => 0,
+        'already_delivered' => 0,
+        'delivery_pending' => 0,
+        'delivery_failed' => 0,
+    ];
+    $existingStmt = $pdo->prepare(
+        'SELECT id FROM project_invoices
+         WHERE project_id=? AND billing_period_start=? AND billing_period_end=? AND status<>"void" LIMIT 1'
+    );
+    $stateStmt = $pdo->prepare('SELECT status,sent_at FROM project_invoices WHERE id=?');
+    $deliveryStmt = $pdo->prepare(
+        'SELECT delivery_status,COUNT(*) AS status_count FROM project_invoice_notifications
+         WHERE project_invoice_id=? AND notification_type="on_generate" AND delivery_key="generated"
+         GROUP BY delivery_status'
+    );
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $project) {
+        $projectId = (int)$project['id'];
         $sendEmail = $hasAutoEmail ? !empty($project['project_invoice_auto_email']) : true;
-        $id = project_invoice_create_for_period($pdo, (int)$project['id'], $start, $end, $appConfig, $sendEmail, true);
-        if ($id) {
-            $count++;
+        $existingStmt->execute([$projectId, $start, $end]);
+        $wasExisting = (int)($existingStmt->fetchColumn() ?: 0) > 0;
+        $id = project_invoice_create_for_period($pdo, $projectId, $start, $end, $appConfig, false, false);
+        if (!$id) {
+            continue;
+        }
+
+        $stats['processed']++;
+        $stats[$wasExisting ? 'existing' : 'generated']++;
+        if (!$sendEmail) {
+            $stats['drafted']++;
+            continue;
+        }
+
+        $stateStmt->execute([$id]);
+        $state = $stateStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        if (!empty($state['sent_at'])) {
+            $stats['already_delivered']++;
+            continue;
+        }
+        if (!project_invoice_has_saved_deliverable_recipient($pdo, $projectId)) {
+            $stats['delivery_failed']++;
+            @error_log('[project_invoice_billing] Monthly project invoice delivery blocked: project ' . $projectId . ' has no valid saved recipient.');
+            continue;
+        }
+
+        $sent = project_invoice_send_email($pdo, $id, $appConfig);
+        if ($sent > 0) {
+            $stats['delivered'] += $sent;
+        }
+
+        $deliveryStmt->execute([$id]);
+        $deliveryStatuses = [];
+        foreach ($deliveryStmt->fetchAll(PDO::FETCH_ASSOC) as $deliveryRow) {
+            $deliveryStatuses[(string)$deliveryRow['delivery_status']] = (int)$deliveryRow['status_count'];
+        }
+        $hasPendingDelivery = array_sum(array_intersect_key($deliveryStatuses, array_flip(['pending', 'processing', 'retry']))) > 0;
+        $hasFailedDelivery = array_sum(array_intersect_key($deliveryStatuses, array_flip(['failed', 'suppressed']))) > 0;
+        if ($hasPendingDelivery) {
+            $stats['delivery_pending']++;
+            @error_log('[project_invoice_billing] Monthly project invoice delivery pending or retrying for project ' . $projectId . '.');
+        }
+        if ($hasFailedDelivery || ($sent === 0 && !$hasPendingDelivery)) {
+            $stats['delivery_failed']++;
+            @error_log('[project_invoice_billing] Monthly project invoice delivery failed for project ' . $projectId . '.');
         }
     }
-    return $count;
+    return $stats;
+}
+
+function project_invoice_generate_due_monthly(PDO $pdo, array $appConfig): int
+{
+    return project_invoice_generate_due_monthly_result($pdo, $appConfig)['processed'];
 }

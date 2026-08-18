@@ -26,6 +26,10 @@ if (!$org) {
       <div>Organization Name</div>
       <input required type="text" name="name" value="<?php echo htmlspecialchars($org['name']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     </label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <label><div>General Email</div><input type="email" name="general_email" autocomplete="email" value="<?php echo htmlspecialchars((string)($org['general_email'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+      <label><div>General Phone</div><input name="general_phone" maxlength="50" autocomplete="tel" value="<?php echo htmlspecialchars((string)($org['general_phone'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    </div>
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
       <legend style="padding:0 6px;color:var(--muted)">Organization Address</legend>
       <label>

@@ -20,9 +20,9 @@ if (($invitationId <= 0 && $token === '') || $name === '') {
     exit;
 }
 
-$state = strtoupper(client_onboarding_clean_text($_POST['state'] ?? '', 2));
+$state = client_onboarding_clean_text($_POST['state'] ?? '', 100);
 $email = client_onboarding_normalize_email($_POST['email'] ?? '');
-if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+if ($email !== '' && (mb_strlen($email) > 255 || !filter_var($email, FILTER_VALIDATE_EMAIL))) {
     header('Location: /?page=client-onboarding&error=' . urlencode('Enter a valid email address.'));
     exit;
 }
@@ -33,11 +33,26 @@ if (!in_array($clientType, ['business', 'consumer'], true)) {
 $organizationName = $clientType === 'business'
     ? client_onboarding_clean_text($_POST['organization_name'] ?? '', 150)
     : '';
+$organizationEmail = $clientType === 'business'
+    ? client_onboarding_normalize_email($_POST['organization_email'] ?? '')
+    : '';
+if ($clientType === 'business' && $organizationName === '') {
+    header('Location: /?page=client-onboarding&error=' . urlencode('Organization name is required.'));
+    exit;
+}
+if ($organizationEmail !== '' && (mb_strlen($organizationEmail) > 255 || !filter_var($organizationEmail, FILTER_VALIDATE_EMAIL))) {
+    header('Location: /?page=client-onboarding&error=' . urlencode('Enter a valid general company email address.'));
+    exit;
+}
 $data = [
     'name' => $name,
     'email' => $email,
     'phone' => client_onboarding_clean_text($_POST['phone'] ?? '', 50),
     'organization_name' => $organizationName,
+    'organization_email' => $organizationEmail,
+    'organization_phone' => $clientType === 'business'
+        ? client_onboarding_clean_text($_POST['organization_phone'] ?? '', 50)
+        : '',
     'address_line1' => client_onboarding_clean_text($_POST['address_line1'] ?? '', 255),
     'address_line2' => client_onboarding_clean_text($_POST['address_line2'] ?? '', 255),
     'city' => client_onboarding_clean_text($_POST['city'] ?? '', 100),

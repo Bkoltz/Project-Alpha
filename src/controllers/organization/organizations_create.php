@@ -6,6 +6,8 @@ require_once __DIR__ . '/../../utils/address_book.php';
 require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 $name = trim($_POST['name'] ?? '');
+$generalEmail = strtolower(trim((string)($_POST['general_email'] ?? '')));
+$generalPhone = mb_substr(trim((string)($_POST['general_phone'] ?? '')), 0, 50);
 $notes = trim($_POST['notes'] ?? '');
 $return_to = trim($_POST['return_to'] ?? '');
 $addressValues = [
@@ -19,6 +21,10 @@ $addressValues = [
 
 if ($name === '') {
     header('Location: /?page=organization/organizations-create&error=Name%20is%20required');
+    exit;
+}
+if ($generalEmail !== '' && (mb_strlen($generalEmail) > 255 || !filter_var($generalEmail, FILTER_VALIDATE_EMAIL))) {
+    header('Location: /?page=organization/organizations-create&error=' . rawurlencode('Enter a valid general email address.'));
     exit;
 }
 
@@ -69,9 +75,9 @@ if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_f
 }
 
 $addressColumns = pa_ensure_organization_address_columns($pdo);
-$columns = ['name', 'notes'];
-$placeholders = ['?', '?'];
-$params = [$name, $notes ?: null];
+$columns = ['name', 'general_email', 'general_phone', 'notes'];
+$placeholders = ['?', '?', '?', '?'];
+$params = [$name, $generalEmail ?: null, $generalPhone ?: null, $notes ?: null];
 foreach ($addressValues as $column => $value) {
     if (isset($addressColumns[$column])) {
         $columns[] = $column;

@@ -67,6 +67,7 @@ try {
         AND c.stripe_customer_id IS NOT NULL
         AND c.stripe_payment_method_id IS NOT NULL
         AND i.invoice_type IN ('long_term', 'on_demand')
+        AND COALESCE(i.collection_mode, 'direct') = 'direct'
         AND (i.last_auto_pay_attempt IS NULL OR i.last_auto_pay_attempt < DATE_SUB(NOW(), INTERVAL 1 DAY))
         ORDER BY i.due_date ASC
         LIMIT 50

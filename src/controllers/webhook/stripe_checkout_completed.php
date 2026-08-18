@@ -82,6 +82,23 @@ function handleCheckoutSessionCompleted($pdo, $session) {
     if ($existingPaymentId > 0) {
         stripe_update_payment_processor_fields($pdo, $existingPaymentId, $processorTx, $GLOBALS['appConfig'] ?? []);
         $pdo->commit();
+        $deliveryState = $pdo->prepare(
+            'SELECT p.amount,i.status FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE p.id=?'
+        );
+        $deliveryState->execute([$existingPaymentId]);
+        $existing = $deliveryState->fetch(PDO::FETCH_ASSOC);
+        if ($existing) {
+            require_once __DIR__ . '/../../utils/payment_receipts.php';
+            payment_email_attempt_all(
+                static fn() => notify_admin_invoice_paid(
+                    $pdo, $GLOBALS['appConfig'] ?? [], $invoiceId, (float)$existing['amount'],
+                    (string)$existing['status'], false, true, null, 'payment:' . $existingPaymentId
+                ),
+                static fn() => payment_receipt_issue(
+                    $pdo, $existingPaymentId, $GLOBALS['appConfig'] ?? [], true, null, true
+                )
+            );
+        }
         @error_log('[StripeWebhook] Session ' . $session['id'] . ' already processed - skipping');
         return;
     }
@@ -125,18 +142,19 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         $pdo->commit();
         @error_log('[StripeWebhook] Payment recorded for invoice ' . $invoiceId . ': $' . $paymentAmount . ' - status: ' . $status);
         
-        // Notify admin
-        try {
-            notify_admin_invoice_paid($pdo, $GLOBALS['appConfig'] ?? [], $invoiceId, $paymentAmount, $status);
-        } catch (Throwable $e) {
-            @error_log('[StripeWebhook] Failed to send admin notification: ' . $e->getMessage());
-        }
-        try {
-            require_once __DIR__ . '/../../utils/payment_receipts.php';
-            payment_receipt_issue($pdo, $paymentId, $GLOBALS['appConfig'] ?? []);
-        } catch (Throwable $e) {
-            @error_log('[StripeWebhook] Receipt issue failed: ' . $e->getMessage());
-        }
+        // Delivery failures deliberately fail the webhook after the payment is
+        // committed. Stripe's retry then enters the idempotent branch above
+        // and retries only the missing email side effects.
+        require_once __DIR__ . '/../../utils/payment_receipts.php';
+        payment_email_attempt_all(
+            static fn() => notify_admin_invoice_paid(
+                $pdo, $GLOBALS['appConfig'] ?? [], $invoiceId, $paymentAmount, $status,
+                true, true, null, 'payment:' . $paymentId
+            ),
+            static fn() => payment_receipt_issue(
+                $pdo, $paymentId, $GLOBALS['appConfig'] ?? [], true, null, true
+            )
+        );
         
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();

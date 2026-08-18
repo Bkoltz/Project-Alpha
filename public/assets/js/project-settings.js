@@ -132,7 +132,6 @@
             var id = String(button.getAttribute('data-remove-id') || '');
             selected[type].delete(id);
             if (type === 'project') {
-              selected.invoice.delete(id);
               selected.links.delete(id);
               if (primaryId === id) primaryId = '';
             }
@@ -185,7 +184,7 @@
         id = String(id);
         if (!clientById(id)) return;
         selected[type].add(id);
-        if (type === 'invoice' || type === 'links') {
+        if (type === 'links') {
           selected.project.add(id);
         }
         if (!primaryId && selected.project.has(id)) {
@@ -197,7 +196,24 @@
       ['project', 'invoice', 'links'].forEach(function (type) {
         var p = picker(type);
         if (!p) return;
-        p.search.addEventListener('input', function () { renderSuggestions(type); });
+        p.search.addEventListener('input', function () {
+          renderSuggestions(type);
+          if (type === 'invoice' && p.search.value.trim().length >= 2) {
+            fetch('/?page=clients-search&term=' + encodeURIComponent(p.search.value.trim()), { credentials: 'same-origin' })
+              .then(function (response) { return response.ok ? response.json() : []; })
+              .then(function (rows) {
+                (Array.isArray(rows) ? rows : []).forEach(function (client) {
+                  client.id = String(client.id);
+                  client.email = client.email || '';
+                  if (!clients.some(function (candidate) { return candidate.id === client.id; })) {
+                    clients.push(client);
+                  }
+                });
+                renderSuggestions(type);
+              })
+              .catch(function () { /* retain already-loaded contacts */ });
+          }
+        });
         p.search.addEventListener('focus', function () { renderSuggestions(type); });
         p.suggestions.addEventListener('click', function (event) {
           var option = event.target.closest('[data-client-id]');

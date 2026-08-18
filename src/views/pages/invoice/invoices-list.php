@@ -51,9 +51,10 @@ if ($statusFilter === 'paid') {
 } elseif ($statusFilter === 'unpaid') {
   $where[] = "i.status IN ('unpaid','partial')";
 } elseif ($statusFilter === 'overdue') {
-  // Drafts are never receivables. A row is overdue only after issue and an
-  // explicit due date has passed; never infer it from a draft's creation date.
+  // Drafts are never receivables. Project-aggregate children age only through
+  // their project statement and never enter the direct-invoice overdue view.
   $where[] = "i.status IN ('sent','unpaid','partial','overdue')
+    AND i.collection_mode='direct'
     AND i.due_date IS NOT NULL AND i.due_date < CURDATE()";
 } elseif ($statusFilter === 'void') {
   $where[] = "i.status='void'";

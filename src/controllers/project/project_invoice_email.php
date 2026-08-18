@@ -27,6 +27,11 @@ if ($recipientClientIds !== null && !is_array($recipientClientIds)) {
     $recipientClientIds = [];
 }
 $recipientClientIds = $recipientClientIds === null ? null : array_map('intval', $recipientClientIds);
+$recipientKeys = $_POST['recipient_keys'] ?? null;
+if ($recipientKeys !== null && !is_array($recipientKeys)) {
+    $recipientKeys = [];
+}
+$recipientKeys = $recipientKeys === null ? null : array_values(array_unique(array_map('strval', $recipientKeys)));
 if (invoice_should_prompt_for_missing_content_links($pdo, 'project_invoice', $id, $appConfig, $recipientClientIds)) {
     $missingLinkBehavior = invoice_missing_content_links_behavior($appConfig);
     if ($missingLinkBehavior === 'block') {
@@ -38,7 +43,7 @@ if (invoice_should_prompt_for_missing_content_links($pdo, 'project_invoice', $id
         exit;
     }
 }
-$sent = project_invoice_send_email($pdo, $id, $appConfig, $recipientClientIds, true);
+$sent = project_invoice_send_email($pdo, $id, $appConfig, $recipientClientIds, true, $recipientKeys);
 $param = $sent > 0 ? 'emailed=1' : 'email_err=' . urlencode('No new project invoice emails were sent.');
 header('Location: /?page=project/project-invoice-details&id=' . $id . '&' . $param);
 exit;

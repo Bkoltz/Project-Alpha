@@ -204,16 +204,10 @@ function send_admin_notification(PDO $pdo, array $appConfig, string $subject, st
  *
  * @return string[]  Deduplicated, deliverable email addresses.
  */
-function invoice_payment_notification_recipients(PDO $pdo, int $invoiceId): array
+function processor_payment_notification_users(PDO $pdo): array
 {
-    // Resolve the invoice creator so non-admin users are scoped to their own
-    // invoices only.
-    $creatorStmt = $pdo->prepare('SELECT created_by FROM invoices WHERE id=? LIMIT 1');
-    $creatorStmt->execute([$invoiceId]);
-    $createdBy = (int)($creatorStmt->fetchColumn() ?: 0);
-
     try {
-        $stmt = $pdo->query(
+        return $pdo->query(
             "SELECT u.id, u.email, u.role,
                     COALESCE(np.notify_processor_invoice_paid, 1) AS notify
              FROM users u
@@ -224,14 +218,46 @@ function invoice_payment_notification_recipients(PDO $pdo, int $invoiceId): arra
                AND u.email <> ''
                AND COALESCE(np.notify_processor_invoice_paid, 1) = 1
              ORDER BY u.id ASC"
-        );
-    } catch (Throwable $e) {
-        @error_log('[invoice_payment_notification_recipients] Query failed: ' . $e->getMessage());
-        return [];
+        )->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $preferenceError) {
+        // Migration 0061 defines existing users as opted in by default. Keep
+        // payment alerts working during a rolling deploy where application
+        // code reaches a node just before that additive table is available.
+        @error_log('[processor_payment_notification_users] Preference query unavailable: ' . $preferenceError->getMessage());
+        $errorText = strtolower($preferenceError->getMessage());
+        $preferenceTableMissing = (string)$preferenceError->getCode() === '42S02'
+            || (str_contains($errorText, 'user_notification_preferences')
+                && (str_contains($errorText, 'no such table') || str_contains($errorText, "doesn't exist")));
+        if (!$preferenceTableMissing) {
+            return [];
+        }
+        try {
+            return $pdo->query(
+                "SELECT u.id, u.email, u.role, 1 AS notify
+                 FROM users u
+                 WHERE u.is_disabled = 0
+                   AND u.deleted_at IS NULL
+                   AND u.email IS NOT NULL
+                   AND u.email <> ''
+                 ORDER BY u.id ASC"
+            )->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $userError) {
+            @error_log('[processor_payment_notification_users] User query failed: ' . $userError->getMessage());
+            return [];
+        }
     }
+}
+
+function invoice_payment_notification_recipients(PDO $pdo, int $invoiceId): array
+{
+    // Resolve the invoice creator so non-admin users are scoped to their own
+    // invoices only.
+    $creatorStmt = $pdo->prepare('SELECT created_by FROM invoices WHERE id=? LIMIT 1');
+    $creatorStmt->execute([$invoiceId]);
+    $createdBy = (int)($creatorStmt->fetchColumn() ?: 0);
 
     $emails = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    foreach (processor_payment_notification_users($pdo) as $row) {
         $isAdmin   = in_array((string)($row['role'] ?? ''), ['admin', 'owner'], true);
         $isCreator = $createdBy > 0 && (int)$row['id'] === $createdBy;
 
@@ -263,26 +289,8 @@ function project_invoice_payment_notification_recipients(PDO $pdo, int $projectI
     $creatorStmt->execute([$projectInvoiceId]);
     $createdBy = (int)($creatorStmt->fetchColumn() ?: 0);
 
-    try {
-        $stmt = $pdo->query(
-            "SELECT u.id, u.email, u.role,
-                    COALESCE(np.notify_processor_invoice_paid, 1) AS notify
-             FROM users u
-             LEFT JOIN user_notification_preferences np ON np.user_id = u.id
-             WHERE u.is_disabled = 0
-               AND u.deleted_at IS NULL
-               AND u.email IS NOT NULL
-               AND u.email <> ''
-               AND COALESCE(np.notify_processor_invoice_paid, 1) = 1
-             ORDER BY u.id ASC"
-        );
-    } catch (Throwable $e) {
-        @error_log('[project_invoice_payment_notification_recipients] Query failed: ' . $e->getMessage());
-        return [];
-    }
-
     $emails = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    foreach (processor_payment_notification_users($pdo) as $row) {
         $isAdmin   = in_array((string)($row['role'] ?? ''), ['admin', 'owner'], true);
         $isCreator = $createdBy > 0 && (int)$row['id'] === $createdBy;
 
@@ -394,9 +402,19 @@ function notify_admin_contract_signed(PDO $pdo, array $appConfig, array $contrac
  * @param float  $amount
  * @param string $status   'paid' or 'partial'
  */
-function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, float $amount, string $status): void {
+function notify_admin_invoice_paid(
+    PDO $pdo,
+    array $appConfig,
+    int $invoiceId,
+    float $amount,
+    string $status,
+    bool $recordSideEffects = true,
+    bool $throwOnEmailFailure = false,
+    ?callable $sender = null,
+    ?string $paymentOccurrenceKey = null
+): bool {
     try {
-        if ($status === 'paid') {
+        if ($recordSideEffects && $status === 'paid') {
             require_once __DIR__ . '/workforce_compensation.php';
             workforce_release_invoice_paid($pdo, $invoiceId, (int)($_SESSION['user']['id'] ?? 0));
         }
@@ -409,7 +427,7 @@ function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, f
         );
         $stmt->execute([$invoiceId]);
         $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$invoice) { return; }
+        if (!$invoice) { return true; }
 
         // Log the activity regardless of email opt-in.
         $invoiceLabel = pa_invoice_label_from_row($invoice + ['id' => $invoiceId]);
@@ -417,20 +435,22 @@ function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, f
         $total        = (float)($invoice['total'] ?? 0);
         $statusText   = $status === 'paid' ? 'paid in full' : 'partially paid';
 
-        log_activity(
-            $pdo, 'invoice_paid', 'invoice', $invoiceId, (int)($invoice['client_id'] ?? 0),
-            "Invoice $invoiceLabel $statusText via processor payment (\$$amount)",
-            ['project_code' => $project, 'amount' => $amount, 'status' => $status, 'total' => $total]
-        );
+        if ($recordSideEffects) {
+            log_activity(
+                $pdo, 'invoice_paid', 'invoice', $invoiceId, (int)($invoice['client_id'] ?? 0),
+                "Invoice $invoiceLabel $statusText via processor payment (\$$amount)",
+                ['project_code' => $project, 'amount' => $amount, 'status' => $status, 'total' => $total]
+            );
+        }
 
         // Master switch: if the global setting is off, skip all emails.
         if (!admin_invoice_paid_notification_enabled($appConfig, $invoice)) {
-            return;
+            return true;
         }
 
         $recipients = invoice_payment_notification_recipients($pdo, $invoiceId);
         if (!$recipients) {
-            return;
+            return true;
         }
 
         $brand      = (string)($appConfig['brand_name'] ?? 'Project Alpha');
@@ -447,26 +467,50 @@ function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, f
             $statusText, $amount, $total
         );
 
+        $sender ??= [EmailService::class, 'sendEmail'];
+        $failures = [];
         foreach ($recipients as $recipientEmail) {
-            $occurrence = implode(':', [
-                number_format((float)($invoice['amount_paid'] ?? 0), 2, '.', ''),
-                number_format((float)($invoice['balance_due'] ?? 0), 2, '.', ''),
-            ]);
-            [$ok, $error] = EmailService::sendEmail($recipientEmail, $subject, $html, [
+            $occurrence = trim((string)$paymentOccurrenceKey);
+            if ($occurrence === '') {
+                $occurrence = implode(':', [
+                    number_format((float)($invoice['amount_paid'] ?? 0), 2, '.', ''),
+                    number_format((float)($invoice['balance_due'] ?? 0), 2, '.', ''),
+                ]);
+            }
+            [$ok, $error] = $sender($recipientEmail, $subject, $html, [
                 'document_type' => 'notification',
                 'message_key'   => 'invoice-paid-processor:' . $invoiceId . ':'
-                    . hash('sha256', $recipientEmail . ':' . $subject . ':' . $occurrence),
+                    . hash('sha256', strtolower($recipientEmail) . ':' . $occurrence),
             ]);
             if (!$ok) {
+                $failures[] = $recipientEmail . ': ' . $error;
                 @error_log('[notify_admin_invoice_paid] Failed for ' . $recipientEmail . ': ' . $error);
             }
         }
+        if ($failures && $throwOnEmailFailure) {
+            throw new RuntimeException('Payment notification email delivery failed: ' . implode('; ', $failures));
+        }
+        return !$failures;
     } catch (Throwable $e) {
         @error_log('[notify_admin_invoice_paid] Error: ' . $e->getMessage());
+        if ($throwOnEmailFailure) {
+            throw $e;
+        }
+        return false;
     }
 }
 
-function notify_admin_project_invoice_paid(PDO $pdo, array $appConfig, int $projectInvoiceId, float $amount, string $status): void {
+function notify_admin_project_invoice_paid(
+    PDO $pdo,
+    array $appConfig,
+    int $projectInvoiceId,
+    float $amount,
+    string $status,
+    bool $recordSideEffects = true,
+    bool $throwOnEmailFailure = false,
+    ?callable $sender = null,
+    ?string $paymentOccurrenceKey = null
+): bool {
     try {
         $stmt = $pdo->prepare(
             'SELECT pi.*, p.name AS project_name, c.name AS client_name
@@ -477,7 +521,7 @@ function notify_admin_project_invoice_paid(PDO $pdo, array $appConfig, int $proj
         );
         $stmt->execute([$projectInvoiceId]);
         $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$invoice) { return; }
+        if (!$invoice) { return true; }
 
         $statusText  = $status === 'paid' ? 'paid in full' : 'partially paid';
         $docnum      = (string)($invoice['doc_number'] ?? $projectInvoiceId);
@@ -485,22 +529,24 @@ function notify_admin_project_invoice_paid(PDO $pdo, array $appConfig, int $proj
         $total       = (float)($invoice['total'] ?? 0);
 
         // Always log the activity.
-        log_activity(
-            $pdo, 'project_invoice_paid', 'project_invoice', $projectInvoiceId,
-            (int)($invoice['primary_client_id'] ?? 0),
-            "Project invoice PI-$docnum $statusText via processor payment (\$$amount)",
-            ['project_id' => (int)($invoice['project_id'] ?? 0), 'amount' => $amount, 'status' => $status, 'total' => $total]
-        );
+        if ($recordSideEffects) {
+            log_activity(
+                $pdo, 'project_invoice_paid', 'project_invoice', $projectInvoiceId,
+                (int)($invoice['primary_client_id'] ?? 0),
+                "Project invoice PI-$docnum $statusText via processor payment (\$$amount)",
+                ['project_id' => (int)($invoice['project_id'] ?? 0), 'amount' => $amount, 'status' => $status, 'total' => $total]
+            );
+        }
 
         // Master switch: both global settings must be on.
         if (!notification_setting_enabled($appConfig, 'notify_invoice_paid', true)
             || !notification_setting_enabled($appConfig, 'notify_invoice_paid_project', true)) {
-            return;
+            return true;
         }
 
         $recipients = project_invoice_payment_notification_recipients($pdo, $projectInvoiceId);
         if (!$recipients) {
-            return;
+            return true;
         }
 
         $brand      = (string)($appConfig['brand_name'] ?? 'Project Alpha');
@@ -516,21 +562,35 @@ function notify_admin_project_invoice_paid(PDO $pdo, array $appConfig, int $proj
             htmlspecialchars($clientName), $amount, $total
         );
 
+        $sender ??= [EmailService::class, 'sendEmail'];
+        $failures = [];
         foreach ($recipients as $recipientEmail) {
-            $occurrence = implode(':', [
-                number_format((float)($invoice['amount_paid'] ?? 0), 2, '.', ''),
-                number_format((float)($invoice['balance_due'] ?? 0), 2, '.', ''),
-            ]);
-            [$ok, $error] = EmailService::sendEmail($recipientEmail, $subject, $html, [
+            $occurrence = trim((string)$paymentOccurrenceKey);
+            if ($occurrence === '') {
+                $occurrence = implode(':', [
+                    number_format((float)($invoice['amount_paid'] ?? 0), 2, '.', ''),
+                    number_format((float)($invoice['balance_due'] ?? 0), 2, '.', ''),
+                ]);
+            }
+            [$ok, $error] = $sender($recipientEmail, $subject, $html, [
                 'document_type' => 'notification',
                 'message_key'   => 'project-invoice-paid-processor:' . $projectInvoiceId . ':'
-                    . hash('sha256', $recipientEmail . ':' . $subject . ':' . $occurrence),
+                    . hash('sha256', strtolower($recipientEmail) . ':' . $occurrence),
             ]);
             if (!$ok) {
+                $failures[] = $recipientEmail . ': ' . $error;
                 @error_log('[notify_admin_project_invoice_paid] Failed for ' . $recipientEmail . ': ' . $error);
             }
         }
+        if ($failures && $throwOnEmailFailure) {
+            throw new RuntimeException('Project payment notification email delivery failed: ' . implode('; ', $failures));
+        }
+        return !$failures;
     } catch (Throwable $e) {
         @error_log('[notify_admin_project_invoice_paid] Error: ' . $e->getMessage());
+        if ($throwOnEmailFailure) {
+            throw $e;
+        }
+        return false;
     }
 }
