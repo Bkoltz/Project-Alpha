@@ -47,6 +47,19 @@ final class ManagedDeliveryIntegrationTest extends TestCase
         }
     }
 
+    public function testManagedDeliverySchemaRunsAfterItsPortalProfileDependency(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $baseline = (string)file_get_contents($root . '/database/baseline.sql');
+        $portalMigration = (string)file_get_contents($root . '/database/migrations/0066_generic_portal_v2_integration.sql');
+        $deliveryMigration = (string)file_get_contents($root . '/database/migrations/0069_managed_delivery_intents.sql');
+
+        self::assertStringNotContainsString('CREATE TABLE IF NOT EXISTS managed_delivery_intent_outbox', $baseline);
+        self::assertStringContainsString('CREATE TABLE IF NOT EXISTS portal_integration_profiles', $portalMigration);
+        self::assertStringContainsString('CREATE TABLE IF NOT EXISTS managed_delivery_intent_outbox', $deliveryMigration);
+        self::assertStringContainsString('REFERENCES portal_integration_profiles(id)', $deliveryMigration);
+    }
+
     public function testPreflightWorksWhileProviderDisabledAndValidatesExactCapabilities(): void
     {
         $pdo = $this->database(false);
