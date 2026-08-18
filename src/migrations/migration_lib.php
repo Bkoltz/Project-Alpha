@@ -281,6 +281,7 @@ function migration_schema_health(PDO $pdo): void
         'portal_projection_state', 'portal_draft_quote_commands', 'portal_integration_audit',
         'portal_projection_resource_state', 'portal_manager_scope_state',
         'portal_integration_request_receipts', 'portal_integration_rate_buckets',
+        'managed_delivery_intent_outbox',
         'document_number_sequences',
     ];
     $deadTables = [
@@ -323,6 +324,7 @@ function migration_schema_health(PDO $pdo): void
         'portal_integration_audit' => ['integration_profile_id','api_key_id','correlation_id','action','outcome','target_type','target_public_id','metadata_json'],
         'portal_projection_resource_state' => ['integration_profile_id','workspace_public_id','route_type','resource_type','resource_public_id','source_version','payload_hash','record_json'],
         'portal_manager_scope_state' => ['integration_profile_id','workspace_id','scope_type','scope_public_id','state','last_manager_removed_at','updated_by'],
+        'managed_delivery_intent_outbox' => ['delivery_id','intent_type','target_delivery_id','integration_profile_id','destination_url','pinned_application_key','signing_key_id','signing_contract_hash','delivery_timeout_seconds','delivery_max_attempts','actor_user_id','scope_type','scope_public_id','audience_type','audience_public_id','access_mode','request_fingerprint','payload_json','attempts','next_attempt_at','claim_token','claimed_at','delivered_at','dead_lettered_at','last_http_status','last_error_code','receipt_id','revoked_at'],
         'notification_relay_queue' => ['api_key_id', 'action_name', 'template_name', 'recipient_alias', 'variables_json', 'idempotency_hash', 'payload_hash', 'status', 'attempt_count', 'next_attempt_at', 'lock_token'],
         'notification_relay_events' => ['queue_id', 'queue_reference', 'api_key_id', 'event_type', 'status', 'attempt_count', 'error_code'],
         'sync_source_identity' => ['singleton', 'source_instance_id'],

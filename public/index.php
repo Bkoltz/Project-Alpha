@@ -869,6 +869,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'settings/document-customization-save',
         'settings/document-custom-fields-handler',
         'settings/link-test-connection',
+        'settings/managed-delivery-test',
+        'settings/managed-delivery-send',
+        'settings/managed-delivery-revoke',
+        'settings/managed-delivery-retry',
         'settings/stripe-net-backfill',
         'settings/stripe-import-payments',
         'settings/dropbox-oauth',
@@ -1050,7 +1054,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //   settings/link-test-connection - controller validates CSRF (csrf_validate)
     //   settings/link-resolver-run    - controller validates CSRF (csrf_validate)
     //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', '2fa-setup-action', '2fa-verify-action', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'legal/tos-accept'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', '2fa-setup-action', '2fa-verify-action', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'settings/managed-delivery-test', 'settings/managed-delivery-send', 'settings/managed-delivery-revoke', 'settings/managed-delivery-retry', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -1501,6 +1505,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'settings/link-test-connection') {
         require_once __DIR__ . '/../src/controllers/settings/link_test_connection.php';
+        exit;
+    }
+    if ($page === 'settings/managed-delivery-test') {
+        require_once __DIR__ . '/../src/controllers/settings/managed_delivery_test.php';
+        exit;
+    }
+    if ($page === 'settings/managed-delivery-send') {
+        require_once __DIR__ . '/../src/controllers/settings/managed_delivery_send.php';
+        exit;
+    }
+    if ($page === 'settings/managed-delivery-revoke') {
+        require_once __DIR__ . '/../src/controllers/settings/managed_delivery_revoke.php';
+        exit;
+    }
+    if ($page === 'settings/managed-delivery-retry') {
+        require_once __DIR__ . '/../src/controllers/settings/managed_delivery_retry.php';
         exit;
     }
     if ($page === 'settings/link-resolver-run') {
