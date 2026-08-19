@@ -277,6 +277,7 @@ final class InvoiceAutomationTest extends TestCase
             'INSERT INTO project_clients (project_id,client_id,is_primary_billing,send_project_invoices,sort_order)
              VALUES (?,?,1,1,0),(?,?,0,0,1)'
         )->execute([$projectId, $recipientId, $projectId, $suppressedId]);
+        project_invoice_sync_recipients($this->pdo, $projectId, [$recipientId]);
         $this->pdo->prepare(
             'INSERT INTO project_invoices
              (project_id,organization_id,primary_client_id,doc_number,status,billing_period_start,billing_period_end,
