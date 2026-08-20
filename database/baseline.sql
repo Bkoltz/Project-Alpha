@@ -130,6 +130,8 @@ CREATE TABLE IF NOT EXISTS organizations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT (LOWER(HEX(RANDOM_BYTES(16)))),
     name VARCHAR(150) NOT NULL,
+    general_email VARCHAR(255) NULL,
+    general_phone VARCHAR(50) NULL,
     notes TEXT NULL,
     address_line1 VARCHAR(255) NULL,
     address_line2 VARCHAR(255) NULL,
@@ -832,6 +834,36 @@ CREATE TABLE IF NOT EXISTS project_clients (
     CONSTRAINT fk_project_clients_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     CONSTRAINT fk_project_clients_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     CONSTRAINT fk_project_clients_department FOREIGN KEY (department_id) REFERENCES organization_departments(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- PROJECT INVOICE RECIPIENTS
+-- Delivery recipients are deliberately separate from project membership. A
+-- project can therefore bill a saved contact outside the owning organization,
+-- or a one-off email address, without granting project access or changing the
+-- billed client.
+CREATE TABLE IF NOT EXISTS project_invoice_recipients (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NOT NULL,
+    client_id INT NULL,
+    organization_id INT NULL,
+    manual_email VARCHAR(254) NULL,
+    manual_name VARCHAR(190) NULL,
+    recipient_key VARCHAR(300) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_project_invoice_recipient (project_id, recipient_key),
+    INDEX idx_project_invoice_recipients_project (project_id, sort_order),
+    INDEX idx_project_invoice_recipients_client (client_id),
+    INDEX idx_project_invoice_recipients_organization (organization_id),
+    CONSTRAINT fk_project_invoice_recipients_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_invoice_recipients_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_invoice_recipients_organization FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT chk_project_invoice_recipient_target CHECK (
+        (client_id IS NOT NULL AND organization_id IS NULL AND manual_email IS NULL)
+        OR (client_id IS NULL AND organization_id IS NOT NULL AND manual_email IS NULL)
+        OR (client_id IS NULL AND organization_id IS NULL AND manual_email IS NOT NULL)
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- PROJECT INVOICES
@@ -3933,6 +3965,10 @@ INSERT INTO app_config (config_key, config_value) VALUES
     ('notify_invoice_paid_project', '1'),
     ('notify_client_onboarding_submit', '1'),
     ('client_portal_enabled', '0'),
+    ('managed_delivery_enabled', '0'),
+    ('managed_delivery_intent_url', ''),
+    ('managed_delivery_profile_id', '0'),
+    ('managed_delivery_guest_links_enabled', '0'),
     ('workforce_allow_non_admin_time_management', '0'),
     ('workforce_allow_non_admin_time_approval', '0'),
     ('default_mileage_rate', '0.670'),

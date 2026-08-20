@@ -13,6 +13,30 @@ final class ClientOnboardingTest extends TestCase
         $this->root = dirname(__DIR__, 2);
     }
 
+    public function testOrganizationsPersistSeparateGeneralContactChannels(): void
+    {
+        $baseline = (string)file_get_contents($this->root . '/database/baseline.sql');
+        $migration = (string)file_get_contents($this->root . '/database/migrations/0071_organization_general_contacts.sql');
+        $create = (string)file_get_contents($this->root . '/src/controllers/organization/organizations_create.php');
+        $update = (string)file_get_contents($this->root . '/src/controllers/organization/organizations_update.php');
+        $createView = (string)file_get_contents($this->root . '/src/views/pages/organization/organizations-create.php');
+        $editView = (string)file_get_contents($this->root . '/src/views/pages/organization/organizations-edit.php');
+        $detailView = (string)file_get_contents($this->root . '/src/views/pages/organization/organization-view.php');
+        $migrationHealth = (string)file_get_contents($this->root . '/src/migrations/migration_lib.php');
+
+        self::assertStringContainsString('general_email VARCHAR(255) NULL', $baseline);
+        self::assertStringContainsString('general_phone VARCHAR(50) NULL', $baseline);
+        self::assertStringContainsString('ALTER TABLE organizations ADD COLUMN general_email', $migration);
+        self::assertStringContainsString('ALTER TABLE organizations ADD COLUMN general_phone', $migration);
+        self::assertStringContainsString("filter_var(\$generalEmail, FILTER_VALIDATE_EMAIL)", $create . $update);
+        self::assertStringContainsString("'general_email', 'general_phone'", $create);
+        self::assertStringContainsString('general_email = ?, general_phone = ?', $update);
+        self::assertStringContainsString('name="general_email"', $createView . $editView);
+        self::assertStringContainsString('name="general_phone"', $createView . $editView);
+        self::assertStringContainsString('General Contact', $detailView);
+        self::assertStringContainsString("'organizations' => ['public_id', 'source_version', 'general_email', 'general_phone']", $migrationHealth);
+    }
+
     public function testInvitationStoresTokenHashAndEncryptedRecoveryToken(): void
     {
         $baseline = file_get_contents($this->root . '/database/baseline.sql');
@@ -54,7 +78,15 @@ final class ClientOnboardingTest extends TestCase
         self::assertStringContainsString('Approve as New Client', (string)$view);
         self::assertStringContainsString('Merge Selected Fields', (string)$view);
         self::assertStringContainsString('Keep invited organization', (string)$view);
-        self::assertStringContainsString('Leave organization blank (do not assign one)', (string)$view);
+        self::assertStringContainsString('Keep this as an individual client', (string)$view);
+        self::assertStringContainsString('Create or update organization from the reviewed values', (string)$view);
+        self::assertStringContainsString('review_data[organization_email]', (string)$view);
+        self::assertStringContainsString('review_data[organization_phone]', (string)$view);
+        self::assertStringContainsString('address_book_save($pdo, $sharedAddress, \'organization\'', (string)$review);
+        self::assertStringContainsString('SET organization_id=?,client_type="business",address_line1=?', (string)$review);
+        self::assertStringContainsString('client_onboarding_clean_text($reviewData[\'name\']', (string)$review);
+        self::assertStringContainsString('$allowedClientMatchIds', (string)$review);
+        self::assertStringContainsString('$allowedOrganizationMatchIds', (string)$review);
         self::assertStringNotContainsString('Leave organization as invited', (string)$view);
         self::assertStringContainsString('onboarding-link-row', (string)$view);
         self::assertStringContainsString('client_onboarding_link_for_invitation($appConfig, $invitation)', (string)$view);
@@ -83,15 +115,19 @@ final class ClientOnboardingTest extends TestCase
         self::assertStringContainsString("rate_limit_check(\$pdo, 'client_onboarding_submit'", (string)$submit);
         self::assertStringContainsString('name="email"', (string)$page);
         self::assertStringContainsString('name="organization_name"', (string)$page);
-        self::assertStringContainsString("'consumer' => 'Individual'", (string)$page);
-        self::assertStringContainsString("'business' => 'Organization'", (string)$page);
-        self::assertStringContainsString('data-client-type-select', (string)$page);
-        self::assertStringContainsString('data-organization-name-field', (string)$page);
+        self::assertStringContainsString('value="consumer" data-onboarding-type', (string)$page);
+        self::assertStringContainsString('value="business" data-onboarding-type', (string)$page);
+        self::assertStringContainsString('data-organization-fields', (string)$page);
+        self::assertStringContainsString('data-contact-name-label', (string)$page);
+        self::assertStringContainsString('public-client-onboarding.js', (string)$page);
+        self::assertStringContainsString("\$appConfig['primary_state']", (string)$page);
         self::assertStringContainsString("\$clientType = (string)(\$_POST['client_type'] ?? 'consumer')", (string)$submit);
         self::assertStringContainsString("\$clientType = 'consumer';", (string)$submit);
         self::assertStringContainsString("\$organizationName = \$clientType === 'business'", (string)$submit);
         self::assertStringContainsString("'email' => \$email", (string)$submit);
         self::assertStringContainsString("'organization_name' => \$organizationName", (string)$submit);
+        self::assertStringContainsString("'organization_email' => \$organizationEmail", (string)$submit);
+        self::assertStringContainsString("\$_POST['organization_phone']", (string)$submit);
         self::assertStringContainsString('send_admin_notification', (string)$submit);
         self::assertStringNotContainsString('card_number', (string)$submit . (string)$page);
         self::assertStringNotContainsString('payment_method', (string)$submit . (string)$page);

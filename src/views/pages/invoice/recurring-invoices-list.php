@@ -26,7 +26,7 @@ $where = ['ltc.contract_type="long_term"'];
 $p = [];
 
 if($client_id>0){$where[]='ltc.client_id=?';$p[]=$client_id;}
-elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
+elseif($client_name!==''){ $where[]='(c.name LIKE ? OR o.name LIKE ?)'; $p[]='%'.$client_name.'%'; $p[]='%'.$client_name.'%'; }
 if ($status !== '' && $status !== 'all') {
     $where[] = 'ltc.status=?';
     $p[] = $status;
@@ -42,12 +42,13 @@ if ($scopeWhere !== '') {
     $p = array_merge($p, $scopeParams);
 }
 
-$sql = "SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total, ltc.total_invoiced, ltc.next_invoice_date, ltc.last_invoice_date, ltc.start_date, ltc.end_date, c.name client_name, c.id AS client_id,
+$sql = "SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total, ltc.total_invoiced, ltc.next_invoice_date, ltc.last_invoice_date, ltc.start_date, ltc.end_date, c.name client_name, c.id AS client_id, o.name AS organization_name,
                (SELECT COUNT(*) FROM invoices ih WHERE ih.contract_id=ltc.id AND ih.invoice_type=\"long_term\") AS invoice_history_count,
                (SELECT COUNT(*) FROM contract_recurring_services rs WHERE rs.contract_id=ltc.id AND rs.status<>\"ended\") AS recurring_service_count,
                (SELECT COALESCE(SUM(rs.amount),0) FROM contract_recurring_services rs WHERE rs.contract_id=ltc.id AND rs.status IN (\"active\",\"paused\") AND rs.approval_status=\"approved\" AND rs.next_invoice_date=ltc.next_invoice_date) AS next_service_amount
-        FROM contracts ltc 
-        LEFT JOIN clients c ON c.id=ltc.client_id";
+        FROM contracts ltc
+        LEFT JOIN clients c ON c.id=ltc.client_id
+        LEFT JOIN organizations o ON o.id=COALESCE(ltc.organization_id,c.organization_id)";
 
 if ($where) {
     $sql .= ' WHERE ' . implode(' AND ', $where);
@@ -64,7 +65,7 @@ $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $historyWhere = ['i.invoice_type="long_term"'];
 $historyParams = [];
 if ($client_id > 0) { $historyWhere[] = 'i.client_id=?'; $historyParams[] = $client_id; }
-elseif ($client_name !== '') { $historyWhere[] = 'c.name LIKE ?'; $historyParams[] = '%' . $client_name . '%'; }
+elseif ($client_name !== '') { $historyWhere[] = '(c.name LIKE ? OR o.name LIKE ?)'; $historyParams[] = '%' . $client_name . '%'; $historyParams[] = '%' . $client_name . '%'; }
 if ($project_code !== '') { $historyWhere[] = 'i.project_code LIKE ?'; $historyParams[] = $project_code . '%'; }
 if ($history_contract_id > 0) { $historyWhere[] = 'i.contract_id=?'; $historyParams[] = $history_contract_id; }
 if ($invoice_status !== 'all') { $historyWhere[] = 'i.status=?'; $historyParams[] = $invoice_status; }
@@ -75,7 +76,7 @@ if ($historyScopeWhere !== '') {
     $historyParams = array_merge($historyParams, $historyScopeParams);
 }
 
-$historyFrom = ' FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN contracts ltc ON ltc.id=i.contract_id';
+$historyFrom = ' FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN contracts ltc ON ltc.id=i.contract_id LEFT JOIN organizations o ON o.id=COALESCE(i.organization_id,ltc.organization_id,c.organization_id)';
 $historyWhereSql = ' WHERE ' . implode(' AND ', $historyWhere);
 $historyCountStmt = $pdo->prepare('SELECT COUNT(*)' . $historyFrom . $historyWhereSql);
 $historyCountStmt->execute($historyParams);
@@ -85,7 +86,7 @@ $history_page = min($history_page, $historyLastPage);
 $historyOffset = ($history_page - 1) * $history_per_page;
 
 $historySql = 'SELECT i.id,i.doc_number,i.contract_id,i.project_code,i.status,i.total,i.amount_paid,i.balance_due,i.due_date,i.sent_at,i.paid_at,i.created_at,
-                      c.name AS client_name,c.id AS client_id,ltc.doc_number AS contract_doc_number'
+                      c.name AS client_name,c.id AS client_id,o.name AS organization_name,ltc.doc_number AS contract_doc_number'
     . $historyFrom . $historyWhereSql
     . ' ORDER BY i.created_at DESC,i.id DESC LIMIT ? OFFSET ?';
 $historyStmt = $pdo->prepare($historySql);
@@ -160,7 +161,8 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
       <thead>
         <tr style="text-align:left;border-bottom:1px solid #eee">
           <th style="padding:10px">Contract</th>
-          <th style="padding:10px">Client</th>
+          <th style="padding:10px">Customer</th>
+          <th style="padding:10px">Contact</th>
           <th style="padding:10px">Status</th>
           <th style="padding:10px">Billing</th>
           <th style="padding:10px">Amount/Invoice</th>
@@ -173,7 +175,7 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
       <tbody>
         <?php if (empty($contracts)): ?>
           <tr>
-            <td colspan="9" style="padding:20px;text-align:center;color:#6b7280">No recurring billing contracts found.</td>
+            <td colspan="10" style="padding:20px;text-align:center;color:#6b7280">No recurring billing contracts found.</td>
           </tr>
         <?php else: ?>
           <?php foreach ($contracts as $ltc): ?>
@@ -227,10 +229,9 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
                 <?php endif; ?>
               </td>
               <td style="padding:10px">
-                <a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$ltc['client_id']; ?>">
-                  <?php echo htmlspecialchars($ltc['client_name']); ?>
-                </a>
+                <?php echo htmlspecialchars((string)($ltc['organization_name'] ?: $ltc['client_name'])); ?>
               </td>
+              <td style="padding:10px"><?php if (!empty($ltc['organization_name'])): ?><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$ltc['client_id']; ?>"><?php echo htmlspecialchars((string)$ltc['client_name']); ?></a><?php endif; ?></td>
               <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($ltc['status']); ?></td>
               <td style="padding:10px"><?php echo htmlspecialchars($billingInterval); ?></td>
               <td style="padding:10px;font-weight:600"><?php echo htmlspecialchars($amountText); ?></td>
@@ -265,7 +266,7 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
         <?php if ($history_contract_id > 0 && !empty($contracts[0])): ?>
           <div style="margin-top:8px;padding:8px 10px;border:1px solid #bfdbfe;border-radius:7px;background:#eff6ff;color:#1e3a8a;font-size:13px">
-            Showing invoices for <strong>LTC-<?php echo (int)($contracts[0]['doc_number'] ?? $contracts[0]['id']); ?></strong> — <?php echo htmlspecialchars((string)$contracts[0]['client_name']); ?>.
+            Showing invoices for <strong>LTC-<?php echo (int)($contracts[0]['doc_number'] ?? $contracts[0]['id']); ?></strong> — <?php echo htmlspecialchars((string)($contracts[0]['organization_name'] ?: $contracts[0]['client_name'])); ?>.
           </div>
         <?php endif; ?>
       </div>
@@ -296,7 +297,8 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
           <tr style="text-align:left;border-bottom:1px solid #eee">
             <th style="padding:10px">Invoice</th>
             <th style="padding:10px">Contract</th>
-            <th style="padding:10px">Client</th>
+            <th style="padding:10px">Customer</th>
+            <th style="padding:10px">Contact</th>
             <th style="padding:10px">Issued</th>
             <th style="padding:10px">Due</th>
             <th style="padding:10px">Status</th>
@@ -308,7 +310,7 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
         </thead>
         <tbody>
           <?php if (!$invoiceHistory): ?>
-            <tr><td colspan="10" style="padding:20px;text-align:center;color:#6b7280">No recurring invoices match these filters.</td></tr>
+            <tr><td colspan="11" style="padding:20px;text-align:center;color:#6b7280">No recurring invoices match these filters.</td></tr>
           <?php else: ?>
             <?php foreach ($invoiceHistory as $historyInvoice): ?>
               <?php
@@ -322,7 +324,8 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
               <tr style="border-top:1px solid #f3f4f6;<?php echo $historyRowStyle; ?>">
                 <td style="padding:10px;font-weight:600"><a href="/?page=invoice/invoice-details&id=<?php echo (int)$historyInvoice['id']; ?>" style="color:#2563eb;text-decoration:none"><?php echo htmlspecialchars(pa_invoice_label($historyInvoice['doc_number'] ?? null, 'long_term', $historyInvoice['id'])); ?></a></td>
                 <td style="padding:10px"><a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$historyInvoice['contract_id']; ?>" style="color:inherit;text-decoration:none">LTC-<?php echo (int)($historyInvoice['contract_doc_number'] ?? $historyInvoice['contract_id']); ?></a></td>
-                <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$historyInvoice['client_id']; ?>"><?php echo htmlspecialchars((string)$historyInvoice['client_name']); ?></a></td>
+                <td style="padding:10px"><?php echo htmlspecialchars((string)($historyInvoice['organization_name'] ?: $historyInvoice['client_name'])); ?></td>
+                <td style="padding:10px"><?php if (!empty($historyInvoice['organization_name'])): ?><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$historyInvoice['client_id']; ?>"><?php echo htmlspecialchars((string)$historyInvoice['client_name']); ?></a><?php endif; ?></td>
                 <td style="padding:10px;white-space:nowrap"><?php echo !empty($historyInvoice['created_at']) ? date('M j, Y', strtotime((string)$historyInvoice['created_at'])) : '—'; ?></td>
                 <td style="padding:10px;white-space:nowrap"><?php echo !empty($historyInvoice['due_date']) ? date('M j, Y', strtotime((string)$historyInvoice['due_date'])) : '—'; ?></td>
                 <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($historyStatus); ?></td>

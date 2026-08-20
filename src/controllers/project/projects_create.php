@@ -22,6 +22,8 @@ $projectClientIds = $_POST['project_client_ids'] ?? [];
 if (!is_array($projectClientIds)) { $projectClientIds = []; }
 $projectInvoiceRecipientIds = $_POST['project_invoice_email_client_ids'] ?? [];
 if ($projectInvoiceRecipientIds !== null && !is_array($projectInvoiceRecipientIds)) { $projectInvoiceRecipientIds = []; }
+$projectInvoiceManualEmailsRaw = $_POST['project_invoice_manual_emails'] ?? '';
+$useOrganizationInvoiceEmail = !empty($_POST['project_invoice_use_organization_email']);
 $projectInvoiceLinkClientIds = $_POST['project_invoice_link_client_ids'] ?? null;
 if ($projectInvoiceLinkClientIds !== null && !is_array($projectInvoiceLinkClientIds)) { $projectInvoiceLinkClientIds = []; }
 $parent_id = null; // Parent projects are not supported any more
@@ -53,6 +55,15 @@ if ($organization_id <= 0 && $__orgId !== null) {
 }
 if ($organization_id > 0) {
 	require_record_ownership($pdo, 'organizations', $organization_id);
+}
+if ($useOrganizationInvoiceEmail) {
+	$organizationEmailStmt = $pdo->prepare('SELECT general_email FROM organizations WHERE id = ? LIMIT 1');
+	$organizationEmailStmt->execute([$organization_id]);
+	$organizationEmail = trim((string)($organizationEmailStmt->fetchColumn() ?: ''));
+	if ($organization_id <= 0 || !filter_var($organizationEmail, FILTER_VALIDATE_EMAIL)) {
+		header('Location: /?page=project/projects-create&error=' . urlencode('The selected organization does not have a valid company email.'));
+		exit;
+	}
 }
 
 if ($businessUnitId > 0) {
@@ -93,12 +104,17 @@ $projectClientIds = array_values(array_unique(array_filter(array_map('intval', $
 $projectInvoiceRecipientIds = $projectInvoiceRecipientIds === null
 	? null
 	: array_values(array_unique(array_filter(array_map('intval', $projectInvoiceRecipientIds), static fn($id) => $id > 0)));
+try {
+	$projectInvoiceManualEmails = project_invoice_normalize_manual_recipient_emails($projectInvoiceManualEmailsRaw);
+} catch (InvalidArgumentException $error) {
+	header('Location: /?page=project/projects-create&error=' . urlencode($error->getMessage()));
+	exit;
+}
 $projectInvoiceLinkClientIds = $projectInvoiceLinkClientIds === null
 	? null
 	: array_values(array_unique(array_filter(array_map('intval', $projectInvoiceLinkClientIds), static fn($id) => $id > 0)));
 $projectClientIds = array_values(array_unique(array_merge(
 	$projectClientIds,
-	$projectInvoiceRecipientIds ?? [],
 	$projectInvoiceLinkClientIds ?? []
 )));
 if ($client_id > 0 && !in_array($client_id, $projectClientIds, true)) {
@@ -121,8 +137,20 @@ if ($organization_id > 0 && $projectClientIds) {
 		require_record_ownership($pdo, 'clients', $attachedClientId);
 	}
 }
-$projectInvoiceRecipientIds = $projectInvoiceRecipientIds === null ? null : array_values(array_intersect($projectInvoiceRecipientIds, $projectClientIds));
+$projectInvoiceRecipientIds = $projectInvoiceRecipientIds ?? [];
+foreach ($projectInvoiceRecipientIds as $recipientClientId) {
+	require_record_ownership($pdo, 'clients', $recipientClientId);
+}
 $projectInvoiceLinkClientIds = $projectInvoiceLinkClientIds === null ? null : array_values(array_intersect($projectInvoiceLinkClientIds, $projectClientIds));
+if ($projectInvoiceAutoEmail && !project_invoice_has_deliverable_recipient_config(
+	$pdo,
+	$projectInvoiceRecipientIds,
+	$projectInvoiceManualEmails,
+	$useOrganizationInvoiceEmail ? [$organization_id] : []
+)) {
+	header('Location: /?page=project/projects-create&error=' . urlencode('Automatic project invoice email requires at least one valid recipient.'));
+	exit;
+}
 
 // Validate date window if set
 if ($estimated_start !== '' && $estimated_end !== '') {
@@ -204,8 +232,15 @@ project_invoice_sync_clients(
 	$project_id,
 	$client_id > 0 ? $client_id : null,
 	$projectClientIds,
-	$projectInvoiceRecipientIds,
+	array_values(array_intersect($projectInvoiceRecipientIds, $projectClientIds)),
 	$projectInvoiceLinkClientIds
+);
+project_invoice_sync_recipients(
+	$pdo,
+	$project_id,
+	$projectInvoiceRecipientIds,
+	$projectInvoiceManualEmails,
+	$useOrganizationInvoiceEmail ? [$organization_id] : []
 );
 audit_log($pdo, 'project.create', 'project', $project_id, ['client_id' => $client_id > 0 ? $client_id : null, 'organization_id' => $organization_id > 0 ? $organization_id : null, 'department_id' => $department_id > 0 ? $department_id : null, 'business_unit_id' => $businessUnitId > 0 ? $businessUnitId : null, 'manager_user_id' => $managerUserId > 0 ? $managerUserId : null, 'created_by' => $__creator]);
 ScheduleService::syncProject($pdo, $project_id, (string)($appConfig['timezone'] ?? 'UTC'), $__creator);

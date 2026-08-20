@@ -1,0 +1,47 @@
+{
+  "contract": "project-alpha-delivery-intent-v1",
+  "applicationKey": "project-alpha",
+  "keyId": "ops-v1",
+  "testSecret": "0123456789abcdef0123456789abcdef",
+  "timestamp": "2026-08-18T14:00:00.000Z",
+  "cases": {
+    "preflight": {
+      "method": "POST",
+      "path": "/api/internal/project-alpha/delivery-intents/preflight",
+      "deliveryId": "11111111-1111-4111-8111-111111111111",
+      "body": "{\"schemaVersion\":1,\"applicationKey\":\"project-alpha\",\"deliveryId\":\"11111111-1111-4111-8111-111111111111\",\"occurredAt\":\"2026-08-18T14:00:00.000Z\"}",
+      "bodySha256": "05d4da8a77013c59bf8bc482879b224eba4a8b09eb080e9b771b96f1e2be7c1b",
+      "canonical": "2026-08-18T14:00:00.000Z\nPOST\n/api/internal/project-alpha/delivery-intents/preflight\nops-v1\n11111111-1111-4111-8111-111111111111\n{\"schemaVersion\":1,\"applicationKey\":\"project-alpha\",\"deliveryId\":\"11111111-1111-4111-8111-111111111111\",\"occurredAt\":\"2026-08-18T14:00:00.000Z\"}",
+      "signature": "sha256=6902d5493ddf2d93875f393822328f47cc89d41c23ad51dbf2ceff4e0fa66157",
+      "response": "{\"status\":\"ready\",\"schemaVersion\":1,\"integrationEnabled\":false,\"portalSupported\":true,\"guestSupported\":false,\"revocationSupported\":true}"
+    },
+    "portal": {
+      "method": "POST",
+      "path": "/api/internal/project-alpha/delivery-intents",
+      "deliveryId": "22222222-2222-4222-8222-222222222222",
+      "body": "{\"schemaVersion\":1,\"applicationKey\":\"project-alpha\",\"deliveryId\":\"22222222-2222-4222-8222-222222222222\",\"occurredAt\":\"2026-08-18T14:00:00.000Z\",\"scope\":{\"type\":\"project\",\"publicId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"audience\":{\"type\":\"principal\",\"publicId\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"},\"accessMode\":\"portal\",\"expiresAt\":null,\"label\":\"Johnson Road\",\"notify\":true}",
+      "bodySha256": "cc98203132cc2b2dfbd446d338af2dbf3f6a9422b738384718dc16ae1ae00b4e",
+      "canonical": "2026-08-18T14:00:00.000Z\nPOST\n/api/internal/project-alpha/delivery-intents\nops-v1\n22222222-2222-4222-8222-222222222222\n{\"schemaVersion\":1,\"applicationKey\":\"project-alpha\",\"deliveryId\":\"22222222-2222-4222-8222-222222222222\",\"occurredAt\":\"2026-08-18T14:00:00.000Z\",\"scope\":{\"type\":\"project\",\"publicId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"audience\":{\"type\":\"principal\",\"publicId\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"},\"accessMode\":\"portal\",\"expiresAt\":null,\"label\":\"Johnson Road\",\"notify\":true}",
+      "signature": "sha256=e20dee31cb3877284a45e104fd8808d936912915f46d7d6a618ef1b0ed36da86"
+    },
+    "guest": {
+      "method": "POST",
+      "path": "/api/internal/project-alpha/delivery-intents",
+      "deliveryId": "33333333-3333-4333-8333-333333333333",
+      "body": "{\"schemaVersion\":1,\"applicationKey\":\"project-alpha\",\"deliveryId\":\"33333333-3333-4333-8333-333333333333\",\"occurredAt\":\"2026-08-18T14:00:00.000Z\",\"scope\":{\"type\":\"project\",\"publicId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"audience\":{\"type\":\"principal\",\"publicId\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"},\"accessMode\":\"guest\",\"expiresAt\":\"2026-09-17T14:00:00.000Z\",\"label\":null,\"notify\":true}",
+      "bodySha256": "dfb555c334c70e550cea9852f3dfdf69c981437de44cf760998634e5d52ce868",
+      "canonical": "2026-08-18T14:00:00.000Z\nPOST\n/api/internal/project-alpha/delivery-intents\nops-v1\n33333333-3333-4333-8333-333333333333\n{\"schemaVersion\":1,\"applicationKey\":\"project-alpha\",\"deliveryId\":\"33333333-3333-4333-8333-333333333333\",\"occurredAt\":\"2026-08-18T14:00:00.000Z\",\"scope\":{\"type\":\"project\",\"publicId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"audience\":{\"type\":\"principal\",\"publicId\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"},\"accessMode\":\"guest\",\"expiresAt\":\"2026-09-17T14:00:00.000Z\",\"label\":null,\"notify\":true}",
+      "signature": "sha256=2a59682d8e8dea581bde57498f9fa1e24797555678383f3cdf97fa96296891fb"
+    },
+    "revoke": {
+      "method": "POST",
+      "path": "/api/internal/project-alpha/delivery-intents/revoke",
+      "deliveryId": "44444444-4444-4444-8444-444444444444",
+      "body": "{\"schemaVersion\":1,\"applicationKey\":\"project-alpha\",\"deliveryId\":\"44444444-4444-4444-8444-444444444444\",\"occurredAt\":\"2026-08-18T14:00:00.000Z\",\"receiptId\":\"receipt_01\",\"reasonCode\":\"project_alpha_delivery_revoked\"}",
+      "bodySha256": "c7fef1b51f5586c3fe0f3e8f148a444794c6f34cf05f6fb7e424f874345f70a4",
+      "canonical": "2026-08-18T14:00:00.000Z\nPOST\n/api/internal/project-alpha/delivery-intents/revoke\nops-v1\n44444444-4444-4444-8444-444444444444\n{\"schemaVersion\":1,\"applicationKey\":\"project-alpha\",\"deliveryId\":\"44444444-4444-4444-8444-444444444444\",\"occurredAt\":\"2026-08-18T14:00:00.000Z\",\"receiptId\":\"receipt_01\",\"reasonCode\":\"project_alpha_delivery_revoked\"}",
+      "signature": "sha256=de0711fc8f27eb878ac2b53b4c66eabbe58970d18c5b590552a3851bed11d8ea"
+    }
+  },
+  "acceptedResponse": "{\"receiptId\":\"receipt_01\",\"status\":\"accepted\"}"
+}

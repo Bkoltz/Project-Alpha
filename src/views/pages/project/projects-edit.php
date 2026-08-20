@@ -16,7 +16,8 @@ require_record_ownership($pdo, 'projects', $projectId);
 pa_project_public_link_ensure_schema($pdo);
 
 $stmt = $pdo->prepare('
-    SELECT p.*, c.name AS client_name, o.name AS organization_name, od.name AS department_name
+    SELECT p.*, c.name AS client_name, o.name AS organization_name,
+           o.general_email AS organization_general_email, od.name AS department_name
     FROM projects p
     LEFT JOIN clients c ON c.id = p.client_id
     LEFT JOIN organizations o ON o.id = p.organization_id
@@ -116,10 +117,28 @@ if ($projectOrganizationId > 0) {
 }
 
 $selectedProjectClientIds = array_map(static fn($row) => (int)$row['id'], $projectClients);
-$selectedProjectInvoiceRecipientIds = array_map(
-    static fn($row) => (int)$row['id'],
-    array_values(array_filter($projectClients, static fn($row) => !empty($row['send_project_invoices'])))
-);
+$savedProjectInvoiceRecipients = project_invoice_saved_recipients($pdo, $projectId);
+if (project_invoice_table_has_column($pdo, 'project_invoice_recipients', 'recipient_key')) {
+    $selectedProjectInvoiceRecipientIds = array_values(array_map(
+        static fn($row) => (int)$row['id'],
+        array_filter($savedProjectInvoiceRecipients, static fn($row) => !empty($row['id']))
+    ));
+    $projectInvoiceManualEmails = array_values(array_map(
+        static fn($row) => (string)$row['manual_email'],
+        array_filter($savedProjectInvoiceRecipients, static fn($row) => !empty($row['manual_email']))
+    ));
+    $useOrganizationInvoiceEmail = count(array_filter(
+        $savedProjectInvoiceRecipients,
+        static fn($row) => !empty($row['organization_id'])
+    )) > 0;
+} else {
+    $selectedProjectInvoiceRecipientIds = array_map(
+        static fn($row) => (int)$row['id'],
+        array_values(array_filter($projectClients, static fn($row) => !empty($row['send_project_invoices'])))
+    );
+    $projectInvoiceManualEmails = [];
+    $useOrganizationInvoiceEmail = false;
+}
 $selectedProjectInvoiceLinkClientIds = array_map(
     static fn($row) => (int)$row['id'],
     array_values(array_filter($projectClients, static fn($row) => !empty($row['can_view_invoice_links'])))
@@ -171,6 +190,24 @@ foreach ($projectClients as $client) {
         'is_primary' => (int)($project['client_id'] ?? 0) === $clientId ? 1 : 0,
         'is_department_contact' => in_array($clientId, $projectDepartmentContactIds, true) ? 1 : 0,
         'is_primary_department_contact' => in_array($clientId, $projectDepartmentPrimaryContactIds, true) ? 1 : 0,
+    ];
+}
+foreach ($savedProjectInvoiceRecipients as $recipient) {
+    $clientId = (int)($recipient['id'] ?? 0);
+    if ($clientId <= 0 || isset($projectSettingsClientIds[$clientId])) {
+        continue;
+    }
+    $projectSettingsClientIds[$clientId] = true;
+    $projectSettingsClients[] = [
+        'id' => $clientId,
+        'name' => (string)($recipient['name'] ?? ''),
+        'email' => (string)($recipient['email'] ?? ''),
+        'is_selected' => 0,
+        'is_invoice_recipient' => 1,
+        'can_view_links' => 0,
+        'is_primary' => 0,
+        'is_department_contact' => 0,
+        'is_primary_department_contact' => 0,
     ];
 }
 
@@ -265,7 +302,8 @@ $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?
 
       <section id="project-contacts" class="project-edit-section" data-project-settings-contact-manager>
         <h2>Contacts</h2>
-        <p>Use search boxes to add clients. Remove any row with the x. Invoice recipients and content-link viewers remain attached to the project automatically.</p>
+        <p>Project contacts control project access. Invoice recipients are a separate delivery list and may be any accessible saved client contact.</p>
+        <input type="hidden" name="project_invoice_recipients_present" value="1">
         <script type="application/json" data-project-settings-clients><?php echo json_encode($projectSettingsClients, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?></script>
         <div class="project-info-box">Primary department contacts are marked when the current department has one saved on the organization.</div>
         <label class="project-field">
@@ -293,6 +331,19 @@ $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?
             <div data-picker-hidden></div>
           </div>
         </div>
+        <label class="project-field">
+          <span>Manual project invoice email recipients</span>
+          <input type="text" name="project_invoice_manual_emails" value="<?php echo htmlspecialchars(implode(', ', $projectInvoiceManualEmails), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" placeholder="billing@example.com, owner@example.com">
+          <small>Optional. Separate multiple addresses with commas. These addresses receive invoices without becoming clients or project contacts.</small>
+        </label>
+        <?php $organizationGeneralEmail = trim((string)($project['organization_general_email'] ?? '')); ?>
+        <label class="project-check" style="padding:10px;border:1px solid #dfe3e8;border-radius:8px;background:#fff">
+          <input type="checkbox" name="project_invoice_use_organization_email" value="1" <?php echo $useOrganizationInvoiceEmail ? 'checked' : ''; ?> <?php echo filter_var($organizationGeneralEmail, FILTER_VALIDATE_EMAIL) ? '' : 'disabled'; ?>>
+          <span>
+            <strong>Company email</strong>
+            <small style="display:block;color:var(--muted)"><?php echo $organizationGeneralEmail !== '' ? htmlspecialchars($organizationGeneralEmail, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . ' — select explicitly to include it.' : 'No company email is saved for this organization.'; ?></small>
+          </span>
+        </label>
         <div class="project-settings-picker" data-project-settings-picker="links" data-empty-text="No invoice content-link viewers selected.">
           <div class="label">Invoice content-link viewers</div>
           <div class="project-settings-picker__selected" data-picker-selected></div>

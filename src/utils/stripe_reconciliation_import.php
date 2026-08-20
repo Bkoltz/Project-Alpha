@@ -7,6 +7,8 @@ require_once __DIR__ . '/stripe_financial_events.php';
 require_once __DIR__ . '/stripe_payment_accounting.php';
 require_once __DIR__ . '/public_links.php';
 require_once __DIR__ . '/invoice_lifecycle.php';
+require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/payment_receipts.php';
 
 function stripe_reconcile_payment_intents(
     PDO $pdo,
@@ -82,6 +84,22 @@ function stripe_reconcile_payment_intents(
             $existingPaymentId = (int)($existsStmt->fetchColumn() ?: 0);
             if ($existingPaymentId > 0) {
                 stripe_update_payment_processor_fields($pdo, $existingPaymentId, $processorTx, $appConfig);
+                $deliveryState = $pdo->prepare(
+                    'SELECT p.amount,i.status FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE p.id=?'
+                );
+                $deliveryState->execute([$existingPaymentId]);
+                $existing = $deliveryState->fetch(PDO::FETCH_ASSOC);
+                if ($existing) {
+                    payment_email_attempt_all(
+                        static fn() => notify_admin_invoice_paid(
+                            $pdo, $appConfig, $invoiceId, (float)$existing['amount'],
+                            (string)$existing['status'], false, true, null, 'payment:' . $existingPaymentId
+                        ),
+                        static fn() => payment_receipt_issue(
+                            $pdo, $existingPaymentId, $appConfig, true, null, true
+                        )
+                    );
+                }
                 $result['duplicates']++;
                 $result['reconciled']++;
                 continue;
@@ -141,13 +159,15 @@ function stripe_reconcile_payment_intents(
             $pdo->commit();
             $result['imported']++;
             $result['reconciled']++;
-
-            try {
-                require_once __DIR__ . '/payment_receipts.php';
-                payment_receipt_issue($pdo, $paymentId, $appConfig);
-            } catch (Throwable $receiptError) {
-                @error_log("[stripe_reconciliation] Receipt issue failed for payment {$paymentId}: " . $receiptError->getMessage());
-            }
+            payment_email_attempt_all(
+                static fn() => notify_admin_invoice_paid(
+                    $pdo, $appConfig, $invoiceId, $paymentAmount, $newStatus,
+                    true, true, null, 'payment:' . $paymentId
+                ),
+                static fn() => payment_receipt_issue(
+                    $pdo, $paymentId, $appConfig, true, null, true
+                )
+            );
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();

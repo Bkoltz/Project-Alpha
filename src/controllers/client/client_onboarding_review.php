@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/client_onboarding.php';
+require_once __DIR__ . '/../../utils/address_book.php';
 require_once __DIR__ . '/../../utils/portal_projection_hooks.php';
 
 $organizationId = request_client_org_id();
@@ -44,6 +45,25 @@ try {
     if (!is_array($data) || empty($data['name'])) {
         throw new RuntimeException('The submitted client data is invalid.');
     }
+    $submittedData = $data;
+    if ($decision === 'approve') {
+        $allowedClientMatchIds = array_map(
+            static fn(array $match): int => (int)$match['id'],
+            client_onboarding_find_client_matches($pdo, $submittedData, $organizationId > 0 ? $organizationId : null)
+        );
+        $allowedOrganizationMatchIds = array_map(
+            static fn(array $match): int => (int)$match['id'],
+            client_onboarding_find_organization_matches($pdo, (string)($submittedData['organization_name'] ?? ''))
+        );
+        if (in_array($resolution, ['keep_existing', 'merge_existing'], true)
+            && !in_array($matchClientId, $allowedClientMatchIds, true)) {
+            throw new RuntimeException('The selected client is not an allowed match for this submission.');
+        }
+        if ($organizationResolution === 'match'
+            && !in_array($matchOrganizationId, $allowedOrganizationMatchIds, true)) {
+            throw new RuntimeException('The selected organization is not an allowed match for this submission.');
+        }
+    }
 
     $clientId = (int)($submission['client_id'] ?? 0);
     $projection = new \App\Services\PortalProjectionMutationService();
@@ -60,29 +80,109 @@ try {
         $portalTargetOrganizationIds
     );
     if ($decision === 'approve') {
+        $reviewData = is_array($_POST['review_data'] ?? null) ? $_POST['review_data'] : [];
+        $reviewClientType = (string)($reviewData['client_type'] ?? 'consumer');
+        if (!in_array($reviewClientType, ['business', 'consumer'], true)) {
+            $reviewClientType = 'consumer';
+        }
+        $data = [
+            'name' => client_onboarding_clean_text($reviewData['name'] ?? '', 150),
+            'email' => client_onboarding_normalize_email($reviewData['email'] ?? ''),
+            'phone' => client_onboarding_clean_text($reviewData['phone'] ?? '', 50),
+            'organization_name' => $reviewClientType === 'business'
+                ? client_onboarding_clean_text($reviewData['organization_name'] ?? '', 150)
+                : '',
+            'organization_email' => $reviewClientType === 'business'
+                ? client_onboarding_normalize_email($reviewData['organization_email'] ?? '')
+                : '',
+            'organization_phone' => $reviewClientType === 'business'
+                ? client_onboarding_clean_text($reviewData['organization_phone'] ?? '', 50)
+                : '',
+            'address_line1' => client_onboarding_clean_text($reviewData['address_line1'] ?? '', 255),
+            'address_line2' => client_onboarding_clean_text($reviewData['address_line2'] ?? '', 255),
+            'city' => client_onboarding_clean_text($reviewData['city'] ?? '', 100),
+            'state' => client_onboarding_clean_text($reviewData['state'] ?? '', 100),
+            'postal_code' => client_onboarding_clean_text($reviewData['postal_code'] ?? '', 32),
+            'country' => client_onboarding_clean_text($reviewData['country'] ?? 'US', 100) ?: 'US',
+            'client_type' => $reviewClientType,
+        ];
+        if ($data['name'] === '') {
+            throw new RuntimeException('Contact name is required.');
+        }
+        if ($data['email'] !== '' && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+            throw new RuntimeException('Enter a valid contact email address.');
+        }
+        if ($data['organization_email'] !== '' && !filter_var($data['organization_email'], FILTER_VALIDATE_EMAIL)) {
+            throw new RuntimeException('Enter a valid general company email address.');
+        }
+        if ($reviewClientType === 'business' && $data['organization_name'] === '') {
+            throw new RuntimeException('Organization name is required for an organization submission.');
+        }
         $emailValue = client_onboarding_submitted_email($data, $submission);
         if ($emailValue !== '' && !filter_var($emailValue, FILTER_VALIDATE_EMAIL)) {
             $emailValue = '';
         }
-        $targetOrganizationId = !empty($submission['target_organization_id']) ? (int)$submission['target_organization_id'] : null;
+        $targetOrganizationId = $reviewClientType === 'business' && !empty($submission['target_organization_id'])
+            ? (int)$submission['target_organization_id']
+            : null;
         $submittedOrganizationName = client_onboarding_clean_text($data['organization_name'] ?? '', 150);
-        if ($organizationResolution === 'match' && $matchOrganizationId > 0) {
+        if ($reviewClientType === 'business' && $organizationResolution === 'match') {
+            if ($matchOrganizationId <= 0) {
+                throw new RuntimeException('Choose an organization match.');
+            }
             $orgStmt = $pdo->prepare('SELECT id FROM organizations WHERE id=?');
             $orgStmt->execute([$matchOrganizationId]);
             if (!$orgStmt->fetchColumn()) {
                 throw new RuntimeException('The selected organization match is unavailable.');
             }
             $targetOrganizationId = $matchOrganizationId;
-        } elseif ($organizationResolution === 'create' && $submittedOrganizationName !== '') {
-            $orgInsert = $pdo->prepare('INSERT INTO organizations (name,source_version) VALUES (?,?)');
+        } elseif ($reviewClientType === 'business' && ($organizationResolution === 'create' || !$targetOrganizationId)) {
+            $orgInsert = $pdo->prepare(
+                'INSERT INTO organizations
+                 (name,general_email,general_phone,address_line1,address_line2,city,state,postal_code,country,source_version)
+                 VALUES (?,?,?,?,?,?,?,?,?,?)'
+            );
             try {
-                $orgInsert->execute([$submittedOrganizationName,portal_projection_source_version()]);
+                $orgInsert->execute([
+                    $submittedOrganizationName,
+                    $data['organization_email'] ?: null,
+                    $data['organization_phone'] ?: null,
+                    $data['address_line1'] ?: null,
+                    $data['address_line2'] ?: null,
+                    $data['city'] ?: null,
+                    $data['state'] ?: null,
+                    $data['postal_code'] ?: null,
+                    $data['country'] ?: 'US',
+                    portal_projection_source_version(),
+                ]);
                 $targetOrganizationId = (int)$pdo->lastInsertId();
             } catch (Throwable $orgError) {
                 $orgLookup = $pdo->prepare('SELECT id FROM organizations WHERE name=?');
                 $orgLookup->execute([$submittedOrganizationName]);
                 $targetOrganizationId = (int)($orgLookup->fetchColumn() ?: 0) ?: $targetOrganizationId;
             }
+        }
+        if ($reviewClientType === 'business') {
+            if (!$targetOrganizationId) {
+                throw new RuntimeException('Choose or create an organization before approval.');
+            }
+            $pdo->prepare(
+                'UPDATE organizations
+                 SET name=?,general_email=?,general_phone=?,address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,source_version=?
+                 WHERE id=?'
+            )->execute([
+                $submittedOrganizationName,
+                $data['organization_email'] ?: null,
+                $data['organization_phone'] ?: null,
+                $data['address_line1'] ?: null,
+                $data['address_line2'] ?: null,
+                $data['city'] ?: null,
+                $data['state'] ?: null,
+                $data['postal_code'] ?: null,
+                $data['country'] ?: 'US',
+                portal_projection_source_version(),
+                $targetOrganizationId,
+            ]);
         }
 
         $values = [
@@ -144,7 +244,7 @@ try {
                 ->execute([$clientId, $targetOrganizationId, (int)$submission['invitation_id']]);
         } elseif ($clientId > 0) {
             $update = $pdo->prepare(
-                'UPDATE clients SET name=?,email=?,phone=?,address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,client_type=?,organization_id=COALESCE(?, organization_id),source_version=? WHERE id=?'
+                'UPDATE clients SET name=?,email=?,phone=?,address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,client_type=?,organization_id=?,source_version=? WHERE id=?'
             );
             $update->execute(array_merge($values, [$targetOrganizationId, portal_projection_source_version(), $clientId]));
         } else {
@@ -159,9 +259,45 @@ try {
                 $userId,
             ]));
             $clientId = (int)$pdo->lastInsertId();
-            $pdo->prepare('UPDATE client_onboarding_invitations SET client_id=? WHERE id=?')
-                ->execute([$clientId, (int)$submission['invitation_id']]);
         }
+        $pdo->prepare('UPDATE client_onboarding_invitations SET client_id=?,target_organization_id=? WHERE id=?')
+            ->execute([$clientId, $targetOrganizationId, (int)$submission['invitation_id']]);
+        if ($reviewClientType === 'business' && $targetOrganizationId) {
+            // Organization onboarding has one shared business address. Even an
+            // explicitly matched client must not retain a separate private
+            // address under this approval path.
+            $pdo->prepare(
+                'UPDATE clients
+                 SET organization_id=?,client_type="business",address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,source_version=?
+                 WHERE id=?'
+            )->execute([
+                $targetOrganizationId,
+                $data['address_line1'] ?: null,
+                $data['address_line2'] ?: null,
+                $data['city'] ?: null,
+                $data['state'] ?: null,
+                $data['postal_code'] ?: null,
+                $data['country'] ?: 'US',
+                portal_projection_source_version(),
+                $clientId,
+            ]);
+        }
+        $sharedAddress = [
+            'label' => 'Billing address',
+            'address_line1' => $data['address_line1'],
+            'address_line2' => $data['address_line2'],
+            'city' => $data['city'],
+            'state' => $data['state'],
+            'postal_code' => $data['postal_code'],
+            'country' => $data['country'],
+            'source' => 'manual',
+        ];
+        address_book_save($pdo, $sharedAddress, 'client', $clientId, 'billing', true, $userId);
+        if ($reviewClientType === 'business' && $targetOrganizationId) {
+            address_book_save($pdo, $sharedAddress, 'organization', $targetOrganizationId, 'billing', true, $userId);
+        }
+        $pdo->prepare('UPDATE client_onboarding_submissions SET proposed_data=? WHERE id=?')
+            ->execute([json_encode($data, JSON_UNESCAPED_SLASHES), $submissionId]);
     }
 
     $status = $decision === 'approve' ? 'approved' : 'rejected';

@@ -24,6 +24,8 @@ $projectClientIds = $_POST['project_client_ids'] ?? [];
 if (!is_array($projectClientIds)) { $projectClientIds = []; }
 $projectInvoiceRecipientIds = $_POST['project_invoice_email_client_ids'] ?? [];
 if (!is_array($projectInvoiceRecipientIds)) { $projectInvoiceRecipientIds = []; }
+$projectInvoiceManualEmailsRaw = $_POST['project_invoice_manual_emails'] ?? '';
+$useOrganizationInvoiceEmail = !empty($_POST['project_invoice_use_organization_email']);
 $projectInvoiceLinkClientIds = $_POST['project_invoice_link_client_ids'] ?? [];
 if (!is_array($projectInvoiceLinkClientIds)) { $projectInvoiceLinkClientIds = []; }
 $parent_id = null; // Parent projects not supported any more
@@ -102,13 +104,30 @@ if ($department_id > 0) {
 
 $projectClientIds = array_values(array_unique(array_filter(array_map('intval', $projectClientIds), static fn($clientId) => $clientId > 0)));
 $projectInvoiceRecipientIds = array_values(array_unique(array_filter(array_map('intval', $projectInvoiceRecipientIds), static fn($clientId) => $clientId > 0)));
+try {
+	$projectInvoiceManualEmails = project_invoice_normalize_manual_recipient_emails($projectInvoiceManualEmailsRaw);
+} catch (InvalidArgumentException $error) {
+	header('Location: '.$editRedirect.'&error=' . urlencode($error->getMessage()));
+	exit;
+}
+if ($useOrganizationInvoiceEmail) {
+	$organizationEmailStmt = $pdo->prepare('SELECT general_email FROM organizations WHERE id = ? LIMIT 1');
+	$organizationEmailStmt->execute([$organization_id]);
+	$organizationEmail = trim((string)($organizationEmailStmt->fetchColumn() ?: ''));
+	if ($organization_id <= 0 || !filter_var($organizationEmail, FILTER_VALIDATE_EMAIL)) {
+		header('Location: '.$editRedirect.'&error=' . urlencode('The project organization does not have a valid company email.'));
+		exit;
+	}
+}
 $projectInvoiceLinkClientIds = array_values(array_unique(array_filter(array_map('intval', $projectInvoiceLinkClientIds), static fn($clientId) => $clientId > 0)));
 if ($client_id > 0 && !in_array($client_id, $projectClientIds, true)) {
 	header('Location: '.$editRedirect.'&error=' . urlencode('Primary invoice receiver must remain attached to the project.'));
 	exit;
 }
-$projectInvoiceRecipientIds = array_values(array_intersect($projectInvoiceRecipientIds, $projectClientIds));
 $projectInvoiceLinkClientIds = array_values(array_intersect($projectInvoiceLinkClientIds, $projectClientIds));
+foreach ($projectInvoiceRecipientIds as $recipientClientId) {
+	require_record_ownership($pdo, 'clients', $recipientClientId);
+}
 
 if ($organization_id > 0) {
 	require_record_ownership($pdo, 'organizations', $organization_id);
@@ -129,6 +148,19 @@ if ($organization_id > 0) {
 	foreach ($projectClientIds as $attachedClientId) {
 		require_record_ownership($pdo, 'clients', $attachedClientId);
 	}
+}
+
+$recipientConfigIsDeliverable = !empty($_POST['project_invoice_recipients_present'])
+	? project_invoice_has_deliverable_recipient_config(
+		$pdo,
+		$projectInvoiceRecipientIds,
+		$projectInvoiceManualEmails,
+		$useOrganizationInvoiceEmail ? [$organization_id] : []
+	)
+	: project_invoice_has_saved_deliverable_recipient($pdo, $id);
+if ($projectInvoiceAutoEmail && !$recipientConfigIsDeliverable) {
+	header('Location: '.$editRedirect.'&error=' . urlencode('Automatic project invoice email requires at least one valid recipient.'));
+	exit;
 }
 
 // Validate dates
@@ -208,7 +240,23 @@ if ($managerUserId > 0) {
 }
 $pdo->prepare('UPDATE operations SET business_unit_id=? WHERE project_id=?')->execute([$businessUnitId ?: null, $id]);
 $pdo->prepare('UPDATE tasks SET business_unit_id=? WHERE project_id=?')->execute([$businessUnitId ?: null, $id]);
-project_invoice_sync_clients($pdo, $id, $client_id > 0 ? $client_id : null, $projectClientIds, $projectInvoiceRecipientIds, $projectInvoiceLinkClientIds);
+project_invoice_sync_clients(
+	$pdo,
+	$id,
+	$client_id > 0 ? $client_id : null,
+	$projectClientIds,
+	array_values(array_intersect($projectInvoiceRecipientIds, $projectClientIds)),
+	$projectInvoiceLinkClientIds
+);
+if (!empty($_POST['project_invoice_recipients_present'])) {
+	project_invoice_sync_recipients(
+		$pdo,
+		$id,
+		$projectInvoiceRecipientIds,
+		$projectInvoiceManualEmails,
+		$useOrganizationInvoiceEmail ? [$organization_id] : []
+	);
+}
 $serviceLocationIds = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['service_location_ids'] ?? [])))));
 $defaultServiceLocationId = (int)($_POST['default_service_location_id'] ?? 0);
 if ($defaultServiceLocationId > 0 && !in_array($defaultServiceLocationId, $serviceLocationIds, true)) $serviceLocationIds[] = $defaultServiceLocationId;

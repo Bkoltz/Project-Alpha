@@ -32,6 +32,10 @@ try {
         $params = [$departmentId, $organizationId];
     }
 
+    $organizationStmt = $pdo->prepare('SELECT name, general_email FROM organizations WHERE id = ? LIMIT 1');
+    $organizationStmt->execute([$organizationId]);
+    $organization = $organizationStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
     $stmt = $pdo->prepare("
         SELECT c.id, c.name, c.email, {$select}
         FROM clients c
@@ -40,7 +44,14 @@ try {
         ORDER BY is_primary_department_contact DESC, is_department_contact DESC, c.name ASC
     ");
     $stmt->execute($params);
-    echo json_encode(['clients' => $stmt->fetchAll(PDO::FETCH_ASSOC)], JSON_UNESCAPED_SLASHES);
+    echo json_encode([
+        'clients' => $stmt->fetchAll(PDO::FETCH_ASSOC),
+        'organization_recipient' => [
+            'id' => $organizationId,
+            'name' => (string)($organization['name'] ?? ''),
+            'email' => (string)($organization['general_email'] ?? ''),
+        ],
+    ], JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     http_response_code(403);
     echo json_encode(['error' => 'Permission denied']);

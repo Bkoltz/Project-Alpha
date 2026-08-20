@@ -66,9 +66,31 @@ try {
     @error_log("$logPrefix Completed: $invoicesGenerated invoices generated across $catchUpPasses catch-up pass(es), $errors errors");
 
     $projectInvoicesGenerated = 0;
+    $projectBillingResult = [
+        'processed' => 0,
+        'generated' => 0,
+        'existing' => 0,
+        'drafted' => 0,
+        'delivered' => 0,
+        'already_delivered' => 0,
+        'delivery_pending' => 0,
+        'delivery_failed' => 0,
+    ];
     try {
-        $projectInvoicesGenerated = project_invoice_generate_due_monthly($pdo, $appConfig);
-        @error_log("$logPrefix Project monthly billing generated {$projectInvoicesGenerated} project invoice(s)");
+        $projectBillingResult = project_invoice_generate_due_monthly_result($pdo, $appConfig);
+        $projectInvoicesGenerated = $projectBillingResult['generated'];
+        $errors += $projectBillingResult['delivery_pending'] + $projectBillingResult['delivery_failed'];
+        @error_log(sprintf(
+            '%s Project monthly billing: %d generated, %d existing, %d drafted, %d delivered, %d already delivered, %d pending/retrying, %d failed',
+            $logPrefix,
+            $projectBillingResult['generated'],
+            $projectBillingResult['existing'],
+            $projectBillingResult['drafted'],
+            $projectBillingResult['delivered'],
+            $projectBillingResult['already_delivered'],
+            $projectBillingResult['delivery_pending'],
+            $projectBillingResult['delivery_failed']
+        ));
     } catch (Throwable $e) {
         $errors++;
         @error_log("$logPrefix Project monthly billing failed: " . $e->getMessage());
@@ -89,7 +111,7 @@ try {
         $errors += $deliveryStats['retry'];
 
     }
-    cron_state_mark_success($pdo, $jobName, "Generated {$invoicesGenerated} recurring invoice(s), {$projectInvoicesGenerated} project invoice(s); delivery {$deliveryStats['sent']} sent/{$deliveryStats['retry']} retry/{$deliveryStats['suppressed']} suppressed; {$errors} error(s); {$catchUpPasses} catch-up pass(es)");
+    cron_state_mark_success($pdo, $jobName, "Generated {$invoicesGenerated} recurring invoice(s), {$projectInvoicesGenerated} project invoice(s); project delivery {$projectBillingResult['delivered']} sent/{$projectBillingResult['delivery_pending']} pending/{$projectBillingResult['delivery_failed']} failed; delivery {$deliveryStats['sent']} sent/{$deliveryStats['retry']} retry/{$deliveryStats['suppressed']} suppressed; {$errors} error(s); {$catchUpPasses} catch-up pass(es)");
 
     // Update last run timestamp in settings (legacy support)
     $configMount = '/var/www/config';

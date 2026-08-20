@@ -193,6 +193,7 @@ if ($activeOrgId > 0) {
   </style>
   <form method="post" action="/?page=project/projects-create" style="display:grid;gap:12px;max-width:680px">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+    <input type="hidden" name="project_invoice_recipients_present" value="1">
     
     <label>
       <div>Project Name</div>
@@ -275,7 +276,21 @@ if ($activeOrgId > 0) {
         </div>
         <div data-picker-hidden></div>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">Department primary contacts are added automatically when a department is selected. You can remove them with the x.</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Contacts from the selected organization are suggested first. Search can also find another client contact you are allowed to access. Choosing a recipient does not add them to the project.</div>
+    </label>
+
+    <label>
+      <div>Manual Project Invoice Email Recipients</div>
+      <input type="text" name="project_invoice_manual_emails" placeholder="billing@example.com, owner@example.com" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Optional. Separate multiple email addresses with commas. Manual recipients do not become clients or project contacts.</div>
+    </label>
+
+    <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;border:1px solid #dbe3ef;border-radius:8px">
+      <input id="projectOrganizationInvoiceEmail" type="checkbox" name="project_invoice_use_organization_email" value="1" disabled style="margin-top:3px">
+      <span>
+        <strong>Company email</strong>
+        <small id="projectOrganizationInvoiceEmailHelp" style="display:block;color:var(--muted)">Select an organization with a saved company email.</small>
+      </span>
     </label>
 
     <!-- Parent projects removed per spec: Projects have no parents -->

@@ -240,7 +240,7 @@ function migration_schema_health(PDO $pdo): void
     $requiredTables = [
         'users', 'organizations', 'roles', 'role_permissions',
         'clients', 'organization_departments', 'organization_department_contacts',
-        'projects', 'quotes', 'contracts', 'invoices', 'payments',
+        'projects', 'quotes', 'contracts', 'invoices', 'payments', 'project_invoice_recipients',
         'api_keys', 'client_onboarding_invitations', 'client_onboarding_submissions',
         'business_settings', 'employee_profiles', 'project_assignments',
         'work_time_entries', 'work_time_breaks', 'work_timer_locks', 'work_break_locks',
@@ -281,6 +281,7 @@ function migration_schema_health(PDO $pdo): void
         'portal_projection_state', 'portal_draft_quote_commands', 'portal_integration_audit',
         'portal_projection_resource_state', 'portal_manager_scope_state',
         'portal_integration_request_receipts', 'portal_integration_rate_buckets',
+        'managed_delivery_intent_outbox',
         'document_number_sequences',
     ];
     $deadTables = [
@@ -308,13 +309,14 @@ function migration_schema_health(PDO $pdo): void
 
     $requiredColumns = [
         'users' => ['email', 'password_hash', 'role', 'force_password_reset', 'auth_version', 'totp_reenroll_required'],
-        'organizations' => ['public_id', 'source_version'],
+        'organizations' => ['public_id', 'source_version', 'general_email', 'general_phone'],
         'organization_departments' => ['public_id', 'source_version'],
         'clients' => ['public_id', 'source_version', 'organization_id', 'created_by'],
         'projects' => ['public_id', 'source_version', 'completed_at', 'organization_id', 'department_id', 'business_unit_id', 'manager_user_id', 'created_by'],
         'portal_principals' => ['public_id', 'email_hint', 'display_name', 'source_version', 'enabled', 'authorization_version', 'revoked_at'],
         'portal_identity_bindings' => ['portal_principal_id', 'issuer', 'subject_hash', 'enabled', 'revoked_at'],
         'project_clients' => ['client_id', 'send_project_invoices', 'can_view_invoice_links'],
+        'project_invoice_recipients' => ['project_id', 'client_id', 'organization_id', 'manual_email', 'recipient_key', 'sort_order'],
         'entity_links' => ['include_on_invoices', 'resolver_mode', 'visibility_scope'],
         'contracts' => ['organization_id', 'show_contact_on_document', 'created_by', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision', 'signed_revision_number', 'signed_pdf_sha256'],
         'invoices' => ['organization_id', 'show_contact_on_document', 'created_by', 'collection_mode', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision', 'credit_due', 'credit_applied'],
@@ -323,6 +325,7 @@ function migration_schema_health(PDO $pdo): void
         'portal_integration_audit' => ['integration_profile_id','api_key_id','correlation_id','action','outcome','target_type','target_public_id','metadata_json'],
         'portal_projection_resource_state' => ['integration_profile_id','workspace_public_id','route_type','resource_type','resource_public_id','source_version','payload_hash','record_json'],
         'portal_manager_scope_state' => ['integration_profile_id','workspace_id','scope_type','scope_public_id','state','last_manager_removed_at','updated_by'],
+        'managed_delivery_intent_outbox' => ['delivery_id','intent_type','target_delivery_id','integration_profile_id','destination_url','pinned_application_key','signing_key_id','signing_contract_hash','delivery_timeout_seconds','delivery_max_attempts','actor_user_id','scope_type','scope_public_id','audience_type','audience_public_id','access_mode','request_fingerprint','payload_json','attempts','next_attempt_at','claim_token','claimed_at','delivered_at','dead_lettered_at','last_http_status','last_error_code','receipt_id','revoked_at'],
         'notification_relay_queue' => ['api_key_id', 'action_name', 'template_name', 'recipient_alias', 'variables_json', 'idempotency_hash', 'payload_hash', 'status', 'attempt_count', 'next_attempt_at', 'lock_token'],
         'notification_relay_events' => ['queue_id', 'queue_reference', 'api_key_id', 'event_type', 'status', 'attempt_count', 'error_code'],
         'sync_source_identity' => ['singleton', 'source_instance_id'],

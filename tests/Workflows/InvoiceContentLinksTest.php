@@ -112,6 +112,27 @@ final class InvoiceContentLinksTest extends TestCase
         $this->assertContains($clientLink, array_map(static fn($row) => (int)$row['id'], $links));
     }
 
+    public function testOutsideBillingRecipientDoesNotGainClientContentLinkAccess(): void
+    {
+        $suffix = bin2hex(random_bytes(5));
+        $orgId = $this->insertOrganization('Recipient Separation ' . $suffix);
+        $primaryId = $this->insertClient('Authorized Contact ' . $suffix, $orgId, 'authorized-' . $suffix . '@example.invalid');
+        $outsideId = $this->insertClient('Delivery Only ' . $suffix, null, 'delivery-' . $suffix . '@example.invalid');
+        $projectId = $this->insertProject($orgId, 0, $primaryId, 'Recipient Separation ' . $suffix);
+        $this->insertProjectClient($projectId, $primaryId, 1, 1, 1);
+        $projectInvoiceId = $this->insertProjectInvoice($projectId, $orgId, $primaryId);
+
+        $authorizedUrl = 'https://example.invalid/authorized-' . $suffix;
+        $deliveryOnlyUrl = 'https://example.invalid/delivery-only-' . $suffix;
+        $this->insertLink('client', $primaryId, 'Authorized client link', $authorizedUrl, 'manual_dropbox', 'entity_only');
+        $this->insertLink('client', $outsideId, 'Delivery-only client link', $deliveryOnlyUrl, 'manual_dropbox', 'entity_only');
+
+        $urls = array_column(invoice_content_links_for_project_invoice($this->pdo, $projectInvoiceId, [], [$outsideId]), 'url');
+
+        $this->assertNotContains($deliveryOnlyUrl, $urls, 'Selecting an email recipient must not grant access to that client\'s links.');
+        $this->assertNotContains($authorizedUrl, $urls, 'A per-recipient email includes only links explicitly authorized for that recipient.');
+    }
+
     public function testProjectClientSyncRemovesContactsWithoutDeletingClientOrKeepingLinkAccess(): void
     {
         require_once dirname(__DIR__, 2) . '/src/utils/project_invoice_billing.php';

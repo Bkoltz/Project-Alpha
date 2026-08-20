@@ -232,6 +232,14 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
               </form>
             </dd>
           </div>
+          <div>
+            <dt>General Contact</dt>
+            <dd>
+              <?php if (!empty($org['general_email'])): ?><div><a href="mailto:<?php echo htmlspecialchars((string)$org['general_email']); ?>"><?php echo htmlspecialchars((string)$org['general_email']); ?></a></div><?php endif; ?>
+              <?php if (!empty($org['general_phone'])): ?><div><?php echo htmlspecialchars((string)$org['general_phone']); ?></div><?php endif; ?>
+              <?php if (empty($org['general_email']) && empty($org['general_phone'])): ?><span style="color:var(--muted)">No general contact saved.</span><?php endif; ?>
+            </dd>
+          </div>
         </dl>
       </div>
 

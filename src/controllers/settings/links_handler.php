@@ -16,6 +16,9 @@ if (!csrf_validate()) {
 }
 
 try {
+    if (isset($_POST['managed_delivery_enabled'], $_POST['provider_enabled_r2'])) {
+        throw new DomainException('LTDS Managed Delivery and the standalone direct-R2 resolver cannot be enabled together. Your saved R2 credentials were not removed.');
+    }
     // Ensure app_config table exists
     $pdo->exec("CREATE TABLE IF NOT EXISTS app_config (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -165,6 +168,13 @@ try {
         $expirationDays = (int)($globalSettings['default_link_expiration_days'] ?? $readConfig('default_link_expiration_days', 365));
         pa_link_provider_save($pdo, $provider, $isEnabled, $credentials, $expirationDays);
     }
+
+    (new \App\Services\ManagedDeliveryService())->saveConfig($pdo, [
+        'enabled' => isset($_POST['managed_delivery_enabled']),
+        'intent_url' => (string)($_POST['managed_delivery_intent_url'] ?? ''),
+        'profile_id' => (int)($_POST['managed_delivery_profile_id'] ?? 0),
+        'guest_links_enabled' => isset($_POST['managed_delivery_guest_links_enabled']),
+    ]);
     
     header('Location: /?page=settings&tab=links&saved=1');
     exit;

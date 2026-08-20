@@ -136,6 +136,15 @@ function project_invoice_notification_process(
                 break;
             }
         }
+        if (!$currentRecipient && $row['notification_type'] === 'manual') {
+            $queuedEmail = trim((string)($row['email_to'] ?? ''));
+            if (filter_var($queuedEmail, FILTER_VALIDATE_EMAIL)) {
+                // A manual send is an explicit, authenticated point-in-time
+                // choice. Retries honor that queued destination even when it
+                // is not part of the project's automatic reminder list.
+                $currentRecipient = ['id' => null, 'name' => 'there', 'email' => $queuedEmail];
+            }
+        }
         $reason = null;
         if (!in_array((string)$row['invoice_status'], ['sent', 'unpaid', 'partial'], true)
             || empty($row['finalized_at']) || (float)$row['balance_due'] <= 0.005) {
@@ -207,7 +216,8 @@ function project_invoice_notification_process(
                 . '<p>Outstanding balance: <strong>$' . number_format((float)$row['balance_due'], 2) . '</strong></p>'
                 . '<p>Payment terms: Net ' . $termDays . ' (due ' . date('F j, Y', strtotime($due)) . ')</p>'
                 . ($url !== '' ? '<p><a href="' . htmlspecialchars($url) . '">View project invoice</a></p>' : '');
-            $body .= invoice_content_links_html(invoice_content_links_for_project_invoice($pdo, (int)$row['project_invoice_id'], $appConfig, [(int)$currentRecipient['id']]));
+            $contentLinkClientIds = !empty($currentRecipient['id']) ? [(int)$currentRecipient['id']] : [];
+            $body .= invoice_content_links_html(invoice_content_links_for_project_invoice($pdo, (int)$row['project_invoice_id'], $appConfig, $contentLinkClientIds));
             $send = $sender ?: static fn(string $to, string $subject, string $body, array $options): array
                 => EmailService::sendEmail($to, $subject, $body, $options);
             [$ok, $error] = $send((string)$currentRecipient['email'], $subject, $body, [

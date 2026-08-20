@@ -193,28 +193,30 @@ function pa_invoice_links_query_for_context(
         }
     }
 
+    $requestedClientIds = $recipientClientIds === null
+        ? null
+        : array_values(array_unique(array_filter(array_map('intval', $recipientClientIds), static fn($id) => $id > 0)));
     $clientIds = [];
-    if ($recipientClientIds !== null) {
-        $clientIds = array_values(array_unique(array_filter(array_map('intval', $recipientClientIds), static fn($id) => $id > 0)));
-    } elseif ($primaryClientId) {
-        $clientIds[] = $primaryClientId;
-    }
     if ($projectId && pa_table_has_column($pdo, 'project_clients', 'can_view_invoice_links')) {
         $linkClientQuery = 'SELECT client_id FROM project_clients WHERE project_id = ? AND can_view_invoice_links = 1';
         $linkClientParams = [$projectId];
         if ($recipientClientIds !== null) {
-            if (!$clientIds) {
+            if (!$requestedClientIds) {
                 $linkClientQuery = '';
             } else {
-                $linkClientQuery .= ' AND client_id IN (' . implode(',', array_fill(0, count($clientIds), '?')) . ')';
-                $linkClientParams = array_merge($linkClientParams, $clientIds);
+                $linkClientQuery .= ' AND client_id IN (' . implode(',', array_fill(0, count($requestedClientIds), '?')) . ')';
+                $linkClientParams = array_merge($linkClientParams, $requestedClientIds);
             }
         }
         if ($linkClientQuery !== '') {
             $stmt = $pdo->prepare($linkClientQuery);
             $stmt->execute($linkClientParams);
-            $clientIds = array_values(array_unique(array_map('intval', array_merge($clientIds, $stmt->fetchAll(PDO::FETCH_COLUMN)))));
+            $clientIds = array_values(array_unique(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN))));
         }
+    } elseif (!$projectId) {
+        // Standalone invoices retain their direct client context. Project
+        // invoices never infer link access from the delivery recipient.
+        $clientIds = $requestedClientIds ?? ($primaryClientId ? [$primaryClientId] : []);
     }
     if ($clientIds) {
         $candidateClauses[] = '(el.entity_type = "client" AND el.entity_id IN (' . implode(',', array_fill(0, count($clientIds), '?')) . '))';

@@ -24,13 +24,16 @@ $uptime = '';
 $dashboard_finance_period_start = date('Y') . '-01-01';
 $dashboard_finance_subtitle = date('Y') . ' finance summary';
 $dashboard_actionable_invoice_where = "
-    status IN ('partial','overdue')
-    OR (
-      status = 'unpaid'
-      AND (
-        due_date IS NULL
-        OR due_date <= CURDATE()
-        OR invoice_type != 'long_term'
+    COALESCE(collection_mode, 'direct') = 'direct'
+    AND (
+      status IN ('partial','overdue')
+      OR (
+        status = 'unpaid'
+        AND (
+          due_date IS NULL
+          OR due_date <= CURDATE()
+          OR invoice_type != 'long_term'
+        )
       )
     )
 ";
@@ -53,7 +56,7 @@ try {
   $pending_quotes     = (int)$pdo->query("SELECT COUNT(*) FROM quotes WHERE status='pending'")->fetchColumn();
   $active_contracts   = (int)$pdo->query("SELECT COUNT(*) FROM contracts WHERE status IN ('draft','active')")->fetchColumn();
   $unpaid_invoices    = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE {$dashboard_actionable_invoice_where}")->fetchColumn();
-  $overdue_invoices   = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('sent','unpaid','partial','overdue') AND due_date IS NOT NULL AND due_date < CURDATE()")->fetchColumn();
+  $overdue_invoices   = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE COALESCE(collection_mode, 'direct') = 'direct' AND status IN ('sent','unpaid','partial','overdue') AND due_date IS NOT NULL AND due_date < CURDATE()")->fetchColumn();
   $receipts_30        = (int)$pdo->query("SELECT COUNT(*) FROM receipts WHERE created_at >= NOW() - INTERVAL 30 DAY")->fetchColumn();
   $total_clients      = (int)$pdo->query("SELECT COUNT(*) FROM clients WHERE archived=0 AND deleted_at IS NULL")->fetchColumn();
   $total_users        = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE is_disabled=0")->fetchColumn();

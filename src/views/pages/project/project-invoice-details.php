@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../../../utils/document_recipient.php';
 require_once __DIR__ . '/../../../utils/invoice_content_links.php';
 require_once __DIR__ . '/../../../utils/public_links.php';
 
@@ -17,16 +18,26 @@ project_invoice_refresh_status($pdo, $id);
 $stmt = $pdo->prepare('
     SELECT pi.*, p.name AS project_name, p.notes AS project_notes,
            o.name AS organization_name,
+           o.general_email AS organization_email,
+           o.general_phone AS organization_phone,
            o.address_line1 AS organization_address_line1,
            o.address_line2 AS organization_address_line2,
            o.city AS organization_city,
            o.state AS organization_state,
            o.postal_code AS organization_postal_code,
            o.country AS organization_country,
-           c.name AS primary_client_name
+           c.name AS client_name,
+           c.email AS client_email,
+           c.phone AS client_phone,
+           c.address_line1 AS client_address_line1,
+           c.address_line2 AS client_address_line2,
+           c.city AS client_city,
+           c.state AS client_state,
+           c.postal_code AS client_postal_code,
+           c.country AS client_country
     FROM project_invoices pi
     JOIN projects p ON p.id = pi.project_id
-    LEFT JOIN organizations o ON o.id = pi.organization_id
+    LEFT JOIN organizations o ON o.id = COALESCE(pi.organization_id, p.organization_id)
     LEFT JOIN clients c ON c.id = pi.primary_client_id
     WHERE pi.id = ?
 ');
@@ -73,6 +84,7 @@ $docNum = $pi['doc_number'] ?: $pi['id'];
 $isPdf = defined('PDF_MODE') && PDF_MODE;
 $isPublic = defined('PUBLIC_VIEW') && PUBLIC_VIEW;
 $showEmailPanel = !empty($_GET['email_panel']) || !empty($_GET['content_link_warning']);
+$billingRecipient = pa_document_recipient($pi);
 ?>
 <section class="document-detail-page" style="max-width:980px;margin:0 auto;padding:<?php echo $isPublic ? '0' : '24px'; ?>">
   <?php if (!$isPdf && !$isPublic): ?>
@@ -113,16 +125,16 @@ $showEmailPanel = !empty($_GET['email_panel']) || !empty($_GET['content_link_war
         <?php endif; ?>
         <div>
           <div style="font-weight:700;margin-bottom:4px">Send Project Invoice</div>
-          <div style="font-size:13px;color:#4b5563">Choose which project clients should receive this email.</div>
+          <div style="font-size:13px;color:#4b5563">Choose from the saved project invoice recipients. Change this list from Edit Project.</div>
         </div>
-        <?php if ($projectClients): ?>
+        <?php if ($recipients): ?>
           <div style="display:grid;gap:6px">
-            <?php foreach ($projectClients as $client): ?>
+            <?php foreach ($recipients as $client): ?>
               <?php $hasEmail = !empty($client['email']) && filter_var((string)$client['email'], FILTER_VALIDATE_EMAIL); ?>
               <label style="display:flex;gap:8px;align-items:flex-start;padding:8px;border:1px solid #bfdbfe;border-radius:8px;background:#fff;<?php echo $hasEmail ? '' : 'opacity:.6'; ?>">
-                <input type="checkbox" name="recipient_client_ids[]" value="<?php echo (int)$client['id']; ?>" <?php echo !empty($client['send_project_invoices']) && $hasEmail ? 'checked' : ''; ?> <?php echo $hasEmail ? '' : 'disabled'; ?> style="margin-top:3px">
+                <input type="checkbox" name="recipient_keys[]" value="<?php echo htmlspecialchars((string)($client['recipient_key'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" <?php echo $hasEmail ? 'checked' : ''; ?> <?php echo $hasEmail ? '' : 'disabled'; ?> style="margin-top:3px">
                 <span>
-                  <span style="font-weight:600"><?php echo htmlspecialchars($client['name']); ?><?php echo !empty($client['is_primary_billing']) ? ' (primary)' : ''; ?></span>
+                  <span style="font-weight:600"><?php echo htmlspecialchars((string)$client['name']); ?></span>
                   <span style="display:block;font-size:12px;color:#6b7280"><?php echo $hasEmail ? htmlspecialchars((string)$client['email']) : 'No email address on file'; ?></span>
                 </span>
               </label>
@@ -133,7 +145,7 @@ $showEmailPanel = !empty($_GET['email_panel']) || !empty($_GET['content_link_war
             <button type="button" class="btn btn-sm" onclick="closeEmailPanel()">Cancel</button>
           </div>
         <?php else: ?>
-          <div style="color:#92400e">No project clients are attached yet.</div>
+          <div style="color:#92400e">No project invoice recipients are saved. Add a company email, client contact, or manual address from Edit Project.</div>
         <?php endif; ?>
       </form>
     </div>
@@ -169,36 +181,13 @@ $showEmailPanel = !empty($_GET['email_panel']) || !empty($_GET['content_link_war
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
     <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">
       <div style="font-weight:700;margin-bottom:8px">Bill To</div>
-      <?php if ($recipients): ?>
-        <?php foreach ($recipients as $r): ?>
-          <div><?php echo htmlspecialchars($r['name'] ?? 'Client'); ?><?php if (!empty($r['email'])): ?> &lt;<?php echo htmlspecialchars($r['email']); ?>&gt;<?php endif; ?></div>
-        <?php endforeach; ?>
-      <?php else: ?>
-        <div style="color:#6b7280">No project clients with email addresses.</div>
-      <?php endif; ?>
+      <?php foreach ($billingRecipient['lines'] as $line): ?><div><?php echo htmlspecialchars($line); ?></div><?php endforeach; ?>
+      <?php if ($billingRecipient['phone'] !== null): ?><div style="color:#6b7280"><?php echo htmlspecialchars($billingRecipient['phone']); ?></div><?php endif; ?>
+      <?php if ($billingRecipient['email'] !== null): ?><div style="color:#6b7280"><?php echo htmlspecialchars($billingRecipient['email']); ?></div><?php endif; ?>
     </div>
     <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">
       <div style="font-weight:700;margin-bottom:8px">Project</div>
       <div><?php echo htmlspecialchars($pi['project_name']); ?></div>
-      <?php
-        $orgLines = [];
-        if (!empty($pi['organization_name'])) { $orgLines[] = (string)$pi['organization_name']; }
-        if (!empty($pi['organization_address_line1'])) { $orgLines[] = (string)$pi['organization_address_line1']; }
-        if (!empty($pi['organization_address_line2'])) { $orgLines[] = (string)$pi['organization_address_line2']; }
-        $orgCity = trim((string)($pi['organization_city'] ?? ''));
-        $orgState = trim((string)($pi['organization_state'] ?? ''));
-        $orgPostal = trim((string)($pi['organization_postal_code'] ?? ''));
-        $orgCityParts = [];
-        if ($orgCity !== '') { $orgCityParts[] = $orgCity; }
-        if ($orgState !== '') { $orgCityParts[] = $orgState; }
-        if ($orgPostal !== '') { $orgCityParts[] = $orgPostal; }
-        $orgCityLine = implode(', ', $orgCityParts);
-        if ($orgCityLine !== '') { $orgLines[] = $orgCityLine; }
-        if (!empty($pi['organization_country']) && strtoupper((string)$pi['organization_country']) !== 'US' && strtoupper((string)$pi['organization_country']) !== 'USA') {
-          $orgLines[] = (string)$pi['organization_country'];
-        }
-      ?>
-      <?php foreach ($orgLines as $line): ?><div style="color:#6b7280"><?php echo htmlspecialchars($line); ?></div><?php endforeach; ?>
     </div>
   </div>
 

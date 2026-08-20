@@ -36,7 +36,11 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('/assets/js/project-settings.js', (string)$edit);
         self::assertStringContainsString('/?page=project/client-options', (string)$script);
         self::assertStringContainsString('is_primary_department_contact', (string)$script);
-        self::assertStringContainsString('selected.project.add(id)', (string)$script);
+        self::assertStringNotContainsString('selected.project.add(id)', (string)$script);
+        self::assertStringContainsString('/?page=clients-search&term=', (string)$script);
+        self::assertStringContainsString('project_invoice_manual_emails', (string)$view);
+        self::assertStringContainsString('project_invoice_use_organization_email', (string)$view);
+        self::assertStringContainsString('project_invoice_use_organization_email', (string)$edit);
         self::assertStringContainsString('initializedNewPicker', (string)$script);
         self::assertStringContainsString('project_invoice_link_client_ids[]', (string)$settingsScript);
         self::assertStringContainsString('$projectInvoiceRecipientIds ?? []', (string)$controller);
@@ -157,6 +161,22 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("page=client/client-details&id=' . \$id", (string)$update);
     }
 
+    public function testClientListOptsIntoAccessibleLivePartialFiltering(): void
+    {
+        $list = file_get_contents($this->root . '/src/views/pages/client/clients-list.php');
+        $template = file_get_contents($this->root . '/src/views/templates/components/document-filter.html.twig');
+        $script = file_get_contents($this->root . '/public/assets/js/client-list-live-filter.js');
+
+        self::assertStringContainsString("'live_filter_fields' => ['q', 'org']", (string)$list);
+        self::assertStringContainsString("'live_filter_debounce' => 300", (string)$list);
+        self::assertStringContainsString('data-live-filter-fields', (string)$template);
+        self::assertStringContainsString('aria-live="polite"', (string)$template);
+        self::assertStringContainsString('projectAlpha.registerPage([', (string)$script);
+        self::assertStringContainsString("'client/clients-list'", (string)$script);
+        self::assertStringContainsString("'organization/organizations-list'", (string)$script);
+        self::assertStringContainsString('window.navigateToPage(state.page, false)', (string)$script);
+    }
+
     public function testResolverFoldersUseProviderAvailabilityInsteadOfCalendarExpiration(): void
     {
         $resolver = file_get_contents($this->root . '/src/services/LinkResolverService.php');
@@ -216,7 +236,8 @@ final class ProjectWorkflowUiTest extends TestCase
             self::assertStringContainsString('pa_document_recipient(', (string)$documentView);
         }
         self::assertStringContainsString('organization_address_line2', (string)$projectInvoiceDetail);
-        self::assertStringContainsString('$orgLines[] = (string)$pi[\'organization_address_line2\'];', (string)$projectInvoiceDetail);
+        self::assertStringContainsString('pa_document_recipient($pi)', (string)$projectInvoiceDetail);
+        self::assertStringContainsString('$billingRecipient[\'lines\']', (string)$projectInvoiceDetail);
     }
 
     public function testWorkforceTimekeepingUsesTheUnifiedDomainService(): void
@@ -558,6 +579,10 @@ final class ProjectWorkflowUiTest extends TestCase
             self::assertStringContainsString($selector, $styles);
         }
         self::assertStringContainsString('.nav-footer-form{margin:0;width:100%}', $styles);
+        self::assertMatchesRegularExpression(
+            '/\.nav-footer \.settings\s*\{(?=[^}]*background:rgba\(255,255,255,0\.06\))(?=[^}]*color:rgba\(255,255,255,0\.9\))[^}]*\}/s',
+            $styles
+        );
         self::assertStringContainsString('-webkit-appearance:none;', $styles);
         self::assertStringContainsString('appearance:none;', $styles);
         self::assertStringNotContainsString('style="margin-top:8px;display:block"', $header);
@@ -750,7 +775,8 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("notification_setting_enabled(\$appConfig, 'notify_signed_contract_uploaded', true)", (string)$notifications);
         self::assertStringContainsString('admin_invoice_paid_notification_enabled($appConfig, $invoice)', (string)$notifications);
         self::assertStringContainsString('function notify_admin_project_invoice_paid', (string)$notifications);
-        self::assertStringContainsString('notify_admin_project_invoice_paid($pdo, $GLOBALS[\'appConfig\'] ?? [], $projectInvoiceId, $amount', (string)$projectBilling);
+        self::assertStringContainsString("\$statusValue === 'paid' ? 'paid' : 'partial', false, true", (string)$projectBilling);
+        self::assertStringContainsString("\$statusValue === 'paid' ? 'paid' : 'partial', true, true", (string)$projectBilling);
         self::assertStringContainsString('notify_admin_invoice_paid($pdo, $GLOBALS[\'appConfig\'] ?? [], $invoiceId, $paymentAmount, $status)', (string)$legacyWebhook);
         self::assertStringNotContainsString('notify_admin_invoice_paid', (string)$manualPayments);
     }

@@ -25,6 +25,13 @@ function invoice_is_past_due(array $invoice, ?DateTimeImmutable $today = null): 
         return false;
     }
 
+    // Project-aggregate child invoices are internal billing components. Their
+    // project statement owns collection timing and overdue presentation.
+    if (array_key_exists('collection_mode', $invoice)
+        && strtolower(trim((string)$invoice['collection_mode'])) !== 'direct') {
+        return false;
+    }
+
     $dueDate = trim((string)($invoice['due_date'] ?? ''));
     if ($dueDate === '') {
         return false;
