@@ -105,12 +105,12 @@
                 if (queuedState) {
                     var next = queuedState;
                     queuedState = null;
-                    restore(next, 'Updating client list…');
+                    restore(next, 'Updating results…');
                     await navigate(next);
                 } else if (pendingState) {
                     restore(pendingState, 'Waiting for typing to pause…');
                 } else {
-                    restore(state, 'Client list updated.');
+                    restore(state, 'Results updated.');
                 }
             }
         }
@@ -143,8 +143,10 @@
 
         function initialize(context) {
             var root = context && context.root ? context.root : document;
-            var form = root.querySelector('form[data-live-filter-id="client-list"]');
-            bind(form);
+            Array.prototype.forEach.call(
+                root.querySelectorAll('form[data-live-filter-fields]'),
+                bind
+            );
         }
         initialize.pageInitializerId = 'client-list-live-filter';
 
@@ -154,7 +156,10 @@
     var liveFilter = projectAlpha.clientListLiveFilter || createClientListLiveFilter();
     projectAlpha.clientListLiveFilter = liveFilter;
     if (typeof projectAlpha.registerPage === 'function') {
-        projectAlpha.registerPage('client/clients-list', liveFilter.initialize);
+        projectAlpha.registerPage([
+            'client/clients-list',
+            'organization/organizations-list'
+        ], liveFilter.initialize);
     } else {
         liveFilter.initialize({ root: document });
     }

@@ -70,6 +70,12 @@ function initInvoiceClientDropdown() {
     if (!ciI || !cidI || !sugI) return;
     if (ciI._clientDropdownInitialized) return;
     ciI._clientDropdownInitialized = true;
+
+    function escapeInvoiceRecipient(value) {
+        var node = document.createElement('div');
+        node.textContent = String(value || '');
+        return node.innerHTML;
+    }
     
     ciI.addEventListener('input', function () {
         cidI.value = '';
@@ -79,7 +85,7 @@ function initInvoiceClientDropdown() {
             .then(r => r.json())
             .then(list => {
                 if (!Array.isArray(list) || list.length === 0) { sugI.style.display = 'none'; sugI.innerHTML = ''; return; }
-                sugI.innerHTML = list.map((x, index) => `<div data-client-index="${index}" style=\"padding:8px 10px;cursor:pointer\"><strong>${escapeHtml(x.name)}</strong>${x.org_name ? `<small style="display:block;color:#6b7280">${escapeHtml(x.org_name)}</small>` : ''}</div>`).join('');
+                sugI.innerHTML = list.map((x, index) => `<div data-client-index="${index}" style=\"padding:8px 10px;cursor:pointer\"><strong>${escapeInvoiceRecipient(x.name)}</strong>${x.org_name ? `<small style="display:block;color:#6b7280">${escapeInvoiceRecipient(x.org_name)}</small>` : ''}</div>`).join('');
                 Array.from(sugI.children).forEach(el => {
                     el.addEventListener('click', function (e) {
                         e.stopPropagation();

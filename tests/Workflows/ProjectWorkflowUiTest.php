@@ -171,7 +171,9 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("'live_filter_debounce' => 300", (string)$list);
         self::assertStringContainsString('data-live-filter-fields', (string)$template);
         self::assertStringContainsString('aria-live="polite"', (string)$template);
-        self::assertStringContainsString("registerPage('client/clients-list'", (string)$script);
+        self::assertStringContainsString('projectAlpha.registerPage([', (string)$script);
+        self::assertStringContainsString("'client/clients-list'", (string)$script);
+        self::assertStringContainsString("'organization/organizations-list'", (string)$script);
         self::assertStringContainsString('window.navigateToPage(state.page, false)', (string)$script);
     }
 

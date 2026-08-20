@@ -7,12 +7,13 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '..', '..');
 const script = fs.readFileSync(path.join(root, 'public/assets/js/client-list-live-filter.js'), 'utf8');
 const clientList = fs.readFileSync(path.join(root, 'src/views/pages/client/clients-list.php'), 'utf8');
+const organizationList = fs.readFileSync(path.join(root, 'src/views/pages/organization/organizations-list.php'), 'utf8');
 const filterTemplate = fs.readFileSync(path.join(root, 'src/views/templates/components/document-filter.html.twig'), 'utf8');
 
 function loadLiveFilter() {
   const context = vm.createContext({
     window: { ProjectAlpha: {}, location: { origin: 'https://pa.example.test' } },
-    document: { querySelector() { return null; } },
+    document: { querySelectorAll() { return []; } },
     URL,
     URLSearchParams,
   });
@@ -31,6 +32,15 @@ test('client name and organization fields opt into an accessible debounce', () =
   assert.match(filterTemplate, /aria-live="polite"/);
 });
 
+test('organization name filtering uses the same partial live-filter contract', () => {
+  assert.match(organizationList, /o\.name LIKE \?/);
+  assert.match(organizationList, /'%'\.\$search\.'%'/);
+  assert.match(organizationList, /'live_filter_id'\s*=>\s*'organization-list'/);
+  assert.match(organizationList, /'live_filter_fields'\s*=>\s*\['search'\]/);
+  assert.match(organizationList, /'live_filter_debounce'\s*=>\s*300/);
+  assert.match(organizationList, /client-list-live-filter\.js/);
+});
+
 test('live filtering serializes partial name and organization values together', () => {
   class FormDataMock {
     constructor() {
@@ -47,7 +57,7 @@ test('live filtering serializes partial name and organization values together', 
   }
   const context = vm.createContext({
     window: { ProjectAlpha: {}, location: { origin: 'https://pa.example.test' } },
-    document: { querySelector() { return null; } },
+    document: { querySelectorAll() { return []; } },
     FormData: FormDataMock,
     URL,
     URLSearchParams,
@@ -62,7 +72,8 @@ test('fragment re-execution reuses one idempotent live-filter engine', () => {
   assert.equal(typeof liveFilter.initialize, 'function');
   assert.match(script, /projectAlpha\.clientListLiveFilter \|\| createClientListLiveFilter\(\)/);
   assert.match(script, /form\.dataset\.liveFilterBound === 'true'/);
-  assert.match(script, /registerPage\('client\/clients-list'/);
+  assert.match(script, /registerPage\(\[[\s\S]*'client\/clients-list',[\s\S]*'organization\/organizations-list'[\s\S]*\]/);
+  assert.match(script, /root\.querySelectorAll\('form\[data-live-filter-fields\]'\)/);
   assert.match(script, /window\.navigateToPage\(state\.page, false\)/);
 });
 
