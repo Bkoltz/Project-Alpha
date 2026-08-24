@@ -860,6 +860,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'settings-backup',
         'settings/backup-download',
         'settings/tax-rates-handler',
+        'settings/pricing-adjustments-handler',
         'settings/tax-import-handler',
         'settings/tax-import-chunk',
         'settings/links-handler',
@@ -1085,6 +1086,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'settings/tax-rates-handler') {
         require_once __DIR__ . '/../src/controllers/settings/tax-rates-handler.php';
+        exit;
+    }
+    if ($page === 'settings/pricing-adjustments-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/pricing_adjustments_handler.php';
         exit;
     }
     if ($page === 'settings/tax-import-handler') {

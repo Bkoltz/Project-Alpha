@@ -151,7 +151,7 @@ try {
             migration_statements((string) $sql);
             fwrite(STDOUT, sprintf("Would apply %04d %s (%s)\n", $file['version'], $file['filename'], substr($file['checksum'], 0, 12)));
         }
-        migration_schema_health($pdo);
+        migration_schema_health($pdo, max(array_keys($ledger)));
         fwrite(STDOUT, 'Dry run passed; pending migrations: ' . count($pending) . PHP_EOL);
         exit(0);
     }

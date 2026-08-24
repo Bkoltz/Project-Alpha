@@ -1,8 +1,8 @@
 # Managed delivery handoff
 
-Project Alpha's LTDS Managed Delivery provider delegates delivery provisioning to the Ops Worker. Project Alpha does not connect this provider to R2 and does not store R2 credentials, object paths, client-facing URLs, bearer tokens, or recipient email addresses. The generic Dropbox, Google Drive, S3, and R2 link resolvers remain available to standalone/open-source installations.
+Project Alpha's Managed Delivery provider delegates delivery provisioning to a configured external delivery service. Project Alpha does not connect this provider directly to object storage and does not store storage credentials, object paths, client-facing URLs, bearer tokens, or recipient email addresses. The Dropbox, Google Drive, S3, and R2 link resolvers remain available to standalone installations.
 
-The provider is disabled by default. Configure the external delivery machine origin's exact HTTPS URL ending in `/api/internal/project-alpha/delivery-intents` and select an enabled External Ops Access integration profile under **Settings → Links & Storage**. For LTDS this is `https://incoming.ledgetopdroneservices.com/api/internal/project-alpha/delivery-intents`, not the staff Ops hostname. The selected profile supplies its existing encrypted HMAC secret and optional Access headers. **Test Ops Capability** signs a non-mutating request to the derived `/preflight` route and works before the local provider is enabled.
+The provider is disabled by default. Configure the external delivery service's exact HTTPS URL ending in `/api/internal/project-alpha/delivery-intents` and select an enabled custom integration profile under **Settings → Links & Storage**. The selected profile supplies its existing encrypted HMAC secret and optional access headers. **Test delivery capability** signs a non-mutating request to the derived `/preflight` route and works before the local provider is enabled.
 
 Managed Delivery and the standalone direct-R2 resolver cannot be enabled together. A rejected dual-enable save does not erase stored standalone R2 credentials.
 

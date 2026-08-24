@@ -235,6 +235,7 @@ try {
             'signature_agreement', 'review_link', 'suppress_assets_warning',
             'cron_enabled', 'cron_schedule', 'cron_custom', 'cron_last_run',
             'contract_custom_sections_json',
+            'contract_settlement_enabled',
             'backup_hour', 'backup_retention_days',
             'link_resolver_enabled', 'default_link_expiration_days', 'link_resolver_scan_mode', 'org_level_links_only',
             'link_resolver_daily_scan_enabled', 'link_resolver_invoice_auto_attach_enabled',

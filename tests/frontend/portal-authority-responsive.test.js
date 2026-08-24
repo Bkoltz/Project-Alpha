@@ -5,21 +5,56 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..', '..');
 
-test('portal authority controls remain native-keyboard operable at 320/390 widths', () => {
+test('custom integrations exposes one generic connection and hides technical portal controls', () => {
   const page = fs.readFileSync(path.join(root, 'src/views/pages/settings/external-ops.php'), 'utf8');
-  assert.match(page, /@media\(max-width:390px\)/);
-  assert.match(page, /grid-template-columns:minmax\(0,1fr\)/);
-  assert.match(page, /width:calc\(100vw - 40px\)/);
-  assert.doesNotMatch(page, /onclick=/i);
-  assert.match(page, /<details><summary class="btn btn-sm">Edit profile<\/summary>/);
-  assert.match(page, /<button class="btn btn-primary">Save manager authority<\/button>/);
-  assert.match(page, /name="action" value="set-portal-workspace-link"/);
-  assert.match(page, /Profile workspace allowlist/);
-  assert.match(page, /No workspaces authorized/);
-  assert.match(page, /name="viewer_share_create" value="1"> Create public model-viewer links/);
-  assert.doesNotMatch(page, /name="viewer_share_create"[^>]*checked/i);
-  assert.match(page, /Deny \(takes precedence\)/);
+  const registry = fs.readFileSync(path.join(root, 'src/views/pages/settings/registry.php'), 'utf8');
+  const clientAlias = fs.readFileSync(path.join(root, 'src/views/pages/settings/client-portal-access.php'), 'utf8');
+  const advancedAlias = fs.readFileSync(path.join(root, 'src/views/pages/settings/integration-advanced.php'), 'utf8');
+  assert.match(page, /External application connection/);
+  assert.match(page, /Custom-integration access/);
+  assert.match(page, /Synchronization status/);
+  assert.match(page, /data-external-ops-grant-form/);
+  assert.doesNotMatch(page, /Portal projection runtime|Advanced integration profiles|Workspaces and portal principals|Scoped client access|Profile workspace allowlist|Manager appointment|Projection recovery|viewer\.share\.create/i);
+  assert.doesNotMatch(registry, /'tab'\s*=>\s*'(?:client-portal-access|integration-advanced)'/);
+  assert.match(clientAlias, /require __DIR__ \. '\/external-ops\.php'/);
+  assert.match(advancedAlias, /require __DIR__ \. '\/external-ops\.php'/);
+  assert.doesNotMatch(clientAlias + advancedAlias, /integrationSurface/);
   assert.match(page, /role="alert"/);
+});
+
+test('open-source integration settings keep deployment branding out of runtime UI', () => {
+  const settingsDir = path.join(root, 'src/views/pages/settings');
+  const runtime = ['external-ops.php','client-portal-access.php','integration-advanced.php','links.php','registry.php']
+    .map(file => fs.readFileSync(path.join(settingsDir, file), 'utf8')).join('\n');
+  const deliveryRuntime = [
+    fs.readFileSync(path.join(root, 'public/assets/js/settings-links.js'), 'utf8'),
+    fs.readFileSync(path.join(root, 'src/controllers/settings/managed_delivery_test.php'), 'utf8'),
+  ].join('\n');
+  const runtimeCopy = (runtime + '\n' + deliveryRuntime).replace(/external-ops/gi, '');
+  assert.doesNotMatch(runtimeCopy, /LTDS|Ledge Top Drone Services|Portal v2|model-viewer|\bOps\b/i);
+  assert.match(runtime, /Managed Delivery Service/);
+  assert.match(runtime, /External application connection/);
+  assert.match(runtime, /Custom-integration access/);
+  assert.doesNotMatch(runtime, /Portal projection runtime|Advanced integration profiles|Profile workspace allowlist|Public delivery-link authority/i);
+});
+
+test('user-visible PHP views do not hard-code deployment-specific branding', () => {
+  const viewsRoot = path.join(root, 'src/views');
+  const phpViews = [];
+  const visit = directory => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(target);
+      else if (entry.isFile() && entry.name.endsWith('.php')) phpViews.push(target);
+    }
+  };
+  visit(viewsRoot);
+  const runtimeViews = phpViews.map(file => fs.readFileSync(file, 'utf8')).join('\n');
+  assert.doesNotMatch(runtimeViews, /LTDS|Ledge Top Drone Services|ledgetopdroneservices\.com/i);
+
+  const logout = fs.readFileSync(path.join(viewsRoot, 'pages/auth/logout.php'), 'utf8');
+  assert.match(logout, /\$appConfig\['brand_name'\]/);
+  assert.match(logout, /Project Alpha/);
 });
 
 test('portal catalog UI exposes only explicit client-safe publication fields', () => {

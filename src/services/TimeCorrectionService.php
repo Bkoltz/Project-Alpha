@@ -13,6 +13,8 @@ use DomainException;
 use PDO;
 use Throwable;
 
+require_once __DIR__ . '/../utils/document_pricing_carry_forward.php';
+
 /** Worker-requested or admin-created corrections to an already recorded time entry. */
 final class TimeCorrectionService
 {
@@ -392,20 +394,20 @@ final class TimeCorrectionService
             if ((string)$allocation['status'] === 'invoiced' && !empty($allocation['invoice_id']) && !empty($allocation['invoice_item_id'])) {
                 if ($sameInvoice) {
                     $allocationService->markInvoiced((int)$replacement['id'], $sourceInvoiceId, (int)$allocation['invoice_item_id']);
-                    $this->refreshDraftInvoice($sourceInvoiceId, (int)$allocation['invoice_item_id']);
+                    $this->refreshDraftInvoice($sourceInvoiceId, (int)$allocation['invoice_item_id'], $actorId, (string)$allocation['currency']);
                 } else {
                     $this->detachBillingProjection((string)$before['id'], $sourceInvoiceId, (int)$allocation['invoice_item_id']);
-                    $this->refreshDraftInvoice($sourceInvoiceId, (int)$allocation['invoice_item_id']);
+                    $this->refreshDraftInvoice($sourceInvoiceId, (int)$allocation['invoice_item_id'], $actorId, (string)$allocation['currency']);
                     if ($targetInvoiceId > 0 && $replacementTreatment === 'hourly' && $replacementRate !== null) {
                         $this->attachReplacementToDraftInvoice(
                             (string)$before['id'], (int)$replacement['id'], $targetInvoiceId,
-                            (int)$after['duration_seconds'], (float)$replacementRate
+                            (int)$after['duration_seconds'], (float)$replacementRate, $actorId, (string)$allocation['currency']
                         );
                     }
                 }
             }
             if ($amounts['model'] === 'base_overage' && $sourceInvoiceId > 0 && $delta !== null && abs((float)$delta) >= 0.005) {
-                $this->applyDraftBaseOverageDelta($sourceInvoiceId, (float)$delta, $actorId);
+                $this->applyDraftBaseOverageDelta($sourceInvoiceId, (float)$delta, $actorId, (string)$allocation['currency']);
             }
         }
         $action = !$draft ? 'admin_review' : ((int)($allocation['invoice_id'] ?? 0) > 0 ? 'draft_update' : 'none');
@@ -488,10 +490,15 @@ final class TimeCorrectionService
         int $allocationId,
         int $invoiceId,
         int $durationSeconds,
-        float $rate
+        float $rate,
+        int $actorId,
+        string $currency
     ): void {
         if ($rate <= 0) {
             throw new DomainException('The corrected time lacks the immutable hourly billing rate required for the destination invoice.');
+        }
+        if(\pricing_invoice_is_fixed_total_installment($this->pdo,$invoiceId)){
+            throw new DomainException('Fixed-total installment invoices are immutable. Amend and reallocate the contract instead.');
         }
         $invoice = $this->pdo->prepare("SELECT id FROM invoices WHERE id=? AND status='draft' AND finalized_at IS NULL FOR UPDATE");
         $invoice->execute([$invoiceId]);
@@ -543,10 +550,10 @@ final class TimeCorrectionService
             throw new DomainException('The corrected billing projection changed before it could be moved.');
         }
         (new TimeBillingAllocationService($this->pdo))->markInvoiced($allocationId, $invoiceId, $invoiceItemId);
-        $this->refreshDraftInvoice($invoiceId, $invoiceItemId);
+        $this->refreshDraftInvoice($invoiceId, $invoiceItemId, $actorId, $currency);
     }
 
-    private function applyDraftBaseOverageDelta(int $invoiceId, float $delta, int $actorId): void
+    private function applyDraftBaseOverageDelta(int $invoiceId, float $delta, int $actorId, string $currency): void
     {
         $statement = $this->pdo->prepare("SELECT * FROM invoices WHERE id=? AND status='draft' AND finalized_at IS NULL FOR UPDATE");
         $statement->execute([$invoiceId]);
@@ -554,11 +561,14 @@ final class TimeCorrectionService
         if (!$invoice) {
             throw new DomainException('Base-plus-overage time can be recalculated automatically only on a mutable draft invoice.');
         }
+        if(\pricing_invoice_is_fixed_total_installment($this->pdo,$invoiceId)){
+            throw new DomainException('Fixed-total installment invoices are immutable. Amend and reallocate the contract instead.');
+        }
         $revision = max(1, (int)($invoice['revision_number'] ?? 1)) + 1;
         $this->pdo->prepare(
             'INSERT INTO invoice_adjustments
-             (invoice_id,adjustment_type,label,description,quantity,unit_price,amount,revision_number,created_by)
-             VALUES (?,?,?,?,1,?,?,?,?)'
+             (invoice_id,adjustment_type,label,description,quantity,unit_price,amount,affects_total,revision_number,created_by)
+             VALUES (?,?,?,?,1,?,?,1,?,?)'
         )->execute([
             $invoiceId,
             $delta < 0 ? 'credit' : 'charge',
@@ -569,25 +579,29 @@ final class TimeCorrectionService
             $revision,
             $actorId,
         ]);
-        $total = max(0.0, (float)$invoice['total'] + $delta);
-        $this->pdo->prepare(
-            'UPDATE invoices SET total=?,balance_due=GREATEST(0,?-COALESCE(amount_paid,0)),
-             revision_number=?,revision_updated_at=UTC_TIMESTAMP(6) WHERE id=?'
-        )->execute([
-            number_format($total, 2, '.', ''),
-            number_format($total, 2, '.', ''),
-            $revision,
-            $invoiceId,
-        ]);
+        $eligible=\pricing_adjustments_enabled($this->pdo)
+            && (int)($invoice['organization_id']??0)>0
+            && (int)($invoice['project_id']??0)>0;
+        if($eligible){
+            \pricing_finalize_frozen_document_revision($this->pdo,(int)$invoice['organization_id'],'invoice',$invoiceId,$actorId,$currency);
+        }else{
+            $total=max(0.0,(float)$invoice['total']+$delta);
+            $this->pdo->prepare('UPDATE invoices SET total=?,balance_due=GREATEST(0,?-COALESCE(amount_paid,0)) WHERE id=?')
+                ->execute([number_format($total,2,'.',''),number_format($total,2,'.',''),$invoiceId]);
+            \DocumentRevisionService::snapshotAndSave($this->pdo,'invoice',$invoiceId,$actorId,true);
+        }
     }
 
-    private function refreshDraftInvoice(int $invoiceId, int $invoiceItemId): void
+    private function refreshDraftInvoice(int $invoiceId, int $invoiceItemId, int $actorId, string $currency): void
     {
         $invoiceStatement = $this->pdo->prepare("SELECT * FROM invoices WHERE id=? AND status='draft' AND finalized_at IS NULL FOR UPDATE");
         $invoiceStatement->execute([$invoiceId]);
         $invoice = $invoiceStatement->fetch(PDO::FETCH_ASSOC);
         if (!$invoice) {
             throw new DomainException('The corrected billing line is no longer on a mutable draft invoice.');
+        }
+        if(\pricing_invoice_is_fixed_total_installment($this->pdo,$invoiceId)){
+            throw new DomainException('Fixed-total installment invoices are immutable. Amend and reallocate the contract instead.');
         }
         $lineStatement = $this->pdo->prepare('SELECT unit_price FROM invoice_items WHERE id=? AND invoice_id=? FOR UPDATE');
         $lineStatement->execute([$invoiceItemId, $invoiceId]);
@@ -615,16 +629,25 @@ final class TimeCorrectionService
         );
         $subtotalStatement->execute([$invoiceId]);
         $subtotal = (float)$subtotalStatement->fetchColumn();
-        $discount = match ((string)$invoice['discount_type']) {
-            'percent' => max(0.0, min(100.0, (float)$invoice['discount_value'])) * $subtotal / 100,
-            'fixed' => min($subtotal, max(0.0, (float)$invoice['discount_value'])),
-            default => 0.0,
-        };
-        $tax = max(0.0, (float)$invoice['tax_percent']) * max(0.0, $subtotal - $discount) / 100;
-        $total = max(0.0, $subtotal - $discount + $tax);
-        $this->pdo->prepare(
-            'UPDATE invoices SET subtotal=?,tax_amount=?,total=?,balance_due=GREATEST(0,?-COALESCE(amount_paid,0)),revision_number=revision_number+1,revision_updated_at=UTC_TIMESTAMP(6) WHERE id=?'
-        )->execute([$subtotal, $tax, $total, $total, $invoiceId]);
+        $this->pdo->prepare('UPDATE invoices SET subtotal=? WHERE id=?')
+            ->execute([number_format($subtotal,2,'.',''),$invoiceId]);
+        $eligible=\pricing_adjustments_enabled($this->pdo)
+            && (int)($invoice['organization_id']??0)>0
+            && (int)($invoice['project_id']??0)>0;
+        if($eligible){
+            \pricing_finalize_frozen_document_revision($this->pdo,(int)$invoice['organization_id'],'invoice',$invoiceId,$actorId,$currency);
+        }else{
+            $discount=match((string)$invoice['discount_type']){
+                'percent'=>max(0.0,min(100.0,(float)$invoice['discount_value']))*$subtotal/100,
+                'fixed'=>min($subtotal,max(0.0,(float)$invoice['discount_value'])),
+                default=>0.0,
+            };
+            $tax=max(0.0,(float)$invoice['tax_percent'])*max(0.0,$subtotal-$discount)/100;
+            $total=max(0.0,$subtotal-$discount+$tax);
+            $this->pdo->prepare('UPDATE invoices SET tax_amount=?,total=?,balance_due=GREATEST(0,?-COALESCE(amount_paid,0)) WHERE id=?')
+                ->execute([$tax,$total,$total,$invoiceId]);
+            \DocumentRevisionService::snapshotAndSave($this->pdo,'invoice',$invoiceId,$actorId,true);
+        }
     }
 
     /** @param array<string,mixed> $proposal @param array<string,mixed> $original @return array<string,mixed> */

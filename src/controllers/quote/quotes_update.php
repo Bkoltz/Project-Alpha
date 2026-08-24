@@ -8,17 +8,19 @@ require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 require_once __DIR__ . '/../../services/ScheduleService.php';
 $id = (int)($_POST['id'] ?? 0);
+$jobClientLockMessage='A document cannot be moved to another client while it belongs to a Job. Clone it into a new Job instead.';
 require_record_ownership($pdo, 'quotes', $id);
 try { $existingQuote=DocumentPolicy::assertMutable($pdo,'quote',$id); } catch(DocumentLockedException $locked){http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'document_locked','message'=>$locked->getMessage(),'request_id'=>bin2hex(random_bytes(8))]);exit;}
 $client_id = (int)($_POST['client_id'] ?? 0);
 $requestedServiceLocationId = !empty($_POST['service_location_id']) ? (int)$_POST['service_location_id'] : null;
 if (!empty($existingQuote['job_id']) && $client_id !== (int)$existingQuote['client_id']) {
-  http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'job_client_conflict','message'=>'A document cannot be moved to another client while it belongs to a Job. Clone it into a new Job instead.','request_id'=>bin2hex(random_bytes(8))]);exit;
+  http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'job_client_conflict','message'=>$jobClientLockMessage,'request_id'=>bin2hex(random_bytes(8))]);exit;
 }
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
@@ -51,6 +53,9 @@ $showContactOnDocument = $organizationId && !empty($_POST['show_contact_on_docum
 
 $pdo->beginTransaction();
 try{
+  $existingQuote=DocumentPolicy::assertMutable($pdo,'quote',$id,'commercial',true);
+  require_record_ownership($pdo,'quotes',$id);
+  if(!empty($existingQuote['job_id'])&&$client_id!==(int)$existingQuote['client_id'])throw new DomainException($jobClientLockMessage);
   $serviceLocationId = document_resolve_service_location($pdo,$client_id,!empty($existingQuote['project_id'])?(int)$existingQuote['project_id']:null,!empty($existingQuote['job_id'])?(int)$existingQuote['job_id']:null,$requestedServiceLocationId);
   $pdo->prepare('UPDATE quotes SET client_id=?, organization_id=?, show_contact_on_document=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, deposit_type=?, deposit_amount=?, fulfillment_date=?, scope=?, custom_fields=?, service_location_id=? WHERE id=?')->execute([$client_id,$organizationId,$showContactOnDocument,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$deposit_type,$deposit_value,$fulfillment_date,$scope,$customFieldsJson,$serviceLocationId,$id]);
   // Upsert project notes if provided and project_code is known
@@ -68,9 +73,10 @@ try{
   foreach($items as $it){$catalog=catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);$ins->execute([$id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$billing_mode==='hourly'?'estimate':'standard',$catalog['catalog_snapshot']]);}
   if($travelItem)$pdo->prepare('INSERT INTO quote_items (quote_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,?)')->execute([$id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit'],$travelItem['pricing_status']]);
   $quoteOrg=$pdo->prepare('SELECT organization_id FROM quotes WHERE id=?');$quoteOrg->execute([$id]);mileage_save_document_rule($pdo,'quote',$id,($quoteOrg->fetchColumn()?:null),$client_id,(int)($_SESSION['user']['id']??0),$travelRule);
-  DocumentRevisionService::snapshotAndSave($pdo,'quote',$id,(int)($_SESSION['user']['id']??0));
+  pricing_apply_posted_override($pdo,(int)$organizationId,'quote',$id,(int)($_SESSION['user']['id']??0),$_POST);
+  pricing_finalize_document_revision($pdo,$organizationId!==null?(int)$organizationId:null,'quote',$id,(int)($_SESSION['user']['id']??0),true,(string)($appConfig['workforce_currency']??'USD'));
   if(!empty($existingQuote['job_id']))ScheduleService::syncJob($pdo,(int)$existingQuote['job_id'],(string)($appConfig['timezone']??'UTC'),(int)($_SESSION['user']['id']??0));
   $pdo->commit();
-}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=quote/quote-details&id=' . $id . '&error=Update%20failed'); exit; }
+}catch(Throwable $e){$pdo->rollBack();$error=$e instanceof DocumentLockedException?$e->getMessage():($e instanceof DomainException&&hash_equals($jobClientLockMessage,$e->getMessage())?$jobClientLockMessage:'Update failed');header('Location: /?page=quote/quote-details&id='.$id.'&error='.rawurlencode($error));exit;}
 header('Location: /?page=quote/quote-details&id=' . $id . '&updated=1');
 exit;

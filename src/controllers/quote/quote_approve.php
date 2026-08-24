@@ -9,8 +9,10 @@ require_once __DIR__ . '/../../utils/public_links.php';
 require_once __DIR__ . '/../../utils/recurring_services.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/job_work_materialization.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
+require_once __DIR__ . '/../../services/ProjectContractEligibilityGuardService.php';
 
 // Auto-create settings (default to true/on when not explicitly set)
 $autoCreateContract = !isset($appConfig['quote_auto_create_contract']) || !empty($appConfig['quote_auto_create_contract']);
@@ -50,6 +52,9 @@ try {
     $pdo->prepare('UPDATE quotes SET project_code=? WHERE id=?')->execute([$projectCode, $id]);
   }
   $projectId = !empty($quote['project_id']) ? (int)$quote['project_id'] : null;
+  if ($autoCreateContract) {
+    (new App\Services\ProjectContractEligibilityGuardService($pdo))->assertCanCreateOrAttach($projectId);
+  }
   $serviceLocationId = !empty($quote['service_location_id']) ? (int)$quote['service_location_id'] : null;
   $jobId = !empty($quote['job_id']) ? (int)$quote['job_id'] : JobAssignmentService::ensureForCode($pdo, (int)$quote['client_id'], $projectCode, $projectId, $quoteCreator);
   $pdo->prepare('UPDATE quotes SET job_id=? WHERE id=?')->execute([$jobId, $id]);
@@ -162,8 +167,17 @@ try {
     }
   }
 
-  if(isset($contract_id))DocumentRevisionService::snapshotAndSave($pdo,'contract',(int)$contract_id,$quoteCreator,false);
-  if(isset($invoice_id))DocumentRevisionService::snapshotAndSave($pdo,'invoice',(int)$invoice_id,$quoteCreator,false);
+  if(isset($contract_id))pricing_finalize_derived_document_revision(
+    $pdo,$quoteOrgId!==null?(int)$quoteOrgId:null,'contract',(int)$contract_id,$quoteCreator,
+    (string)($appConfig['workforce_currency']??'USD'),'quote',$id,(int)($quote['revision_number']??1),
+    $depositType==='percent'&&$quoteOrgId!==null
+      ? static fn(array $pricing)=>pricing_recompute_contract_percentage_deposit($pdo,(int)$quoteOrgId,(int)$contract_id,(string)$depositValue)
+      : null
+  );
+  if(isset($invoice_id))pricing_finalize_derived_document_revision(
+    $pdo,$quoteOrgId!==null?(int)$quoteOrgId:null,'invoice',(int)$invoice_id,$quoteCreator,
+    (string)($appConfig['workforce_currency']??'USD'),'quote',$id,(int)($quote['revision_number']??1)
+  );
   catalog_plan_document_work($pdo,'quote',$id,$quoteCreator);
   $pdo->commit();
 

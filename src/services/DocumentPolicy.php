@@ -13,13 +13,14 @@ final class DocumentPolicy
 {
     private const TABLES = ['quote' => 'quotes', 'contract' => 'contracts', 'invoice' => 'invoices'];
 
-    public static function assertMutable(PDO $pdo, string $type, int $id, string $mutationType = 'commercial'): array
+    public static function assertMutable(PDO $pdo, string $type, int $id, string $mutationType = 'commercial', bool $lock = false): array
     {
         $table = self::TABLES[$type] ?? null;
         if ($table === null || $id <= 0) {
             throw new InvalidArgumentException('Invalid document reference.');
         }
-        $stmt = $pdo->prepare("SELECT * FROM {$table} WHERE id=? LIMIT 1");
+        $suffix=$lock&&$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql'?' FOR UPDATE':'';
+        $stmt = $pdo->prepare("SELECT * FROM {$table} WHERE id=? LIMIT 1".$suffix);
         $stmt->execute([$id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {

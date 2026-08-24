@@ -115,16 +115,14 @@ final class PortalV2CompatibilityTest extends TestCase
         $acl=(string)file_get_contents($root.'/src/utils/acl_middleware.php');self::assertStringContainsString("'quote/quotes-edit-public' => 'quotes.edit'",$acl);
     }
 
-    public function testStaffAuthorityUxIsResponsiveKeyboardNativeAndSeparatedFromContacts():void
+    public function testTechnicalPortalAuthorityStaysBackendOnlyAndOutOfNormalSettings():void
     {
-        $page=(string)file_get_contents(dirname(__DIR__,2).'/src/views/pages/settings/external-ops.php');
-        self::assertStringContainsString('@media(max-width:390px)',$page);self::assertStringContainsString('@media(max-width:640px)',$page);
-        self::assertStringContainsString('<details>',$page);self::assertStringContainsString('<summary class="btn btn-sm">Edit profile</summary>',$page);
-        self::assertStringContainsString('primary contact',$page);self::assertStringContainsString('public-project link',$page);self::assertStringContainsString('never grants portal access',$page);
-        self::assertStringContainsString('appoint-portal-manager',$page);self::assertStringContainsString('offboard-portal-manager',$page);self::assertStringContainsString('queue-portal-snapshot',$page);
-        self::assertStringContainsString('Manager recovery required.',$page);self::assertStringContainsString('portal_manager_scope_state',$page);
-        self::assertStringContainsString('save-viewer-share-entitlement',$page);self::assertStringContainsString('viewer.share.create',$page);self::assertStringContainsString('Deny (takes precedence)',$page);self::assertStringContainsString('name="viewer_share_create" value="1"> Create public model-viewer links',$page);self::assertDoesNotMatchRegularExpression('/name="viewer_share_create"[^>]*checked/i',$page);
-        $acl=(string)file_get_contents(dirname(__DIR__,2).'/src/utils/acl_middleware.php');self::assertStringContainsString("'organization/organization-departments'         => 'organizations.manage'",$acl);
+        $root=dirname(__DIR__,2);$page=(string)file_get_contents($root.'/src/views/pages/settings/external-ops.php');$registry=(string)file_get_contents($root.'/src/views/pages/settings/registry.php');$handler=(string)file_get_contents($root.'/src/controllers/settings/external_ops_handler.php');
+        self::assertStringContainsString('External application connection',$page);self::assertStringContainsString('Custom-integration access',$page);self::assertStringContainsString('Synchronization status',$page);
+        foreach(['Portal projection runtime','Advanced integration profiles','Workspaces and portal principals','Scoped client access','Profile workspace allowlist','Manager appointment','Projection recovery','viewer.share.create']as$surface)self::assertStringNotContainsString($surface,$page);
+        self::assertStringNotContainsString("'tab' => 'client-portal-access'",$registry);self::assertStringNotContainsString("'tab' => 'integration-advanced'",$registry);
+        foreach(['save-portal-profile','save-portal-workspace','save-portal-principal','save-portal-entitlement','set-portal-workspace-link','appoint-portal-manager','offboard-portal-manager','save-viewer-share-entitlement','queue-portal-snapshot']as$action)self::assertStringContainsString($action,$handler);
+        $acl=(string)file_get_contents($root.'/src/utils/acl_middleware.php');self::assertStringContainsString("'organization/organization-departments'         => 'organizations.manage'",$acl);
     }
 
     public function testViewerShareAuthorityIsExplicitDefaultDeniedAndPreservesDeny():void
@@ -165,13 +163,67 @@ final class PortalV2CompatibilityTest extends TestCase
         $service=(string)file_get_contents(dirname(__DIR__,2).'/src/services/PortalIntegrationService.php');self::assertStringContainsString('idempotencyHash = hash(\'sha256\', $idempotencyKey)',$service);self::assertStringContainsString("return ['status' => 409, 'body' => ['code' => 'IDEMPOTENCY_CONFLICT']]",$service);
     }
 
+    public function testDraftPricingAdjustmentIsAuthoritativeAndIdempotentAcrossPortalReplay():void
+    {
+        if(!in_array('sqlite',PDO::getAvailableDrivers(),true))self::markTestSkipped('pdo_sqlite unavailable');
+        $pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+        $pdo->exec(<<<'SQL'
+CREATE TABLE portal_integration_profiles(id INTEGER PRIMARY KEY,application_key TEXT,enabled INTEGER,draft_quote_enabled INTEGER,draft_source TEXT);
+CREATE TABLE portal_v2_workspaces(id INTEGER PRIMARY KEY,public_id TEXT,root_type TEXT,root_public_id TEXT,active INTEGER);
+CREATE TABLE portal_integration_profile_workspaces(profile_id INTEGER,workspace_id INTEGER,active INTEGER);
+CREATE TABLE organizations(id INTEGER PRIMARY KEY,public_id TEXT);
+CREATE TABLE clients(id INTEGER PRIMARY KEY,public_id TEXT,name TEXT,organization_id INTEGER,archived INTEGER,deleted_at TEXT);
+CREATE TABLE projects(id INTEGER PRIMARY KEY,public_id TEXT,client_id INTEGER,status TEXT,organization_id INTEGER);
+CREATE TABLE item_library(id INTEGER PRIMARY KEY,portal_public_id TEXT,portal_requestable INTEGER,is_active INTEGER,entry_type TEXT,item_name TEXT,description TEXT,portal_summary TEXT,portal_category TEXT,portal_display_order INTEGER,portal_geometry_requirement TEXT,portal_questions_json TEXT,pricing_currency TEXT,client_pricing_model TEXT,billing_unit TEXT,unit_price TEXT);
+CREATE TABLE quotes(id INTEGER PRIMARY KEY AUTOINCREMENT,public_id TEXT,client_id INTEGER,project_id INTEGER,organization_id INTEGER,status TEXT,quote_type TEXT,billing_mode TEXT,subtotal TEXT,total TEXT,scope TEXT,custom_fields TEXT,created_at TEXT,doc_number INTEGER,revision_number INTEGER NOT NULL DEFAULT 1,discount_type TEXT DEFAULT 'none',discount_value TEXT DEFAULT '0',tax_percent TEXT DEFAULT '0',tax_amount TEXT DEFAULT '0');
+CREATE TABLE quote_items(id INTEGER PRIMARY KEY AUTOINCREMENT,quote_id INTEGER,item_library_id INTEGER,item TEXT,description TEXT,quantity TEXT,unit_price TEXT,line_total TEXT,billing_unit TEXT,pricing_status TEXT,sort_order INTEGER,catalog_snapshot TEXT);
+CREATE TABLE portal_draft_quote_commands(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,api_key_id INTEGER,idempotency_hash TEXT,payload_hash TEXT,receipt_public_id TEXT,quote_id INTEGER,response_json TEXT,UNIQUE(integration_profile_id,api_key_id,idempotency_hash));
+CREATE TABLE document_number_sequences(document_type TEXT,document_subtype TEXT,next_number INTEGER,PRIMARY KEY(document_type,document_subtype));
+CREATE TABLE portal_integration_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,api_key_id INTEGER,correlation_id TEXT,action TEXT,outcome TEXT,target_type TEXT,target_public_id TEXT,metadata_json TEXT);
+CREATE TABLE document_revisions(document_type TEXT,document_id INTEGER,revision_number INTEGER,snapshot TEXT,content_hash TEXT,created_by INTEGER,UNIQUE(document_type,document_id,revision_number));
+CREATE TABLE addresses(id INTEGER PRIMARY KEY,archived INTEGER);
+CREATE TABLE address_assignments(id INTEGER PRIMARY KEY,address_id INTEGER,entity_type TEXT,entity_id INTEGER,purpose TEXT,is_default INTEGER);
+CREATE TABLE service_locations(id INTEGER PRIMARY KEY,address_id INTEGER,archived INTEGER);
+CREATE TABLE app_config(organization_id INTEGER,config_key TEXT,config_value TEXT,PRIMARY KEY(organization_id,config_key));
+CREATE TABLE pricing_adjustment_definitions(id INTEGER PRIMARY KEY,organization_id INTEGER,scope_type TEXT,scope_key TEXT,name TEXT,adjustment_kind TEXT,percentage_rate TEXT,is_active INTEGER,effective_from TEXT,effective_until TEXT);
+CREATE TABLE project_pricing_adjustment_assignments(id INTEGER PRIMARY KEY,organization_id INTEGER,project_id INTEGER,adjustment_definition_id INTEGER);
+CREATE TABLE contract_pricing_adjustment_assignments(id INTEGER PRIMARY KEY,organization_id INTEGER,contract_id INTEGER,adjustment_definition_id INTEGER);
+CREATE TABLE document_pricing_adjustment_overrides(id INTEGER PRIMARY KEY,organization_id INTEGER,document_type TEXT,document_id INTEGER,override_mode TEXT,adjustment_definition_id INTEGER,reason TEXT);
+CREATE TABLE document_pricing_adjustment_snapshots(id INTEGER PRIMARY KEY AUTOINCREMENT,organization_id INTEGER,document_type TEXT,document_id INTEGER,document_revision INTEGER,source_type TEXT,source_assignment_id INTEGER,adjustment_definition_id INTEGER,adjustment_name TEXT,adjustment_kind TEXT,percentage_rate TEXT,currency TEXT,basis_minor INTEGER,adjustment_minor INTEGER,adjusted_minor INTEGER,calculation_version TEXT,override_reason TEXT,applied_by INTEGER,derived_from_snapshot_id INTEGER,UNIQUE(document_type,document_id,document_revision));
+INSERT INTO portal_integration_profiles VALUES(1,'generic_portal',1,1,'generic-operations');
+INSERT INTO portal_v2_workspaces VALUES(1,'workspace-one','organization','org-public-a',1);
+INSERT INTO portal_integration_profile_workspaces VALUES(1,1,1);
+INSERT INTO organizations VALUES(1,'org-public-a');
+INSERT INTO clients VALUES(1,'client-public-a','Client',1,0,NULL);
+INSERT INTO projects VALUES(10,'project-public-a',1,'active',1);
+INSERT INTO item_library VALUES(1,'svc-ortho',1,1,'service','Mapping',NULL,'Client safe','Mapping',10,'required','[]','USD','fixed','project','100.00');
+INSERT INTO app_config VALUES(0,'pricing_adjustments_enabled','1');
+INSERT INTO pricing_adjustment_definitions VALUES(50,NULL,'installation','installation','Agreement pricing','percentage_discount','20.0000',1,NULL,NULL);
+INSERT INTO project_pricing_adjustment_assignments VALUES(70,1,10,50);
+SQL);
+        $visible=['publicId'=>'svc-ortho','name'=>'Mapping','summary'=>'Client safe','category'=>'Mapping','displayOrder'=>10,'geometryRequirement'=>'required','questions'=>[]];
+        $request=$this->json('project-alpha-draft-quote-v1.json')['valid']['request'];$request['source']='generic-operations';$request['authorization']=['organizationPublicId'=>'org-public-a','clientPublicId'=>'client-public-a','projectPublicId'=>'project-public-a'];$request['services'][0]['catalogVersion']=PortalSourceVersion::from($visible);
+        $service=new \App\Services\PortalIntegrationService();$payloadHash=hash('sha256','portal-adjusted-payload');
+        $first=$service->createDraftQuote($pdo,7,'generic_portal','adjusted-command',$payloadHash,$request,'correlation-adjusted-1');
+        $replay=$service->createDraftQuote($pdo,7,'generic_portal','adjusted-command',$payloadHash,$request,'correlation-adjusted-2');
+        self::assertSame(201,$first['status']);self::assertSame(200,$replay['status']);self::assertSame($first['body'],$replay['body']);
+        self::assertSame(['100.00','80.00'],$pdo->query('SELECT subtotal,total FROM quotes')->fetch(PDO::FETCH_NUM));
+        self::assertSame([1,1,1,1],array_map('intval',[
+            $pdo->query('SELECT COUNT(*) FROM quotes')->fetchColumn(),$pdo->query('SELECT COUNT(*) FROM portal_draft_quote_commands')->fetchColumn(),
+            $pdo->query('SELECT COUNT(*) FROM document_pricing_adjustment_snapshots')->fetchColumn(),$pdo->query('SELECT COUNT(*) FROM document_revisions')->fetchColumn(),
+        ]));
+        $snapshot=$pdo->query('SELECT source_type,source_assignment_id,adjustment_definition_id,currency,basis_minor,adjustment_minor,adjusted_minor FROM document_pricing_adjustment_snapshots')->fetch(PDO::FETCH_ASSOC);
+        self::assertSame(['source_type'=>'project','source_assignment_id'=>70,'adjustment_definition_id'=>50,'currency'=>'USD','basis_minor'=>10000,'adjustment_minor'=>2000,'adjusted_minor'=>8000],array_replace($snapshot,array_map('intval',array_intersect_key($snapshot,array_flip(['source_assignment_id','adjustment_definition_id','basis_minor','adjustment_minor','adjusted_minor'])))));
+    }
+
     public function testDraftAuditFailureRollsBackQuoteAndIdempotencyReceipt():void
     {
         if(!in_array('sqlite',PDO::getAvailableDrivers(),true))self::markTestSkipped('pdo_sqlite unavailable');$pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
         $pdo->exec("CREATE TABLE portal_integration_profiles(id INTEGER PRIMARY KEY,application_key TEXT,enabled INTEGER,draft_quote_enabled INTEGER,draft_source TEXT);CREATE TABLE portal_v2_workspaces(id INTEGER PRIMARY KEY,public_id TEXT,root_type TEXT,root_public_id TEXT,active INTEGER);CREATE TABLE portal_integration_profile_workspaces(profile_id INTEGER,workspace_id INTEGER,active INTEGER);CREATE TABLE clients(id INTEGER PRIMARY KEY,public_id TEXT,name TEXT,organization_id INTEGER,archived INTEGER,deleted_at TEXT);CREATE TABLE projects(id INTEGER PRIMARY KEY,public_id TEXT,client_id INTEGER,status TEXT);CREATE TABLE item_library(id INTEGER PRIMARY KEY,portal_public_id TEXT,portal_requestable INTEGER,is_active INTEGER,entry_type TEXT,item_name TEXT,description TEXT,portal_summary TEXT,portal_category TEXT,portal_display_order INTEGER,portal_geometry_requirement TEXT,portal_questions_json TEXT,pricing_currency TEXT,client_pricing_model TEXT,billing_unit TEXT,unit_price TEXT);CREATE TABLE quotes(id INTEGER PRIMARY KEY AUTOINCREMENT,public_id TEXT,client_id INTEGER,project_id INTEGER,organization_id INTEGER,status TEXT,quote_type TEXT,billing_mode TEXT,subtotal TEXT,total TEXT,scope TEXT,custom_fields TEXT,created_at TEXT,doc_number INTEGER);CREATE TABLE quote_items(id INTEGER PRIMARY KEY AUTOINCREMENT,quote_id INTEGER,item_library_id INTEGER,item TEXT,description TEXT,quantity TEXT,unit_price TEXT,line_total TEXT,billing_unit TEXT,pricing_status TEXT,sort_order INTEGER,catalog_snapshot TEXT);CREATE TABLE portal_draft_quote_commands(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,api_key_id INTEGER,idempotency_hash TEXT,payload_hash TEXT,receipt_public_id TEXT,quote_id INTEGER,response_json TEXT,UNIQUE(integration_profile_id,api_key_id,idempotency_hash));CREATE TABLE document_number_sequences(document_type TEXT,document_subtype TEXT,next_number INTEGER,PRIMARY KEY(document_type,document_subtype));CREATE TABLE portal_integration_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,api_key_id INTEGER,correlation_id TEXT,action TEXT,outcome TEXT,target_type TEXT,target_public_id TEXT,metadata_json TEXT);CREATE TRIGGER reject_portal_audit BEFORE INSERT ON portal_integration_audit BEGIN SELECT RAISE(FAIL,'audit-fault');END;INSERT INTO portal_integration_profiles VALUES(1,'generic_portal',1,1,'generic-operations');INSERT INTO portal_v2_workspaces VALUES(1,'workspace-one','standalone_client','client-public-a',1);INSERT INTO portal_integration_profile_workspaces VALUES(1,1,1);INSERT INTO clients VALUES(1,'client-public-a','Client',NULL,0,NULL);INSERT INTO item_library VALUES(1,'svc-ortho',1,1,'service','Mapping',NULL,'Client safe','Mapping',10,'required','[]','USD','fixed','project','100.00')");
+        $pdo->exec("ALTER TABLE quotes ADD COLUMN revision_number INTEGER NOT NULL DEFAULT 1; CREATE TABLE document_revisions(document_type TEXT,document_id INTEGER,revision_number INTEGER,snapshot TEXT,content_hash TEXT,created_by INTEGER,UNIQUE(document_type,document_id,revision_number)); CREATE TABLE addresses(id INTEGER PRIMARY KEY,archived INTEGER); CREATE TABLE address_assignments(id INTEGER PRIMARY KEY,address_id INTEGER,entity_type TEXT,entity_id INTEGER,purpose TEXT,is_default INTEGER); CREATE TABLE service_locations(id INTEGER PRIMARY KEY,address_id INTEGER,archived INTEGER)");
         $visible=['publicId'=>'svc-ortho','name'=>'Mapping','summary'=>'Client safe','category'=>'Mapping','displayOrder'=>10,'geometryRequirement'=>'required','questions'=>[]];$request=$this->json('project-alpha-draft-quote-v1.json')['valid']['request'];$request['source']='generic-operations';$request['authorization']=['organizationPublicId'=>null,'clientPublicId'=>'client-public-a','projectPublicId'=>null];$request['services'][0]['catalogVersion']=PortalSourceVersion::from($visible);
         try{(new \App\Services\PortalIntegrationService())->createDraftQuote($pdo,7,'generic_portal','command-one',hash('sha256','payload'),$request,'correlation-test-1');self::fail('Expected audit fault.');}catch(\PDOException$error){self::assertStringContainsString('audit-fault',$error->getMessage());}
-        self::assertSame(0,(int)$pdo->query('SELECT COUNT(*) FROM quotes')->fetchColumn());self::assertSame(0,(int)$pdo->query('SELECT COUNT(*) FROM portal_draft_quote_commands')->fetchColumn());self::assertFalse($pdo->inTransaction());
+        self::assertSame(0,(int)$pdo->query('SELECT COUNT(*) FROM quotes')->fetchColumn());self::assertSame(0,(int)$pdo->query('SELECT COUNT(*) FROM document_revisions')->fetchColumn());self::assertSame(0,(int)$pdo->query('SELECT COUNT(*) FROM portal_draft_quote_commands')->fetchColumn());self::assertFalse($pdo->inTransaction());
     }
 
     public function testPricingReplayDenialDurablyConsumesAdmission():void

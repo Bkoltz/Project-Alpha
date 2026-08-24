@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../../../services/ProjectReceivablesSummaryService.php';
 require_once __DIR__ . '/../../../utils/project_files.php';
 require_once __DIR__ . '/../../../utils/public_project_links.php';
 require_once __DIR__ . '/../../../config/app.php';
@@ -75,6 +76,7 @@ $editOperationId=max(0,(int)($_GET['operation_id']??0));$editTaskId=max(0,(int)(
 foreach($projectOperations as $row)if((int)$row['id']===$editOperationId)$editOperation=$row;
 foreach($projectTasks as $row)if((int)$row['id']===$editTaskId)$editTask=$row;
 $canManageProjectWork = user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), 'projects.edit', 0) && user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), 'workforce.assignments.manage', 0);
+$canEditProjectStatus = user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), 'projects.edit', 0);
 
 // Fetch associated quotes
 $stmt = $pdo->prepare('SELECT id, doc_number, status, total, created_at FROM quotes WHERE project_id = ? ORDER BY created_at DESC');
@@ -82,7 +84,7 @@ $stmt->execute([$projectId]);
 $quotes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch associated contracts
-$stmt = $pdo->prepare('SELECT id, doc_number, status, total, created_at FROM contracts WHERE project_id = ? ORDER BY created_at DESC');
+$stmt = $pdo->prepare('SELECT id, doc_number, status, contract_type, total, created_at FROM contracts WHERE project_id = ? ORDER BY created_at DESC');
 $stmt->execute([$projectId]);
 $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -335,6 +337,27 @@ $statusColors = [
 ];
 
 $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started'];
+$contractSettlementEnabled = (string)($appConfig['contract_settlement_enabled'] ?? '0') === '1';
+$projectIsTerminal = in_array((string)$project['status'], ['completed', 'cancelled'], true);
+$closeoutTarget = in_array((string)($_GET['closeout_target'] ?? ''), ['completed', 'cancelled'], true)
+    ? (string)$_GET['closeout_target']
+    : null;
+$closeoutBlocked = $canEditProjectStatus && $contractSettlementEnabled && !empty($_GET['closeout_blocked']) && $closeoutTarget !== null;
+$terminalContractStatuses = ['completed', 'cancelled', 'denied', 'void'];
+$closeoutBlockers = $closeoutBlocked
+    ? array_values(array_filter(
+        $contracts,
+        static fn(array $contract): bool => !in_array(strtolower((string)$contract['status']), $terminalContractStatuses, true)
+    ))
+    : [];
+$terminalInvoiceBadge = null;
+if ($projectIsTerminal) {
+    $receivables = (new App\Services\ProjectReceivablesSummaryService($pdo))->summarize($projectId);
+    $terminalLabel = (string)$project['status'] === 'completed' ? 'Completed' : 'Cancelled';
+    $terminalInvoiceBadge = $receivables['has_outstanding']
+        ? $terminalLabel . ' · Outstanding $' . number_format($receivables['total_minor'] / 100, 2)
+        : $terminalLabel . ' · No outstanding balance';
+}
 $autoEmailEnabled = !array_key_exists('project_invoice_auto_email', $project) || !empty($project['project_invoice_auto_email']);
 $lastProjectInvoice = $projectInvoices[0] ?? null;
 $monthlyBilling = ($project['invoice_billing_period'] ?? 'per_invoice') === 'monthly';
@@ -421,7 +444,7 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
 ?>
 
 <style>
-.project-page{max-width:1440px;margin:0 auto;padding:24px}.project-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;align-items:start}.project-main,.project-sidebar{min-width:0}.project-panel{background:#fff;border:1px solid #dfe3e8;border-radius:8px;padding:20px;margin-bottom:18px;box-shadow:0 1px 2px rgba(15,23,42,.04)}.project-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.project-header h1{margin:0 0 6px;font-size:26px;line-height:1.2}.project-subtitle{color:var(--muted);font-size:13px}.project-status{display:inline-flex;align-items:center;padding:6px 10px;border-radius:6px;font-size:13px;font-weight:700;white-space:nowrap}.project-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px;padding-top:18px;margin-top:18px;border-top:1px solid #e5e7eb}.project-fact-label{font-size:12px;color:var(--muted);margin-bottom:3px}.project-fact-value{font-size:14px;font-weight:600}.project-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid #dfe3e8;border-radius:8px;background:#fff;margin-bottom:18px;overflow:hidden}.project-metric{padding:15px 16px;border-right:1px solid #e5e7eb}.project-metric:last-child{border-right:0}.project-metric-label{font-size:12px;color:var(--muted)}.project-metric-value{font-size:22px;font-weight:750;line-height:1.25;margin-top:2px}.project-metric-note{font-size:12px;margin-top:2px}.project-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.project-section-head h2{font-size:18px;margin:0}.project-doc-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:11px 12px;border:1px solid #e5e7eb;border-radius:6px;background:#fafbfc;text-decoration:none;color:inherit}.project-doc-row:hover{border-color:#c9d1d9;background:#fff}.project-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.project-actions .btn{display:flex;align-items:center;justify-content:center;text-align:center;min-height:38px}.project-actions .project-action-wide{grid-column:1/-1}.project-field{display:grid;gap:5px}.project-field>span,.project-field>div:first-child{font-size:13px;font-weight:600}.project-field input,.project-field select,.project-field textarea{width:100%;padding:9px 10px;border:1px solid #cfd5dc;border-radius:6px;background:#fff}.project-field small{color:var(--muted);font-size:12px;line-height:1.4}.project-check-list{display:grid;gap:7px;padding:10px;border:1px solid #dfe3e8;border-radius:6px;max-height:180px;overflow:auto}.project-check{display:flex;align-items:flex-start;gap:8px;font-size:13px}.project-check input{width:auto;margin-top:2px}.project-sidebar-title{font-size:15px;font-weight:700;margin-bottom:12px}.project-muted{color:var(--muted);font-size:13px}.project-danger{border-color:#fecaca;background:#fffafa}.project-danger .project-sidebar-title{color:#991b1b}@media(max-width:1050px){.project-layout{grid-template-columns:1fr}.project-sidebar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.project-sidebar>.project-panel{margin:0}.project-sidebar>.project-panel:nth-child(3),.project-sidebar>.project-panel:nth-child(4){grid-column:1/-1}}@media(max-width:760px){.site-shell{display:block!important}.main-content{width:100%!important;min-width:0!important}.project-page{width:100%;padding:16px}.project-header{display:grid}.project-facts{grid-template-columns:1fr}.project-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.project-metric{border-bottom:1px solid #e5e7eb}.project-metric:nth-child(2n){border-right:0}.project-metric:last-child{grid-column:1/-1;border-bottom:0}.project-sidebar{display:block}.project-sidebar>.project-panel{margin-bottom:16px}.project-actions{grid-template-columns:1fr}.project-actions .project-action-wide{grid-column:auto}.project-doc-row{align-items:flex-start;flex-direction:column}.project-doc-row>div:last-child{width:100%;justify-content:space-between}}
+.project-page{max-width:1440px;margin:0 auto;padding:24px}.project-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;align-items:start}.project-main,.project-sidebar{min-width:0}.project-panel{background:#fff;border:1px solid #dfe3e8;border-radius:8px;padding:20px;margin-bottom:18px;box-shadow:0 1px 2px rgba(15,23,42,.04)}.project-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.project-header h1{margin:0 0 6px;font-size:26px;line-height:1.2}.project-subtitle{color:var(--muted);font-size:13px}.project-status{display:inline-flex;align-items:center;padding:6px 10px;border-radius:6px;font-size:13px;font-weight:700;white-space:nowrap}.project-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px;padding-top:18px;margin-top:18px;border-top:1px solid #e5e7eb}.project-fact-label{font-size:12px;color:var(--muted);margin-bottom:3px}.project-fact-value{font-size:14px;font-weight:600}.project-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid #dfe3e8;border-radius:8px;background:#fff;margin-bottom:18px;overflow:hidden}.project-metric{padding:15px 16px;border-right:1px solid #e5e7eb}.project-metric:last-child{border-right:0}.project-metric-label{font-size:12px;color:var(--muted)}.project-metric-value{font-size:22px;font-weight:750;line-height:1.25;margin-top:2px}.project-metric-note{font-size:12px;margin-top:2px}.project-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.project-section-head h2{font-size:18px;margin:0}.project-doc-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:11px 12px;border:1px solid #e5e7eb;border-radius:6px;background:#fafbfc;text-decoration:none;color:inherit}.project-doc-row:hover{border-color:#c9d1d9;background:#fff}.project-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.project-actions .btn{display:flex;align-items:center;justify-content:center;text-align:center;min-height:38px}.project-actions .project-action-wide{grid-column:1/-1}.project-field{display:grid;gap:5px}.project-field>span,.project-field>div:first-child{font-size:13px;font-weight:600}.project-field input,.project-field select,.project-field textarea{width:100%;padding:9px 10px;border:1px solid #cfd5dc;border-radius:6px;background:#fff}.project-field small{color:var(--muted);font-size:12px;line-height:1.4}.project-check-list{display:grid;gap:7px;padding:10px;border:1px solid #dfe3e8;border-radius:6px;max-height:180px;overflow:auto}.project-check{display:flex;align-items:flex-start;gap:8px;font-size:13px}.project-check input{width:auto;margin-top:2px}.project-sidebar-title{font-size:15px;font-weight:700;margin-bottom:12px}.project-muted{color:var(--muted);font-size:13px}.project-danger{border-color:#fecaca;background:#fffafa}.project-danger .project-sidebar-title{color:#991b1b}.project-closeout-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 10px;border:1px solid #f1c27d;border-radius:6px;background:#fff}.project-closeout-action{min-height:44px;display:inline-flex;align-items:center;justify-content:center}.project-closeout-retry{margin-top:12px}.project-closeout-retry .btn{min-height:44px}@media(max-width:1050px){.project-layout{grid-template-columns:1fr}.project-sidebar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.project-sidebar>.project-panel{margin:0}.project-sidebar>.project-panel:nth-child(3),.project-sidebar>.project-panel:nth-child(4){grid-column:1/-1}}@media(max-width:760px){.site-shell{display:block!important}.main-content{width:100%!important;min-width:0!important}.project-page{width:100%;padding:16px}.project-header{display:grid}.project-facts{grid-template-columns:1fr}.project-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.project-metric{border-bottom:1px solid #e5e7eb}.project-metric:nth-child(2n){border-right:0}.project-metric:last-child{grid-column:1/-1;border-bottom:0}.project-sidebar{display:block}.project-sidebar>.project-panel{margin-bottom:16px}.project-actions{grid-template-columns:1fr}.project-actions .project-action-wide{grid-column:auto}.project-doc-row{align-items:flex-start;flex-direction:column}.project-doc-row>div:last-child{width:100%;justify-content:space-between}.project-closeout-row{align-items:stretch;flex-direction:column}.project-closeout-action,.project-closeout-retry .btn{width:100%}}
 </style>
 <style>
 .project-settings-form{display:grid;gap:14px}.project-settings-card{border:1px solid #dfe3e8;border-radius:10px;background:#fbfcfd;padding:14px;display:grid;gap:11px}.project-settings-card h3{margin:0;font-size:14px;color:#111827}.project-settings-card p{margin:0;color:var(--muted);font-size:12px;line-height:1.45}.project-settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.project-help-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;cursor:help}.project-pill{display:inline-flex;align-items:center;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:700;background:#dbeafe;color:#1d4ed8;white-space:nowrap}.project-info-box{padding:10px 12px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;color:#1e3a8a;font-size:12px;line-height:1.45}.project-settings-picker{display:grid;gap:8px}.project-settings-picker__selected{display:grid;gap:8px;min-height:42px}.project-settings-picker__empty{padding:10px;border:1px dashed #d1d5db;border-radius:8px;color:var(--muted);background:#fff;font-size:13px}.project-settings-picker__item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid #dfe3e8;border-radius:8px;background:#fff}.project-settings-picker__name{font-weight:700}.project-settings-picker__meta{display:block;color:var(--muted);font-size:12px;margin-top:2px}.project-settings-picker__remove{border:0;background:#f3f4f6;color:#111827;border-radius:999px;width:28px;height:28px;cursor:pointer;font-weight:800}.project-settings-picker__search{position:relative}.project-settings-picker__suggestions{position:absolute;left:0;right:0;top:100%;z-index:40;display:none;max-height:210px;overflow:auto;border:1px solid #dfe3e8;border-radius:8px;background:#fff;box-shadow:0 12px 24px rgba(15,23,42,.12)}.project-settings-picker__suggestion{padding:9px 10px;border-bottom:1px solid #eef2f7;cursor:pointer}.project-settings-picker__suggestion:hover{background:#f8fafc}.project-settings-save{position:sticky;bottom:12px;z-index:1;box-shadow:0 10px 24px rgba(15,23,42,.12)}@media(max-width:760px){.project-settings-grid{grid-template-columns:1fr}.project-settings-save{position:static}}
@@ -453,8 +476,15 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                             Created <?php echo date('F j, Y', strtotime($project['created_at'])); ?>
                         </div>
                     </div>
-                    <div class="project-status" style="background:<?php echo $currentStatus['bg']; ?>;color:<?php echo $currentStatus['color']; ?>">
-                        <?php echo $currentStatus['text']; ?>
+                    <div style="display:grid;justify-items:end;gap:6px">
+                        <div class="project-status" style="background:<?php echo $currentStatus['bg']; ?>;color:<?php echo $currentStatus['color']; ?>">
+                            <?php echo $currentStatus['text']; ?>
+                        </div>
+                        <?php if ($terminalInvoiceBadge !== null): ?>
+                            <div class="project-status" style="background:#fff7ed;color:#9a3412">
+                                <?php echo htmlspecialchars($terminalInvoiceBadge); ?>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;align-items:center">
@@ -566,6 +596,47 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                 </div>
             </div>
 
+            <?php if ($closeoutBlocked): ?>
+                <?php
+                $closeoutIsCompletion = $closeoutTarget === 'completed';
+                $closeoutActionNoun = $closeoutIsCompletion ? 'completion' : 'cancellation';
+                $closeoutActionVerb = $closeoutIsCompletion ? 'Complete' : 'Cancel';
+                $closeoutConfirm = $closeoutActionVerb . ' this Project? Collectible receivables remain due and continue after close-out.';
+                ?>
+                <div id="project-closeout-alert" class="alert alert-warning" role="alert" aria-labelledby="project-closeout-alert-title" tabindex="-1" style="margin-bottom:18px">
+                    <div id="project-closeout-alert-title" style="font-weight:700;margin-bottom:4px">Project <?php echo $closeoutActionNoun; ?> is blocked</div>
+                    <div style="margin-bottom:10px">Close the Contracts below before retrying <?php echo $closeoutActionNoun; ?>. Open invoices do not block project close-out and collectible balances remain due.</div>
+                    <?php if ($closeoutBlockers): ?>
+                        <div style="display:grid;gap:8px">
+                            <?php foreach ($closeoutBlockers as $contract): ?>
+                                <?php $contractPage = ($contract['contract_type'] ?? '') === 'long_term' ? 'contract/long-term-contract-details' : 'contract/contract-details'; ?>
+                                <div class="project-closeout-row">
+                                    <div>
+                                        <strong>Contract #<?php echo htmlspecialchars((string)($contract['doc_number'] ?? $contract['id'])); ?></strong>
+                                        <span class="project-muted"> · <?php echo htmlspecialchars(ucfirst((string)$contract['status'])); ?></span>
+                                    </div>
+                                    <a class="btn btn-sm project-closeout-action" aria-label="Review close-out for Contract <?php echo htmlspecialchars((string)($contract['doc_number'] ?? $contract['id'])); ?>" href="/?page=<?php echo $contractPage; ?>&amp;id=<?php echo (int)$contract['id']; ?>">Review close-out</a>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="project-muted">The Contracts changed after this attempt. Review their current status and try again.</div>
+                    <?php endif; ?>
+                    <?php if ($canEditProjectStatus): ?>
+                        <form class="project-closeout-retry" method="post" action="/?page=project/projects-update-status" onsubmit="return confirm('<?php echo htmlspecialchars($closeoutConfirm, ENT_QUOTES); ?>');">
+                            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                            <input type="hidden" name="project_id" value="<?php echo $projectId; ?>">
+                            <input type="hidden" name="status" value="<?php echo htmlspecialchars($closeoutTarget); ?>">
+                            <button type="submit" class="btn btn-primary">Retry <?php echo $closeoutActionNoun; ?></button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+                <script>document.getElementById('project-closeout-alert')?.focus();</script>
+            <?php endif; ?>
+
+            <?php if (!empty($_GET['status_updated'])): ?>
+                <div class="alert alert-success" role="status" style="margin-bottom:16px">Project status updated.</div>
+            <?php endif; ?>
             <?php if (!empty($_GET['billing_msg'])): ?>
                 <div class="alert alert-info" style="margin-bottom:16px"><?php echo htmlspecialchars((string)$_GET['billing_msg']); ?></div>
             <?php endif; ?>
@@ -852,16 +923,26 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
         <!-- Sidebar Actions -->
         <div class="project-sidebar">
             <!-- Status Management -->
+            <?php if ($canEditProjectStatus): ?>
             <div class="project-panel">
                 <div class="project-sidebar-title">Change Status</div>
+                <?php if ($contractSettlementEnabled): ?>
+                    <div class="project-muted" style="margin-bottom:12px">Completing or cancelling checks attached Contracts. Open invoices do not block project close-out.</div>
+                <?php endif; ?>
                 <div class="grid">
                     <?php foreach ($statusColors as $statusKey => $statusInfo): ?>
                         <?php if ($statusKey !== $project['status']): ?>
-                        <form method="post" action="/?page=project/projects-update-status" style="margin:0">
+                        <?php
+                        $statusConfirmation = $statusKey === 'completed'
+                            ? 'Complete this Project? Collectible receivables remain due and continue after completion.'
+                            : ($statusKey === 'cancelled'
+                                ? 'Cancel this Project? Collectible receivables remain due and continue after cancellation.'
+                                : null);
+                        ?>
+                        <form method="post" action="/?page=project/projects-update-status" style="margin:0"<?php if ($statusConfirmation !== null): ?> onsubmit="return confirm('<?php echo htmlspecialchars($statusConfirmation, ENT_QUOTES); ?>');"<?php endif; ?>>
                             <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                             <input type="hidden" name="project_id" value="<?php echo $projectId; ?>">
                             <input type="hidden" name="status" value="<?php echo $statusKey; ?>">
-                            <input type="hidden" name="redirect" value="/?page=project/projects-details&amp;id=<?php echo $projectId; ?>">
                             <button type="submit" 
                                     style="width:100%;padding:10px;border-radius:6px;border:1px solid #e5e7eb;background:<?php echo $statusInfo['bg']; ?>;color:<?php echo $statusInfo['color']; ?>;font-weight:600;cursor:pointer;text-align:left">
                                 → <?php echo $statusInfo['text']; ?>
@@ -871,6 +952,7 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                     <?php endforeach; ?>
                 </div>
             </div>
+            <?php endif; ?>
 
             <!-- Quick Actions -->
             <div class="project-panel">

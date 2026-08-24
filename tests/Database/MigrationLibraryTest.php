@@ -97,4 +97,36 @@ final class MigrationLibraryTest extends TestCase
         $this->assertStringContainsString("'one;two'", $statements[0]);
         $this->assertStringContainsString('`semi;colon`', $statements[1]);
     }
+
+    public function testSchemaHealthRequirementsFollowTheAppliedMigrationVersion(): void
+    {
+        $tables = migration_required_tables_for_version([
+            'users', 'pricing_adjustment_definitions', 'contract_settlement_terms',
+        ], 71);
+        $this->assertSame(['users'], $tables);
+        $this->assertContains('pricing_adjustment_definitions', migration_required_tables_for_version([
+            'pricing_adjustment_definitions', 'contract_settlement_terms',
+        ], 72));
+        $this->assertSame(
+            ['pricing_adjustment_definitions', 'contract_settlement_terms'],
+            migration_required_tables_for_version([
+                'pricing_adjustment_definitions', 'contract_settlement_terms',
+            ], 77)
+        );
+
+        $columns = [
+            'invoices' => ['organization_id', 'generation_key'],
+            'pricing_adjustment_definitions' => ['organization_id', 'scope_type'],
+            'contract_settlement_terms' => ['organization_id'],
+        ];
+        $this->assertSame(
+            ['invoices' => ['organization_id']],
+            migration_required_columns_for_version($columns, 71)
+        );
+        $this->assertSame(
+            ['invoices' => ['organization_id'], 'pricing_adjustment_definitions' => ['organization_id']],
+            migration_required_columns_for_version($columns, 72)
+        );
+        $this->assertSame($columns, migration_required_columns_for_version($columns, 77));
+    }
 }

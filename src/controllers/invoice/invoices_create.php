@@ -13,6 +13,7 @@ require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../utils/general_recipient_invoices.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 require_once __DIR__ . '/../../services/WorkTimeBillingContextService.php';
@@ -389,7 +390,10 @@ try {
     }
     
     audit_log($pdo, 'invoice.create', 'invoice', $invoice_id, ['client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator, 'recipient_presentation_mode' => $recipientPresentationMode]);
-    DocumentRevisionService::snapshotAndSave($pdo,'invoice',$invoice_id,$__creator,false);
+    if ($__orgId !== null) {
+        pricing_apply_posted_override($pdo,(int)$__orgId,'invoice',$invoice_id,(int)($__creator ?? 0),$_POST);
+    }
+    pricing_finalize_document_revision($pdo,$__orgId !== null ? (int)$__orgId : null,'invoice',$invoice_id,$__creator,false,(string)($appConfig['workforce_currency']??'USD'));
     
     $pdo->commit();
 } catch (Throwable $e) {

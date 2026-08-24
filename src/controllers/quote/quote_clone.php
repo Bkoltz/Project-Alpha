@@ -1,9 +1,11 @@
 <?php
 
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/quote_numbers.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
 $id=(int)($_POST['id']??0);if($id<=0){http_response_code(422);exit('Invalid quote.');}require_record_ownership($pdo,'quotes',$id);
@@ -21,5 +23,5 @@ try{
   $pdo->prepare('UPDATE quotes SET doc_number=? WHERE id=?')->execute([pa_next_quote_doc_number($pdo,(string)($source['quote_type']??'regular')),$newId]);
   $items=$pdo->prepare('SELECT * FROM quote_items WHERE quote_id=? ORDER BY id');$items->execute([$id]);foreach($items->fetchAll(PDO::FETCH_ASSOC) as $item){unset($item['id']);$item['quote_id']=$newId;$itemColumns=array_keys($item);$itemInsert=$pdo->prepare('INSERT INTO quote_items (`'.implode('`,`',$itemColumns).'`) VALUES ('.implode(',',array_fill(0,count($itemColumns),'?')).')');$itemInsert->execute(array_values($item));}
   $ruleStatement=$pdo->prepare('SELECT * FROM travel_billing_rules WHERE scope_type="quote" AND quote_id=? ORDER BY id DESC LIMIT 1');$ruleStatement->execute([$id]);$rule=$ruleStatement->fetch(PDO::FETCH_ASSOC);if($rule)mileage_save_document_rule($pdo,'quote',$newId,!empty($source['organization_id'])?(int)$source['organization_id']:null,(int)$source['client_id'],(int)($_SESSION['user']['id']??0),$rule);
-  DocumentRevisionService::snapshotAndSave($pdo,'quote',$newId,(int)($_SESSION['user']['id']??0),false);$pdo->commit();header('Location: /?page=quote/quotes-edit&id='.$newId.'&cloned=1');exit;
+  pricing_finalize_document_revision($pdo,!empty($source['organization_id'])?(int)$source['organization_id']:null,'quote',$newId,(int)($_SESSION['user']['id']??0),false,(string)($appConfig['workforce_currency']??'USD'));$pdo->commit();header('Location: /?page=quote/quotes-edit&id='.$newId.'&cloned=1');exit;
 }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();header('Location: /?page=quote/quote-details&id='.$id.'&error='.rawurlencode($error->getMessage()));exit;}

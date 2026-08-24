@@ -267,7 +267,7 @@ final class ManagedDeliveryIntegrationTest extends TestCase
         self::assertStringContainsString("(0,'managed_delivery_enabled','0')", (string)file_get_contents($root . '/database/migrations/0069_managed_delivery_intents.sql'));
         $javascript = (string)file_get_contents($root . '/public/assets/js/settings-links.js');
         self::assertStringContainsString('data.integrationEnabled === true', $javascript);
-        self::assertStringContainsString('delivery intents are currently disabled in Ops', $javascript);
+        self::assertStringContainsString('delivery intents are currently disabled there', $javascript);
         $retryController = (string)file_get_contents($root . '/src/controllers/settings/managed_delivery_retry.php');
         self::assertStringContainsString('requeueRevocation', $retryController);
         self::assertStringContainsString('managed_delivery.revocation_requeued', $retryController);

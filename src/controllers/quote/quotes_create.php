@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../utils/quote_numbers.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
@@ -216,7 +217,8 @@ try {
     }
 
     audit_log($pdo, 'quote.create', 'quote', $quote_id, ['client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator]);
-    DocumentRevisionService::snapshotAndSave($pdo,'quote',$quote_id,$__creator,false);
+    pricing_apply_posted_override($pdo,(int)$__orgId,'quote',$quote_id,(int)$__creator,$_POST);
+    pricing_finalize_document_revision($pdo,$__orgId!==null?(int)$__orgId:null,'quote',$quote_id,$__creator,false,(string)($appConfig['workforce_currency']??'USD'));
 
     $pdo->commit();
 } catch (Throwable $e) {

@@ -24,6 +24,18 @@ function document_pdf_attachment(
     if (!isset($views[$type]) || $id <= 0) {
         throw new InvalidArgumentException('Unsupported document PDF request.');
     }
+    $view = $views[$type];
+    if ($type === 'quote' || $type === 'contract') {
+        $table = $type === 'quote' ? 'quotes' : 'contracts';
+        $typeColumn = $type === 'quote' ? 'quote_type' : 'contract_type';
+        $statement = $pdo->prepare("SELECT {$typeColumn} FROM {$table} WHERE id=? LIMIT 1");
+        $statement->execute([$id]);
+        if ((string)$statement->fetchColumn() === 'long_term') {
+            $view = $type === 'quote'
+                ? __DIR__ . '/../views/pages/quote/long-term-quote-details.php'
+                : __DIR__ . '/../views/pages/contract/long-term-contract-details.php';
+        }
+    }
 
     $autoload = __DIR__ . '/../../vendor/autoload.php';
     if (!is_file($autoload)) {
@@ -47,7 +59,7 @@ function document_pdf_attachment(
         if (!defined('PDF_MODE')) {
             define('PDF_MODE', true);
         }
-        require $views[$type];
+        require $view;
         $content = (string)ob_get_clean();
     } catch (Throwable $error) {
         ob_end_clean();

@@ -52,7 +52,22 @@ enable the outbound outbox sender. The pull snapshot remains available when
 outbound delivery is disabled or paused, provided its normal API key and stable
 application key requirements are met.
 
-Open **Settings > System & Integrations > Custom integrations**. Configure a deployment-specific display label, signed-event URL, Cloudflare Access service-token credentials, and HMAC secret. Set a stable application key such as `external_operations`; use the same `APPLICATION_KEY` in the provisioning receiver and snapshot importer. No application key or display label is fixed by Project Alpha. The open-source display-name fallback is **External operations**; a deployment may replace it with its own product name.
+Open **Settings > System & Integrations > Custom integrations**. This single surface contains the deployment-specific display label, signed-event URL, service authentication credentials, HMAC secret, explicit Project Alpha account access, and synchronization health. Set a stable application key such as `external_application`; use the same key in the provisioning receiver and snapshot importer. No application key or display label is fixed by Project Alpha. The open-source display-name fallback is **External operations**; a deployment may replace it with its own product name.
+
+Portal projection profiles, workspace/principal records, scoped allowlists, runtime gates, recovery, and viewer-sharing authority remain backend compatibility contracts and are not presented in normal Settings navigation. Do not infer those authorities from the visible account directory: it controls only the configured application's Project Alpha account entitlement. Connected deployments must keep using their approved automation and receiver contract for the hidden portal-specific state.
+
+Client portal administration is explicit and default-off. A principal has a
+stable Project Alpha public ID, display name, email notification hint, and
+optional relationships to existing client records. Those relationships publish
+eligibility/invitation intent through the same signed, versioned projection but
+never grant access. Add exact scoped entitlements separately; an applicable deny
+takes precedence over an allow. Revoking a principal disables its authority and
+queues projection tombstones in the same transaction as the audit record.
+
+Project Alpha does not accept or infer an identity-provider subject from email.
+The consuming portal verifies a live assertion and owns the issuer/subject
+binding. Matching names, addresses, CRM contacts, primary contacts, and public
+links are never identity bindings or grants.
 
 Outbound delivery is ready only when the administrator has requested it and all
 five delivery values are available: application key, signed event URL, Access

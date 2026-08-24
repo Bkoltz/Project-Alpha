@@ -189,6 +189,14 @@ function pa_settings_registry(): array
                     'keywords' => 'tax rates state county lookup csv import',
                     'form_mode' => 'self',
                 ],
+                'pricing-adjustments' => [
+                    'title' => 'Pricing adjustments',
+                    'description' => 'Manage reusable percentage adjustments for projects, contracts, and their documents.',
+                    'tab' => 'pricing-adjustments',
+                    'permission' => 'financial.manage',
+                    'keywords' => 'pricing adjustment discount reusable customer project contract percentage',
+                    'form_mode' => 'self',
+                ],
             ],
         ],
         'communications' => [

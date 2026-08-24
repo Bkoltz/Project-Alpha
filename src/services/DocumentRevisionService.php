@@ -16,7 +16,8 @@ final class DocumentRevisionService
         if ($table === null) {
             throw new InvalidArgumentException('Invalid document type.');
         }
-        $rowStmt = $pdo->prepare("SELECT * FROM {$table} WHERE id=? FOR UPDATE");
+        $driver = (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $rowStmt = $pdo->prepare("SELECT * FROM {$table} WHERE id=?" . ($driver === 'mysql' ? ' FOR UPDATE' : ''));
         $rowStmt->execute([$id]);
         $row = $rowStmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
@@ -25,7 +26,7 @@ final class DocumentRevisionService
         $revision = max(1, (int)($row['revision_number'] ?? 1));
         if ($increment) {
             $revision++;
-            $pdo->prepare("UPDATE {$table} SET revision_number=?,revision_updated_at=NOW(),updated_at=NOW() WHERE id=?")
+            $pdo->prepare("UPDATE {$table} SET revision_number=?,revision_updated_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?")
                 ->execute([$revision, $id]);
             $row['revision_number'] = $revision;
             $row['revision_updated_at'] = date('Y-m-d H:i:s');
@@ -39,7 +40,11 @@ final class DocumentRevisionService
             $snapshot['adjustments'] = $adjustments->fetchAll(PDO::FETCH_ASSOC);
         }
         $json = json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-        $pdo->prepare('INSERT INTO document_revisions (document_type,document_id,revision_number,snapshot,content_hash,created_by) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE snapshot=VALUES(snapshot),content_hash=VALUES(content_hash),created_by=VALUES(created_by)')
+        $revisionSql='INSERT INTO document_revisions (document_type,document_id,revision_number,snapshot,content_hash,created_by) VALUES (?,?,?,?,?,?)';
+        $revisionSql.=$driver==='sqlite'
+            ? ' ON CONFLICT(document_type,document_id,revision_number) DO UPDATE SET snapshot=excluded.snapshot,content_hash=excluded.content_hash,created_by=excluded.created_by'
+            : ' ON DUPLICATE KEY UPDATE snapshot=VALUES(snapshot),content_hash=VALUES(content_hash),created_by=VALUES(created_by)';
+        $pdo->prepare($revisionSql)
             ->execute([$type, $id, $revision, $json, hash('sha256', $json), $userId ?: null]);
         self::snapshotAddresses($pdo, $type, $id, $revision, $row);
         return $revision;
@@ -55,7 +60,7 @@ final class DocumentRevisionService
         if (!$row) throw new RuntimeException('Document not found.');
         $revision = max(1, (int)$row['revision_number']);
         $pdo->prepare("UPDATE {$table} SET last_sent_revision=? WHERE id=?")->execute([$revision, $id]);
-        $pdo->prepare('INSERT INTO document_deliveries (document_type,document_id,revision_number,email_delivery_id,recipient,delivered_at) VALUES (?,?,?,?,?,NOW())')
+        $pdo->prepare('INSERT INTO document_deliveries (document_type,document_id,revision_number,email_delivery_id,recipient,delivered_at) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)')
             ->execute([$type, $id, $revision, $emailDeliveryId, $recipient]);
         if (in_array($type, ['quote','contract'], true) && strtolower((string)$row['status']) === 'draft') {
             $pdo->prepare("UPDATE {$table} SET status='pending' WHERE id=?")->execute([$id]);

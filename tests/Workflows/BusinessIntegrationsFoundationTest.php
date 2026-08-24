@@ -38,6 +38,9 @@ final class BusinessIntegrationsFoundationTest extends TestCase
         $readiness = (string) file_get_contents($root . '/src/controllers/health/ready.php');
         $mileage = (string) file_get_contents($root . '/src/controllers/financial/mileage_unbilled.php');
         self::assertStringContainsString("schema_out_of_date", $readiness);
+        self::assertStringContainsString('PA_REQUIRED_SCHEMA_VERSION = 75', $readiness);
+        foreach(['pricing_adjustment_definitions','project_pricing_adjustment_assignments','contract_pricing_adjustment_assignments','document_pricing_adjustment_overrides','document_pricing_adjustment_snapshots','contract_settlement_terms','contract_settlements','contract_settlement_lines'] as $table)self::assertStringContainsString("'{$table}'",$readiness);
+        foreach(['generation_key','affects_total','scope_type','scope_key','derived_from_snapshot_id','policy_mode','request_key','basis_hash','source_pricing_snapshot_id','missing_columns'] as $column)self::assertStringContainsString($column,$readiness);
         self::assertStringContainsString("api_json_failure(503,'schema_out_of_date'", $mileage);
         self::assertStringContainsString("'request_id'", (string) file_get_contents($root . '/src/utils/api_response.php'));
     }

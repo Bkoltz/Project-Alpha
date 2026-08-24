@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
 require_once __DIR__ . '/../../../utils/public_links.php';
+require_once __DIR__ . '/../../../utils/document_pricing_adjustments.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
@@ -17,6 +18,7 @@ $stmt = $pdo->prepare('SELECT q.*, c.name client_name, c.email client_email, c.p
 $stmt->execute([$id]);
 $quote = $stmt->fetch(PDO::FETCH_ASSOC);
 if(!$quote){ echo '<p>Quote not found</p>'; return; }
+$pricingSnapshot=(int)($quote['organization_id']??0)>0?pricing_document_snapshot($pdo,(int)$quote['organization_id'],'quote',$id,max(1,(int)($quote['revision_number']??1))):null;
 
 // Determine quote type for back link and display
 $quoteType = $quote['quote_type'] ?? 'regular';
@@ -429,6 +431,7 @@ $isPdf = defined('PDF_MODE');
             <td style="padding:8px 12px;text-align:right;color:#6b7280">Subtotal</td>
             <td style="padding:8px 12px;text-align:right;width:120px">$<?php echo number_format($quote['subtotal'],2); ?></td>
           </tr>
+          <?php echo pricing_adjustment_client_row($pricingSnapshot,'padding:8px 12px','text-align:right;color:#6b7280'); ?>
           <tr>
             <td style="padding:8px 12px;text-align:right;color:#6b7280">Discount</td>
             <td style="padding:8px 12px;text-align:right">
@@ -453,6 +456,7 @@ $isPdf = defined('PDF_MODE');
       </td>
     </tr>
   </table>
+  <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW') && ($pricingProvenance=pricing_adjustment_staff_provenance($pricingSnapshot))!==''): ?><p class="pricing-provenance" data-pricing-provenance><?php echo htmlspecialchars($pricingProvenance,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); ?></p><?php endif; ?>
 <?php if (!isset($appConfig['quotes_show_terms']) || (int)$appConfig['quotes_show_terms'] === 1): ?>
     <div style="page-break-after:always"></div>
     <h3>Terms and Conditions</h3>

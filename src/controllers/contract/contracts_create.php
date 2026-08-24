@@ -13,8 +13,10 @@ require_once __DIR__ . '/../../utils/contract_signatures.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
+require_once __DIR__ . '/../../services/ProjectContractEligibilityGuardService.php';
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -119,6 +121,7 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try{
+  (new App\Services\ProjectContractEligibilityGuardService($pdo))->assertCanCreateOrAttach($project_id);
   $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields, organization_id, show_contact_on_document, created_by) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       ->execute([$client_id, $project_id, 'draft', $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson, $__orgId, $showContactOnDocument, $__creator]);
   $co_id = (int)$pdo->lastInsertId();
@@ -184,8 +187,15 @@ try{
 
   audit_log($pdo, 'contract.create', 'contract', $co_id, ['client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator, 'invoice_id' => $invoice_id]);
   audit_log($pdo, 'invoice.create', 'invoice', $invoice_id, ['contract_id' => $co_id, 'client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator, 'auto_generated' => true]);
-  DocumentRevisionService::snapshotAndSave($pdo,'contract',$co_id,$__creator,false);
-  DocumentRevisionService::snapshotAndSave($pdo,'invoice',$invoice_id,$__creator,false);
+  pricing_apply_posted_override($pdo,(int)$__orgId,'contract',$co_id,(int)$__creator,$_POST);
+  pricing_finalize_document_revision(
+    $pdo,$__orgId!==null?(int)$__orgId:null,'contract',$co_id,$__creator,false,
+    (string)($appConfig['workforce_currency']??'USD'),
+    $deposit_type==='percent'&&$__orgId!==null
+      ? static fn(array $pricing)=>pricing_recompute_contract_percentage_deposit($pdo,(int)$__orgId,$co_id,(string)$deposit_value)
+      : null
+  );
+  pricing_finalize_document_revision($pdo,$__orgId!==null?(int)$__orgId:null,'invoice',$invoice_id,$__creator,false,(string)($appConfig['workforce_currency']??'USD'));
 
   $pdo->commit();
 }catch(Throwable $e){

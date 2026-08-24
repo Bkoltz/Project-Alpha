@@ -31,5 +31,5 @@ try {
     $diagnostic = substr(hash('sha256', get_class($error) . ':' . $error->getMessage()), 0, 12);
     error_log('[managed_delivery_preflight] failed code=' . $diagnostic);
     http_response_code(502);
-    echo json_encode(['success' => false, 'error' => 'Ops capability test failed.', 'diagnostic' => $diagnostic]);
+    echo json_encode(['success' => false, 'error' => 'Delivery capability test failed.', 'diagnostic' => $diagnostic]);
 }

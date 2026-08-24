@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/app_version.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/payment_accounting.php';
+require_once __DIR__ . '/../../services/ProjectReceivablesSummaryService.php';
 header('Content-Type: application/json');
 
 // Lightweight read-only summary for the Command Center dashboard.
@@ -22,6 +23,7 @@ $expenseCountStmt = $pdo->prepare("SELECT COUNT(*) FROM expenses e WHERE {$expen
 $expenseCountStmt->execute($expenseScopeParams);
 $expenseTotalStmt = $pdo->prepare("SELECT COALESCE(SUM(COALESCE(e.total_amount, e.amount, 0)),0) FROM expenses e WHERE {$expenseScopeWhere} AND e.status != 'void'");
 $expenseTotalStmt->execute($expenseScopeParams);
+$outstandingReceivables = (new App\Services\ProjectReceivablesSummaryService($pdo))->summarizeAll();
 
 $resp = [
     'generated_at' => gmdate('c'),
@@ -34,7 +36,7 @@ $resp = [
     'expenses'     => (int)$expenseCountStmt->fetchColumn(),
     'expense_total'=> (float)$expenseTotalStmt->fetchColumn(),
     'revenue'      => _scalar($pdo, "SELECT COALESCE(SUM({$incomeExpr}),0) FROM payments p WHERE p.status='succeeded'"),
-    'outstanding'  => _scalar($pdo, "SELECT COALESCE(SUM(balance_due),0) FROM invoices WHERE status NOT IN ('paid','cancelled','void')"),
+    'outstanding'  => $outstandingReceivables['total_minor'] / 100,
 ];
 
 echo json_encode($resp, JSON_NUMERIC_CHECK);
