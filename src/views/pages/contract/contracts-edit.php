@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../../utils/project_selection.php';
+require_once __DIR__ . '/../../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../components/tax_lookup_control.php';
 $id = (int)($_GET['id'] ?? 0);
 require_record_ownership($pdo, 'contracts', $id);
@@ -74,9 +75,11 @@ try {
 ?>
 <section>
   <h2>Edit Contract C-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?><?php if (!empty($contract['project_code'])) echo ' (Job ' . htmlspecialchars($contract['project_code']) . ')'; ?></h2>
+  <?php echo pricing_adjustment_assignment_controls($pdo,(int)($contract['organization_id']??$contract['client_organization_id']??0),'contract',$id,'/?page=contract/contracts-edit&id='.$id,csrf_token()); ?>
   <form id="coEditForm" method="post" action="/?page=contracts-update" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$contract['id']; ?>">
+    <?php echo pricing_adjustment_override_controls($pdo,(int)($contract['organization_id']??$contract['client_organization_id']??0),'contract',$id); ?>
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <div data-document-recipient-picker>
       <label style="display:block">
@@ -132,8 +135,15 @@ try {
         </select>
       </label>
       <label>
-        <div>Deposit Amount</div>
-        <input id="depositValueCo" type="number" step="0.01" name="deposit_amount" value="<?php echo htmlspecialchars($contract['deposit_amount'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div>Deposit Value <small>(percent or dollars, based on type)</small></div>
+        <?php
+          $depositEditValue=(float)($contract['deposit_amount']??0);
+          if(($contract['deposit_type']??'none')==='percent'){
+            $contractTotal=(float)($contract['total']??0);
+            $depositEditValue=$contractTotal>0?round(max(0,min(100,$depositEditValue/$contractTotal*100)),4):0;
+          }
+        ?>
+        <input id="depositValueCo" type="number" step="0.0001" name="deposit_value" value="<?php echo htmlspecialchars((string)$depositEditValue); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
         <div>Deposit Paid</div>
@@ -411,3 +421,4 @@ try {
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/contracts-edit-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/document-recipient-presentation.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/pricing-adjustments.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

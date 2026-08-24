@@ -55,6 +55,7 @@ function page_permission_map(): array
         'settings/tax-import-handler'        => 'settings.manage',
         'settings/tax-import-chunk'          => 'settings.manage',
         'settings/tax-rates-handler'         => 'settings.manage',
+        'settings/pricing-adjustments-handler' => 'financial.manage',
 
         // Unified Workforce modules
         'workforce/time'        => ['timekeeping.self', 'timekeeping.manage'],

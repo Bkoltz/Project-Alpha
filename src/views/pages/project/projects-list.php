@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../services/ProjectReceivablesSummaryService.php';
 
 $q = trim((string)($_GET['q'] ?? ''));
 $status = trim((string)($_GET['status'] ?? ''));
@@ -39,10 +40,7 @@ $sql = "
            (SELECT COUNT(*) FROM quotes q WHERE q.project_id = p.id) AS quote_count,
            (SELECT COUNT(*) FROM contracts co WHERE co.project_id = p.id) AS contract_count,
            (SELECT COUNT(*) FROM invoices i WHERE i.project_id = p.id) AS invoice_count,
-           (SELECT COUNT(*) FROM project_clients pc WHERE pc.project_id = p.id) AS client_count,
-           (SELECT COALESCE(SUM(GREATEST(0, i.balance_due)), 0)
-              FROM invoices i
-             WHERE i.project_id = p.id AND i.status NOT IN ('paid', 'cancelled', 'void')) AS open_balance
+           (SELECT COUNT(*) FROM project_clients pc WHERE pc.project_id = p.id) AS client_count
       FROM projects p
  LEFT JOIN clients c ON c.id = p.client_id
  LEFT JOIN organizations o ON o.id = p.organization_id
@@ -54,6 +52,13 @@ $sql = "
 $stmt = $pdo->prepare($sql);
 $stmt->execute(array_merge($params, $scopeParams));
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$receivablesService = new App\Services\ProjectReceivablesSummaryService($pdo);
+$receivablesByProject = $receivablesService->summarizeProjects(array_map('intval', array_column($rows, 'id')));
+foreach ($rows as &$row) {
+    $summary = $receivablesByProject[(int)$row['id']];
+    $row['open_balance'] = $summary['total_minor'] / 100;
+}
+unset($row);
 
 $organizations = $pdo->query('SELECT id, name FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 $clients = $pdo->query('SELECT id, name FROM clients WHERE archived = 0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);

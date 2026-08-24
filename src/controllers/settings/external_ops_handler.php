@@ -57,8 +57,15 @@ try {
         $message=$active?'Workspace linked to profile.':'Workspace unlinked; projection and command authorization now fail closed for this profile.';
     } elseif ($action === 'save-portal-principal') {
         if(!user_can($pdo,$actorUserId,'users.manage',0))throw new DomainException('User-management permission is required to manage portal authority.');
-        $principalId=(new PortalAuthorityService())->createPrincipal($pdo,(string)($_POST['email']??''),(string)($_POST['display_name']??''),$actorUserId);
-        audit_log($pdo,'portal.principal.saved','portal_principal',$principalId);$message='Portal principal saved. It remains authorization intent; identity verification occurs in the consuming portal.';
+        $clientIds=array_values(array_filter(array_map('intval',(array)($_POST['client_ids']??[]))));
+        $principalId=(new PortalAuthorityService())->savePrincipalAccess($pdo,(int)($_POST['profile_id']??0),(string)($_POST['workspace_public_id']??''),!empty($_POST['principal_id'])?(int)$_POST['principal_id']:null,(string)($_POST['email']??''),(string)($_POST['display_name']??''),$clientIds,$actorUserId);
+        $message='Client portal principal saved and its normalized projection was queued.';
+    } elseif ($action === 'revoke-portal-principal') {
+        if(!user_can($pdo,$actorUserId,'users.manage',0))throw new DomainException('User-management permission is required to manage portal authority.');
+        (new PortalAuthorityService())->revokePrincipalAccess($pdo,(int)($_POST['profile_id']??0),(string)($_POST['workspace_public_id']??''),(int)($_POST['principal_id']??0),$actorUserId);$message='Client portal principal, identity bindings, and scoped authority were revoked.';
+    } elseif ($action === 'save-portal-entitlement') {
+        if(!user_can($pdo,$actorUserId,'users.manage',0))throw new DomainException('User-management permission is required to manage portal authority.');
+        (new PortalAuthorityService())->saveScopedEntitlement($pdo,(int)($_POST['profile_id']??0),(string)($_POST['workspace_public_id']??''),(int)($_POST['principal_id']??0),(string)($_POST['capability']??''),(string)($_POST['scope_type']??''),(string)($_POST['scope_public_id']??''),(string)($_POST['effect']??''),(string)($_POST['entitlement_state']??'')==='active',$actorUserId);$message='Scoped client portal authority saved and projected.';
     } elseif ($action === 'appoint-portal-manager') {
         if(!user_can($pdo,$actorUserId,'users.manage',0))throw new DomainException('User-management permission is required to manage portal authority.');
         (new PortalAuthorityService())->appointManager($pdo,(int)($_POST['profile_id']??0),(string)($_POST['workspace_public_id']??''),(int)($_POST['principal_id']??0),(string)($_POST['scope_type']??''),(string)($_POST['scope_public_id']??''),!empty($_POST['replace_principal_id'])?(int)$_POST['replace_principal_id']:null,$actorUserId,!empty($_POST['viewer_share_create']));$message='Portal manager authority saved and projection changes were queued atomically.';
@@ -67,7 +74,7 @@ try {
         (new PortalAuthorityService())->offboardManager($pdo,(int)($_POST['profile_id']??0),(string)($_POST['workspace_public_id']??''),(int)($_POST['principal_id']??0),(string)($_POST['scope_type']??''),(string)($_POST['scope_public_id']??''),$actorUserId);$message='Portal manager was offboarded. If this was the final manager, the scope is now visibly locked until a replacement is appointed.';
     } elseif ($action === 'save-viewer-share-entitlement') {
         if(!user_can($pdo,$actorUserId,'users.manage',0))throw new DomainException('User-management permission is required to manage portal authority.');
-        (new PortalAuthorityService())->saveViewerShareEntitlement($pdo,(int)($_POST['profile_id']??0),(string)($_POST['workspace_public_id']??''),(int)($_POST['principal_id']??0),(string)($_POST['scope_type']??''),(string)($_POST['scope_public_id']??''),(string)($_POST['effect']??''),(string)($_POST['entitlement_state']??'')==='active',$actorUserId);$message='Scoped model-viewer share authority saved and projection changes were queued atomically.';
+        (new PortalAuthorityService())->saveViewerShareEntitlement($pdo,(int)($_POST['profile_id']??0),(string)($_POST['workspace_public_id']??''),(int)($_POST['principal_id']??0),(string)($_POST['scope_type']??''),(string)($_POST['scope_public_id']??''),(string)($_POST['effect']??''),(string)($_POST['entitlement_state']??'')==='active',$actorUserId);$message='Scoped public-link authority saved and projection changes were queued atomically.';
     } elseif ($action === 'queue-portal-snapshot') {
         $profileId=(int)($_POST['profile_id']??0);$profileStmt=$pdo->prepare('SELECT * FROM portal_integration_profiles WHERE id=? AND enabled=1 AND portal_projection_enabled=1');$profileStmt->execute([$profileId]);$profile=$profileStmt->fetch(PDO::FETCH_ASSOC);if(!$profile)throw new DomainException('Enable portal projection before queuing a snapshot.');
         $pdo->beginTransaction();try{$summary=(new PortalProjectionService())->queueWorkspaceSnapshot($pdo,$profile,(string)($_POST['workspace_public_id']??''));audit_log($pdo,'portal.snapshot.queued','portal_workspace',null,$summary);$pdo->commit();}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}$message='Complete portal snapshot queued.';
@@ -111,16 +118,23 @@ try {
     }
 
     $returnTo = trim((string)($_POST['return_to'] ?? ''));
+    $clientActions = ['save-portal-workspace','set-portal-workspace-link','save-portal-principal','revoke-portal-principal','save-portal-entitlement','appoint-portal-manager','offboard-portal-manager','save-viewer-share-entitlement'];
+    $advancedActions = ['save-portal-profile','save-portal-runtime','save-portal-delivery','send-portal-now','queue-portal-snapshot','queue-catalog-snapshot'];
+    $returnTab = in_array($action, $clientActions, true) ? 'client-portal-access' : (in_array($action, $advancedActions, true) ? 'integration-advanced' : 'external-ops');
     $location = $returnTo === 'account-edit' && !empty($_POST['user_id'])
         ? '/?page=account-edit&id=' . (int)$_POST['user_id'] . '&success=' . rawurlencode($message ?? 'Saved')
-        : '/?page=settings&tab=external-ops&saved=1' . (isset($message) ? '&message=' . rawurlencode($message) : '');
+        : '/?page=settings&tab=' . $returnTab . '&saved=1' . (isset($message) ? '&message=' . rawurlencode($message) : '');
     header('Location: ' . $location);
 } catch (Throwable $error) {
     $diagnostic=substr(hash('sha256',get_class($error).':'.$error->getMessage()),0,12);error_log('[external_ops_settings] failed code='.$diagnostic);
     $returnTo = trim((string)($_POST['return_to'] ?? ''));
+    $failedAction = (string)($_POST['action'] ?? '');
+    $clientActions = ['save-portal-workspace','set-portal-workspace-link','save-portal-principal','revoke-portal-principal','save-portal-entitlement','appoint-portal-manager','offboard-portal-manager','save-viewer-share-entitlement'];
+    $advancedActions = ['save-portal-profile','save-portal-runtime','save-portal-delivery','send-portal-now','queue-portal-snapshot','queue-catalog-snapshot'];
+    $returnTab = in_array($failedAction, $clientActions, true) ? 'client-portal-access' : (in_array($failedAction, $advancedActions, true) ? 'integration-advanced' : 'external-ops');
     $location = $returnTo === 'account-edit' && !empty($_POST['user_id'])
         ? '/?page=account-edit&id=' . (int)$_POST['user_id'] . '&error=' . rawurlencode($error->getMessage())
-        : '/?page=settings&tab=external-ops&saved=0&error=' . rawurlencode($error instanceof DomainException?$error->getMessage():'The integration action failed. Diagnostic code '.$diagnostic);
+        : '/?page=settings&tab=' . $returnTab . '&saved=0&error=' . rawurlencode($error instanceof DomainException?$error->getMessage():'The integration action failed. Diagnostic code '.$diagnostic);
     header('Location: ' . $location);
 }
 exit;

@@ -45,7 +45,7 @@ if (!defined('PUBLIC_VIEW')) {
 if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 
 // Fetch document_date from the database
-$stmt = $pdo->prepare('SELECT document_date FROM contracts WHERE id=?');
+$stmt = $pdo->prepare('SELECT document_date,contract_type FROM contracts WHERE id=?');
 $stmt->execute([$id]);
 $doc = $stmt->fetch(PDO::FETCH_ASSOC);
 $documentDate = $doc && !empty($doc['document_date']) ? date('m/d/Y', strtotime($doc['document_date'])) : date('m/d/Y');
@@ -54,7 +54,9 @@ $documentDate = $doc && !empty($doc['document_date']) ? date('m/d/Y', strtotime(
 ob_start();
 define('PDF_MODE', true);
 $_GET['id'] = (string)$id;
-$requirePath = __DIR__ . '/../../views/pages/contract/contract-details.php';
+$requirePath = ($doc['contract_type'] ?? '') === 'long_term'
+    ? __DIR__ . '/../../views/pages/contract/long-term-contract-details.php'
+    : __DIR__ . '/../../views/pages/contract/contract-details.php';
 require $requirePath;
 $content = ob_get_clean();
 

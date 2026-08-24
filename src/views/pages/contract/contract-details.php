@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
 require_once __DIR__ . '/../../../utils/public_links.php';
+require_once __DIR__ . '/../../../utils/document_pricing_adjustments.php';
 
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
@@ -20,6 +21,7 @@ if (!$contract) {
   echo '<p>Contract not found</p>';
   return;
 }
+$pricingSnapshot=(int)($contract['organization_id']??0)>0?pricing_document_snapshot($pdo,(int)$contract['organization_id'],'contract',$id,max(1,(int)($contract['revision_number']??1))):null;
 $items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
@@ -496,6 +498,7 @@ if ($termsText === '') {
             <td style="padding:8px 10px;font-weight:600;text-align:right">Subtotal</td>
             <td style="padding:8px 10px;text-align:right;width:120px">$<?php echo number_format($contract['subtotal'] ?? 0, 2); ?></td>
           </tr>
+          <?php echo pricing_adjustment_client_row($pricingSnapshot); ?>
           <tr>
             <td style="padding:8px 10px;font-weight:600;text-align:right">Discount</td>
             <td style="padding:8px 10px;text-align:right">
@@ -526,6 +529,7 @@ if ($termsText === '') {
       </td>
     </tr>
   </table>
+  <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW') && ($pricingProvenance=pricing_adjustment_staff_provenance($pricingSnapshot))!==''): ?><p class="pricing-provenance" data-pricing-provenance><?php echo htmlspecialchars($pricingProvenance,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); ?></p><?php endif; ?>
 
   <!-- Signature section -->
   <div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">

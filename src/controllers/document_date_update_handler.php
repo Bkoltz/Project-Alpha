@@ -5,7 +5,7 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../services/DocumentPolicy.php';
-require_once __DIR__ . '/../services/DocumentRevisionService.php';
+require_once __DIR__ . '/../utils/document_pricing_carry_forward.php';
 require_once __DIR__ . '/../utils/invoice_due_dates.php';
 
 // CSRF is already verified by the router (index.php)
@@ -21,9 +21,10 @@ if ($id <= 0 || !in_array($type, ['quote', 'contract', 'invoice', 'long_term_con
 }
 
 try {
+    $pdo->beginTransaction();
     $policyType=$type==='quote'?'quote':(in_array($type,['contract','long_term_contract','on_demand_contract'],true)?'contract':'invoice');
+    DocumentPolicy::assertMutable($pdo,$policyType,$id,'administrative',true);
     require_record_ownership($pdo,['quote'=>'quotes','contract'=>'contracts','invoice'=>'invoices'][$policyType],$id);
-    DocumentPolicy::assertMutable($pdo,$policyType,$id,$policyType==='invoice'?'monetary_adjustment':'commercial');
     switch ($type) {
         case 'quote':
             $pdo->prepare("UPDATE quotes SET document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
@@ -64,15 +65,30 @@ try {
             throw new Exception('Invalid document type');
     }
 
-    DocumentRevisionService::snapshotAndSave($pdo,$policyType,$id,(int)($_SESSION['user']['id']??0));
+    $table=['quote'=>'quotes','contract'=>'contracts','invoice'=>'invoices'][$policyType];
+    $organization=$pdo->prepare("SELECT organization_id FROM {$table} WHERE id=?");
+    $organization->execute([$id]);
+    $organizationId=$organization->fetchColumn();
+    pricing_carry_forward_document_revision(
+        $pdo,
+        $organizationId===null||$organizationId===false?null:(int)$organizationId,
+        $policyType,
+        $id,
+        (int)($_SESSION['user']['id']??0),
+    );
+    $pdo->commit();
     header("Location: /?page={$redirectPage}&id={$id}&date_updated=1");
     exit;
 
 } catch (DocumentLockedException $e) {
+    if($pdo->inTransaction())$pdo->rollBack();
     http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'document_locked','message'=>$e->getMessage(),'request_id'=>bin2hex(random_bytes(8))]);exit;
 } catch (Throwable $e) {
-    $errorMsg = urlencode($e->getMessage());
-    $redirectPage = $_POST['redirect'] ?? 'dashboard';
-    header("Location: /?page={$redirectPage}&error={$errorMsg}");
+    if($pdo->inTransaction())$pdo->rollBack();
+    $errorMsg=$e instanceof InvalidArgumentException?'Invalid document date.':'Could not update the document date.';
+    $requestedRedirect=(string)($_POST['redirect']??'');
+    $allowedRedirects=['quote/quote-details','quote/long-term-quote-details','contract/contract-details','contract/long-term-contract-details','contract/on-demand-contracts-list','invoice/invoice-details'];
+    $redirectPage=in_array($requestedRedirect,$allowedRedirects,true)?$requestedRedirect:'dashboard';
+    header('Location: /?page='.$redirectPage.'&error='.rawurlencode($errorMsg));
     exit;
 }

@@ -3,9 +3,12 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../services/ScheduleService.php';
 require_once __DIR__ . '/../../services/PortalProjectionMutationService.php';
-require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../services/ProjectContractEligibilityGuardService.php';
+require_once __DIR__ . '/../../services/ProjectReceivablesSummaryService.php';
+require_once __DIR__ . '/../../services/ProjectCloseGuardService.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -33,19 +36,30 @@ if (!in_array($status, $validStatuses)) {
 
 try {
     $pdo->beginTransaction();
-    $st = $pdo->prepare("UPDATE projects SET completed_at=CASE WHEN ?='completed' AND status<>'completed' THEN UTC_TIMESTAMP(6) WHEN ?<>'completed' THEN NULL ELSE completed_at END,status=?,source_version=?,updated_at=NOW() WHERE id=?");
-    $st->execute([$status,$status,$status,'v-'.bin2hex(random_bytes(16)),$id]);
-    if($st->rowCount()!==1)throw new RuntimeException('Project not found.');
+    $transition = (new App\Services\ProjectCloseGuardService($pdo))->transition(
+        $id,
+        (string)$status,
+        (int)($_SESSION['user']['id'] ?? 0)
+    );
+    if (!$transition['transitioned']) {
+        // The blocked attempt is itself a durable security/audit event. No
+        // Project, schedule, projection, or outbox mutation has occurred.
+        $pdo->commit();
+        header(
+            'Location: /?page=project/projects-details&id=' . $id
+            . '&closeout_blocked=1&closeout_target=' . rawurlencode((string)$status)
+            . '#project-closeout-alert'
+        );
+        exit;
+    }
     ScheduleService::syncProject($pdo, $id, (string)($appConfig['timezone'] ?? 'UTC'), (int)($_SESSION['user']['id']??0));
     (new App\Services\PortalProjectionMutationService())->queueProject($pdo,$id);
-    audit_log($pdo,'project.status.changed','project',$id,['status'=>$status,'completed_at_authoritative'=>$status==='completed']);
     $pdo->commit();
 } catch (Throwable $error) {
     if($pdo->inTransaction())$pdo->rollBack();
     http_response_code(500);exit('Project status could not be updated.');
 }
 
-$redirect = $_POST['redirect'] ?? '/?page=project/projects-details&id=' . $id;
-header('Location: ' . $redirect);
+header('Location: /?page=project/projects-details&id=' . $id . '&status_updated=1');
 exit;
 ?>

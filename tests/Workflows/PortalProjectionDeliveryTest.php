@@ -197,13 +197,16 @@ final class PortalProjectionDeliveryTest extends TestCase
         ], 9);
     }
 
-    public function testOperatorUiExplainsImmutableKeySecretAndSurfacesDomainError(): void
+    public function testHiddenOperatorUiKeepsKeyRotationEnforcementAndDomainErrors(): void
     {
         $root = dirname(__DIR__, 2);
         $view = (string)file_get_contents($root . '/src/views/pages/settings/external-ops.php');
         $handler = (string)file_get_contents($root . '/src/controllers/settings/external_ops_handler.php');
-        self::assertStringContainsString('Signing secrets are immutable for a key ID.', $view);
-        self::assertStringContainsString('rotation requires both a distinct new key ID and a new secret.', $view);
+        $service = (string)file_get_contents($root . '/src/services/PortalProjectionDeliveryConfigService.php');
+        self::assertStringNotContainsString('Signing secrets are immutable for a key ID.', $view);
+        self::assertStringNotContainsString('rotation requires both a distinct new key ID and a new secret.', $view);
+        self::assertStringContainsString('Changing the signing secret requires a new signing key ID.', $service);
+        self::assertStringContainsString('A rotated signing key ID requires a new signing secret.', $service);
         self::assertStringContainsString('$error instanceof DomainException?$error->getMessage()', $handler);
     }
 
@@ -323,7 +326,7 @@ final class PortalProjectionDeliveryTest extends TestCase
         $authoritativeMutationPaths=[];$authoritativeCreatePaths=[];
         foreach ([$root.'/src/controllers',$root.'/src/services'] as $directory) {
             $iterator=new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory,\FilesystemIterator::SKIP_DOTS));
-            foreach($iterator as$fileInfo){if(!$fileInfo->isFile()||$fileInfo->getExtension()!=='php')continue;$source=(string)file_get_contents($fileInfo->getPathname());$table='(?:clients|organizations|projects|organization_departments|organization_department_contacts)(?![A-Za-z0-9_])';$creates=preg_match('/INSERT\s+INTO\s+`?'.$table.'`?/i',$source)===1;$restores=preg_match('/UPDATE\s+`?'.$table.'`?\s+SET[\s\S]{0,300}?(?:archived\s*=\s*0|deleted_at\s*=\s*NULL)/i',$source)===1;$updates=preg_match('/UPDATE\s+`?'.$table.'`?\s+SET[\s\S]{0,300}?\b(?:name|organization_id|department_id|client_id|status|archived|deleted_at|is_primary|role)\s*=/i',$source)===1;$deletes=preg_match('/DELETE\s+FROM\s+`?'.$table.'`?/i',$source)===1;if(!$creates&&!$restores&&!$updates&&!$deletes)continue;$file=str_replace('\\','/',substr($fileInfo->getPathname(),strlen($root)+1));$authoritativeMutationPaths[]=$file;if($creates||$restores){$authoritativeCreatePaths[]=$file;self::assertStringContainsString('source_version',$source,$file);}self::assertStringContainsString('PortalProjectionMutationService',$source,$file);self::assertTrue(str_contains($source,'beginTransaction')||str_contains($source,'portal_projection_mutate'),$file);self::assertTrue(str_contains($source,'afterMutation')||str_contains($source,'queueProject')||str_contains($source,'portal_projection_mutate'),$file);}
+            foreach($iterator as$fileInfo){if(!$fileInfo->isFile()||$fileInfo->getExtension()!=='php')continue;$source=(string)file_get_contents($fileInfo->getPathname());$table='(?:clients|organizations|projects|organization_departments|organization_department_contacts)(?![A-Za-z0-9_])';$creates=preg_match('/INSERT\s+INTO\s+`?'.$table.'`?/i',$source)===1;$restores=preg_match('/UPDATE\s+`?'.$table.'`?\s+SET[\s\S]{0,300}?(?:archived\s*=\s*0|deleted_at\s*=\s*NULL)/i',$source)===1;$updates=preg_match('/UPDATE\s+`?'.$table.'`?\s+SET[\s\S]{0,300}?\b(?:name|organization_id|department_id|client_id|status|archived|deleted_at|is_primary|role)\s*=/i',$source)===1;$deletes=preg_match('/DELETE\s+FROM\s+`?'.$table.'`?/i',$source)===1;if(!$creates&&!$restores&&!$updates&&!$deletes)continue;$file=str_replace('\\','/',substr($fileInfo->getPathname(),strlen($root)+1));$authoritativeMutationPaths[]=$file;if($creates||$restores){$authoritativeCreatePaths[]=$file;self::assertStringContainsString('source_version',$source,$file);}if($file==='src/services/ProjectCloseGuardService.php'){$controller=(string)file_get_contents($root.'/src/controllers/project/projects_update_status.php');self::assertStringContainsString('ProjectCloseGuardService',$controller);self::assertStringContainsString('PortalProjectionMutationService',$controller);self::assertStringContainsString('queueProject',$controller);self::assertStringContainsString('beginTransaction',$controller);continue;}self::assertStringContainsString('PortalProjectionMutationService',$source,$file);self::assertTrue(str_contains($source,'beginTransaction')||str_contains($source,'portal_projection_mutate'),$file);self::assertTrue(str_contains($source,'afterMutation')||str_contains($source,'queueProject')||str_contains($source,'portal_projection_mutate'),$file);}
         }
         sort($authoritativeMutationPaths);sort($authoritativeCreatePaths);self::assertGreaterThanOrEqual(8,count($authoritativeCreatePaths));self::assertGreaterThan(count($authoritativeCreatePaths),count($authoritativeMutationPaths));self::assertSame($authoritativeMutationPaths,array_values(array_unique($authoritativeMutationPaths)));
     }

@@ -120,15 +120,15 @@
         btn.textContent = originalText;
         var guest = data.guestSupported ? 'available when explicitly selected' : 'disabled';
         if (data.integrationEnabled === true) {
-          alert('Ops is ready. Portal delivery is supported; guest/public delivery is ' + guest + '.');
+          alert('The delivery service is ready. Portal delivery is supported; guest/public delivery is ' + guest + '.');
         } else {
-          alert('Ops authenticated successfully, but delivery intents are currently disabled in Ops. Portal delivery is supported when enabled; guest/public delivery is ' + guest + '.');
+          alert('The delivery service authenticated successfully, but delivery intents are currently disabled there. Portal delivery is supported when enabled; guest/public delivery is ' + guest + '.');
         }
       })
       .catch(function (error) {
         btn.disabled = false;
         btn.textContent = originalText;
-        alert('Ops capability test failed: ' + error.message);
+        alert('Delivery capability test failed: ' + error.message);
       });
   };
 })();

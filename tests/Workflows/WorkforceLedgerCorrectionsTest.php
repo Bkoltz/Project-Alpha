@@ -113,8 +113,20 @@ final class WorkforceLedgerCorrectionsTest extends TestCase
         self::assertStringContainsString('ClientCreditLedgerService', $this->billingResolutions);
         self::assertStringContainsString('same client and organization', $this->billingResolutions);
         self::assertStringContainsString('time_correction_billing_resolutions', $this->billingResolutions);
-        self::assertStringContainsString("max(0.0, (float)\$source['amount_paid'] - \$newTotal)", $this->billingResolutions);
-        self::assertStringContainsString('number_format($excessPaid, 2', $this->billingResolutions);
+        self::assertStringContainsString('signedMoneyToMinor', $this->billingResolutions);
+        self::assertStringContainsString('pricing_invoice_is_fixed_total_installment', $this->billingResolutions);
+        self::assertStringContainsString('pricing_finalize_frozen_document_revision', $this->billingResolutions);
+        self::assertStringContainsString('pricing_carry_forward_document_revision', $this->billingResolutions);
+        self::assertStringContainsString("(string)\$effect['currency']", $this->billingResolutions);
+        self::assertStringContainsString(
+            '$creditAppliedMinor > max(0, $newTotalMinor - $paidMinor)',
+            $this->billingResolutions
+        );
+        self::assertStringContainsString('affects_total,revision_number', $this->billingResolutions);
+        self::assertStringNotContainsString('revision_number=revision_number+1', $this->billingResolutions);
+        self::assertStringContainsString('pricing_invoice_is_fixed_total_installment', $this->corrections);
+        self::assertStringContainsString('pricing_finalize_frozen_document_revision', $this->corrections);
+        self::assertStringContainsString('affects_total,revision_number', $this->corrections);
     }
 
     public function testCorrectionMovesBillingAsOneConsistentProjection(): void

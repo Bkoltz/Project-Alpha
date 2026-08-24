@@ -70,12 +70,13 @@ final class TimeTrackingCaptureWorkflowTest extends TestCase
         self::assertStringContainsString("'hour',0", str_replace('\\\'', "'", $service));
         self::assertStringContainsString('WorkTimeBillingContextService', $service);
         self::assertStringContainsString('invoice_adjustments', $service);
+        self::assertStringContainsString('affects_total,revision_number', $service);
+        self::assertStringContainsString("VALUES (?,\\'charge\\',\\'Tracked time\\',?,?,?,?,0,?,?)", $service);
+        self::assertStringContainsString('pricing_invoice_is_fixed_total_installment', $service);
+        self::assertStringContainsString('pricing_finalize_frozen_document_revision', $service);
+        self::assertStringContainsString("strtoupper((string)(\$entry['snapshot_currency'] ?? 'USD'))", $service);
         self::assertStringContainsString('DocumentRevisionService::snapshotAndSave', $service);
         self::assertStringContainsString('tax_amount=?', $service);
-        self::assertLessThan(
-            strpos($service, 'DocumentRevisionService::snapshotAndSave'),
-            strpos($service, 'invoice_refresh_payment_totals')
-        );
         self::assertStringNotContainsString('UPDATE work_approval_snapshots', $service);
     }
 

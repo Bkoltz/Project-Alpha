@@ -235,8 +235,101 @@ function migration_connection(): PDO
     ]);
 }
 
-function migration_schema_health(PDO $pdo): void
+/** @param list<string> $requiredTables @return list<string> */
+function migration_required_tables_for_version(array $requiredTables, int $throughVersion): array
 {
+    $introduced = [
+        'pricing_adjustment_definitions' => 72,
+        'project_pricing_adjustment_assignments' => 72,
+        'contract_pricing_adjustment_assignments' => 72,
+        'document_pricing_adjustment_overrides' => 72,
+        'document_pricing_adjustment_snapshots' => 72,
+        'contract_settlement_terms' => 77,
+        'contract_settlements' => 77,
+        'contract_settlement_lines' => 77,
+    ];
+
+    return array_values(array_filter(
+        $requiredTables,
+        static fn(string $table): bool => ($introduced[$table] ?? 0) <= $throughVersion
+    ));
+}
+
+/**
+ * @param array<string, list<string>> $requiredColumns
+ * @return array<string, list<string>>
+ */
+function migration_required_columns_for_version(array $requiredColumns, int $throughVersion): array
+{
+    $introduced = [
+        'project_invoices' => ['revision_number' => 72],
+        'pricing_adjustment_definitions' => [
+            'organization_id' => 72, 'name' => 72, 'adjustment_kind' => 72,
+            'percentage_rate' => 72, 'is_active' => 72, 'effective_from' => 72,
+            'effective_until' => 72, 'scope_type' => 73, 'scope_key' => 73,
+        ],
+        'project_pricing_adjustment_assignments' => [
+            'organization_id' => 72, 'project_id' => 72,
+            'adjustment_definition_id' => 72, 'assigned_by' => 72,
+        ],
+        'contract_pricing_adjustment_assignments' => [
+            'organization_id' => 72, 'contract_id' => 72,
+            'adjustment_definition_id' => 72, 'assigned_by' => 72,
+        ],
+        'document_pricing_adjustment_overrides' => [
+            'organization_id' => 72, 'document_type' => 72, 'document_id' => 72,
+            'override_mode' => 72, 'adjustment_definition_id' => 72,
+            'reason' => 72, 'created_by' => 72,
+        ],
+        'document_pricing_adjustment_snapshots' => [
+            'organization_id' => 72, 'document_type' => 72, 'document_id' => 72,
+            'document_revision' => 72, 'source_type' => 72, 'currency' => 72,
+            'basis_minor' => 72, 'adjustment_minor' => 72, 'adjusted_minor' => 72,
+            'calculation_version' => 72, 'derived_from_snapshot_id' => 74,
+        ],
+        'invoices' => ['generation_key' => 75],
+        'invoice_adjustments' => ['affects_total' => 76],
+        'contract_settlement_terms' => [
+            'organization_id' => 77, 'project_id' => 77, 'contract_id' => 77,
+            'contract_revision' => 77, 'policy_mode' => 77, 'commitment_end_date' => 77,
+            'target_definition_id' => 77, 'frozen_target_name' => 77,
+            'frozen_target_kind' => 77, 'frozen_target_percentage' => 77,
+        ],
+        'contract_settlements' => [
+            'public_id' => 77, 'organization_id' => 77, 'project_id' => 77,
+            'contract_id' => 77, 'contract_revision' => 77, 'settlement_terms_id' => 77,
+            'request_key' => 77, 'basis_hash' => 77, 'status' => 77,
+            'prior_contract_status' => 77, 'actual_end_date' => 77, 'currency' => 77,
+            'subtotal_delta_minor' => 77, 'tax_delta_minor' => 77,
+            'total_delta_minor' => 77, 'calculation_version' => 77, 'basis_json' => 77,
+            'draft_invoice_id' => 77, 'requested_by' => 77, 'reviewed_by' => 77,
+            'decision_reason' => 77,
+        ],
+        'contract_settlement_lines' => [
+            'settlement_id' => 77, 'source_invoice_id' => 77, 'source_revision' => 77,
+            'source_pricing_snapshot_id' => 77, 'currency' => 77, 'basis_minor' => 77,
+            'historical_adjustment_minor' => 77, 'target_percentage_rate' => 77,
+            'target_adjustment_minor' => 77, 'historical_total_minor' => 77,
+            'target_total_minor' => 77, 'delta_minor' => 77, 'source_content_hash' => 77,
+        ],
+    ];
+
+    foreach ($requiredColumns as $table => $columns) {
+        $requiredColumns[$table] = array_values(array_filter(
+            $columns,
+            static fn(string $column): bool => ($introduced[$table][$column] ?? 0) <= $throughVersion
+        ));
+        if ($requiredColumns[$table] === []) {
+            unset($requiredColumns[$table]);
+        }
+    }
+
+    return $requiredColumns;
+}
+
+function migration_schema_health(PDO $pdo, ?int $throughVersion = null): void
+{
+    $throughVersion ??= PHP_INT_MAX;
     $requiredTables = [
         'users', 'organizations', 'roles', 'role_permissions',
         'clients', 'organization_departments', 'organization_department_contacts',
@@ -251,6 +344,10 @@ function migration_schema_health(PDO $pdo): void
         'addresses', 'address_assignments', 'service_locations', 'jobs',
         'project_service_locations', 'document_revisions', 'document_deliveries',
         'document_address_snapshots', 'invoice_adjustments', 'route_estimate_cache',
+        'pricing_adjustment_definitions', 'project_pricing_adjustment_assignments',
+        'contract_pricing_adjustment_assignments', 'document_pricing_adjustment_overrides',
+        'document_pricing_adjustment_snapshots', 'contract_settlement_terms',
+        'contract_settlements', 'contract_settlement_lines',
         'schedule_entries', 'mileage_charge_allocations', 'mileage_tracking_sessions',
         'worker_documents', 'business_units', 'worker_profiles', 'worker_business_units',
         'business_unit_memberships',
@@ -284,6 +381,7 @@ function migration_schema_health(PDO $pdo): void
         'managed_delivery_intent_outbox',
         'document_number_sequences',
     ];
+    $requiredTables = migration_required_tables_for_version($requiredTables, $throughVersion);
     $deadTables = [
         'contract_notes', 'quote_history', 'contract_history', 'invoice_history',
         'recurring_invoices', 'recurring_invoice_items', 'webhook_deliveries',
@@ -318,8 +416,8 @@ function migration_schema_health(PDO $pdo): void
         'project_clients' => ['client_id', 'send_project_invoices', 'can_view_invoice_links'],
         'project_invoice_recipients' => ['project_id', 'client_id', 'organization_id', 'manual_email', 'recipient_key', 'sort_order'],
         'entity_links' => ['include_on_invoices', 'resolver_mode', 'visibility_scope'],
-        'contracts' => ['organization_id', 'show_contact_on_document', 'created_by', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision', 'signed_revision_number', 'signed_pdf_sha256'],
-        'invoices' => ['organization_id', 'show_contact_on_document', 'created_by', 'collection_mode', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision', 'credit_due', 'credit_applied'],
+        'contracts' => ['organization_id', 'show_contact_on_document', 'created_by', 'job_id', 'service_location_id', 'status', 'revision_number', 'last_sent_revision', 'signed_revision_number', 'signed_pdf_sha256'],
+        'invoices' => ['organization_id', 'show_contact_on_document', 'created_by', 'collection_mode', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision', 'credit_due', 'credit_applied', 'generation_key'],
         'api_keys' => ['name', 'key_prefix', 'key_hash', 'scopes', 'allowed_ips', 'created_at', 'last_used_at', 'revoked_at'],
         'api_usage' => ['api_key_id', 'used_at'],
         'portal_integration_audit' => ['integration_profile_id','api_key_id','correlation_id','action','outcome','target_type','target_public_id','metadata_json'],
@@ -350,7 +448,16 @@ function migration_schema_health(PDO $pdo): void
         'service_locations' => ['address_id','client_id','project_id'],
         'jobs' => ['client_id','project_id','job_code','default_service_location_id','archived'],
         'document_revisions' => ['document_type','document_id','revision_number','snapshot','content_hash'],
-        'invoice_adjustments' => ['invoice_id','adjustment_type','amount','revision_number','superseded_at'],
+        'invoice_adjustments' => ['invoice_id','adjustment_type','amount','affects_total','revision_number','superseded_at'],
+        'project_invoices' => ['revision_number'],
+        'pricing_adjustment_definitions' => ['organization_id','scope_type','scope_key','name','adjustment_kind','percentage_rate','is_active','effective_from','effective_until'],
+        'project_pricing_adjustment_assignments' => ['organization_id','project_id','adjustment_definition_id','assigned_by'],
+        'contract_pricing_adjustment_assignments' => ['organization_id','contract_id','adjustment_definition_id','assigned_by'],
+        'document_pricing_adjustment_overrides' => ['organization_id','document_type','document_id','override_mode','adjustment_definition_id','reason','created_by'],
+        'document_pricing_adjustment_snapshots' => ['organization_id','document_type','document_id','document_revision','source_type','currency','basis_minor','adjustment_minor','adjusted_minor','calculation_version','derived_from_snapshot_id'],
+        'contract_settlement_terms' => ['organization_id','project_id','contract_id','contract_revision','policy_mode','commitment_end_date','target_definition_id','frozen_target_name','frozen_target_kind','frozen_target_percentage'],
+        'contract_settlements' => ['public_id','organization_id','project_id','contract_id','contract_revision','settlement_terms_id','request_key','basis_hash','status','prior_contract_status','actual_end_date','currency','subtotal_delta_minor','tax_delta_minor','total_delta_minor','calculation_version','basis_json','draft_invoice_id','requested_by','reviewed_by','decision_reason'],
+        'contract_settlement_lines' => ['settlement_id','source_invoice_id','source_revision','source_pricing_snapshot_id','currency','basis_minor','historical_adjustment_minor','target_percentage_rate','target_adjustment_minor','historical_total_minor','target_total_minor','delta_minor','source_content_hash'],
         'schedule_entries' => ['project_id','job_id','starts_at','timezone','source_type'],
         'worker_documents' => ['user_id','worker_profile_id','worker_name_snapshot','category','title','signed_on','expires_on','status','worker_visible','file_path','content_sha256','version_number','archived_at'],
         'worker_profiles' => ['user_id','relationship_type','relationship_review_required','relationship_review_reason','relationship_reviewed_by','relationship_reviewed_at','time_review_policy','compensation_policy','status','display_name','owner_internal_cost_rate'],
@@ -377,6 +484,7 @@ function migration_schema_health(PDO $pdo): void
         'passkey_credentials' => ['user_id','credential_id','user_handle','credential_record','signature_counter','revoked_at'],
         'passkey_challenges' => ['user_id','ceremony','challenge_hash','session_hash','expires_at','consumed_at'],
     ];
+    $requiredColumns = migration_required_columns_for_version($requiredColumns, $throughVersion);
     $columnQuery = $pdo->prepare(
         'SELECT COUNT(*) FROM information_schema.columns
          WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?'

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
+require_once __DIR__ . '/../../services/ProjectContractEligibilityGuardService.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('project/project-add-document');
@@ -26,6 +27,10 @@ if (in_array($document_type, ['quote','contract','invoice','recurring_invoice','
   if ($table) {
     $pdo->beginTransaction();
     try {
+    if ($stored_document_type === 'contract') {
+      (new App\Services\ProjectContractEligibilityGuardService($pdo))
+        ->assertCanCreateOrAttach($project_id, [$document_id]);
+    }
     require_record_ownership($pdo, $table, $document_id);
     $document = $pdo->prepare("SELECT client_id,project_code,job_id,created_by FROM {$table} WHERE id=?");
     $document->execute([$document_id]);

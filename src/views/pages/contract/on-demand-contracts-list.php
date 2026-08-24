@@ -179,6 +179,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="type" value="contract">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                  <input type="hidden" name="generation_key" value="<?php echo bin2hex(random_bytes(16)); ?>">
                   <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
                   <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
                 </form>
@@ -218,6 +219,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 <form method="post" action="/?page=on-demand-invoice-generate" class="od-generate-form" style="display:inline">
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                  <input type="hidden" name="generation_key" value="<?php echo bin2hex(random_bytes(16)); ?>">
                   <input type="hidden" name="send_email" value="0">
                   <button type="button" onclick="openOdGenerateModal(this.form)" style="padding:6px 10px;border:0;border-radius:8px;background:#3b82f6;color:#fff; font-size: small;">Generate Invoice</button>
                 </form>

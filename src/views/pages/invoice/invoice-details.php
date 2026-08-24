@@ -14,6 +14,7 @@ require_once __DIR__ . '/../../../services/StripeService.php';
 require_once __DIR__ . '/../../../utils/invoice_due_dates.php';
 require_once __DIR__ . '/../../../utils/general_recipient_invoices.php';
 require_once __DIR__ . '/../../../utils/document_recipient.php';
+require_once __DIR__ . '/../../../utils/document_pricing_adjustments.php';
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'invoices', $id);
@@ -22,6 +23,10 @@ $st = $pdo->prepare('SELECT i.*, c.name client_name, c.email client_email, c.pho
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
+$pricingSnapshot=(int)($inv['organization_id']??0)>0?pricing_document_snapshot($pdo,(int)$inv['organization_id'],'invoice',$id,max(1,(int)($inv['revision_number']??1))):null;
+$invoiceOrganizationId=($inv['organization_id']??null)===null?null:(int)$inv['organization_id'];
+$invoiceTotalAdjustments=pricing_invoice_total_adjustments($pdo,$invoiceOrganizationId,$id);
+$invoiceCurrency=(string)($pricingSnapshot['currency']??$inv['currency']??$appConfig['document_currency']??$appConfig['currency']??$appConfig['workforce_currency']??'USD');
 $isGeneralRecipientInvoice = pa_invoice_is_general_recipient($inv);
 $generalRecipientToken = null;
 if (!defined('PUBLIC_VIEW') && !defined('PDF_MODE')) {
@@ -494,17 +499,18 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
         <table style="width:100%;border-collapse:collapse">
           <tr>
             <td style="padding:8px 10px;font-weight:600;text-align:right">Subtotal</td>
-            <td style="padding:8px 10px;text-align:right;width:120px">$<?php echo number_format($inv['subtotal'],2); ?></td>
+            <td style="padding:8px 10px;text-align:right;width:120px"><?php echo pricing_currency_amount($inv['subtotal'],$invoiceCurrency); ?></td>
           </tr>
+          <?php echo pricing_adjustment_client_row($pricingSnapshot); ?>
           <tr>
             <td style="padding:8px 10px;font-weight:600;text-align:right">Discount</td>
             <td style="padding:8px 10px;text-align:right">
               <?php if ($inv['discount_type']==='percent'): ?>
                 <?php echo number_format($inv['discount_value'],2); ?>%
               <?php elseif ($inv['discount_type']==='fixed'): ?>
-                $<?php echo number_format($inv['discount_value'],2); ?>
+                <?php echo pricing_currency_amount($inv['discount_value'],$invoiceCurrency); ?>
               <?php else: ?>
-                $0.00
+                <?php echo pricing_currency_amount(0,$invoiceCurrency); ?>
               <?php endif; ?>
             </td>
           </tr>
@@ -512,19 +518,20 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
             <td style="padding:8px 10px;font-weight:600;text-align:right">Tax</td>
             <td style="padding:8px 10px;text-align:right"><?php echo number_format($inv['tax_percent'],2); ?>%</td>
           </tr>
+          <?php echo pricing_invoice_adjustment_client_rows($invoiceTotalAdjustments,$invoiceCurrency); ?>
           <tr style="border-top:1px solid #e5e7eb">
             <td style="padding:8px 10px;font-weight:700;text-align:right"><?php echo $isPartial ? 'Invoice Total' : 'Total'; ?></td>
-            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($invoiceTotal,2); ?></td>
+            <td style="padding:8px 10px;font-weight:700;text-align:right"><?php echo pricing_currency_amount($invoiceTotal,$invoiceCurrency); ?></td>
           </tr>
           <?php if ($isPartial): ?>
           <!-- Only show payment breakdown for partial invoices -->
           <tr style="background:#ecfdf5">
             <td style="padding:8px 10px;font-weight:600;text-align:right;color:#065f46">Amount Paid</td>
-            <td style="padding:8px 10px;text-align:right;color:#065f46">- $<?php echo number_format($amountPaid,2); ?></td>
+            <td style="padding:8px 10px;text-align:right;color:#065f46"><?php echo pricing_currency_amount($amountPaid,$invoiceCurrency,true); ?></td>
           </tr>
           <tr style="background:#fef3c7;border-top:2px solid #f59e0b">
             <td style="padding:10px;font-weight:700;text-align:right;color:#92400e;font-size:15px">Amount Due</td>
-            <td style="padding:10px;font-weight:700;text-align:right;color:#92400e;font-size:15px">$<?php echo number_format($amountDue,2); ?></td>
+            <td style="padding:10px;font-weight:700;text-align:right;color:#92400e;font-size:15px"><?php echo pricing_currency_amount($amountDue,$invoiceCurrency); ?></td>
           </tr>
           <?php elseif ($isPaid): ?>
           <!-- Paid in full -->
@@ -538,6 +545,7 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
       </td>
     </tr>
   </table>
+  <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW') && ($pricingProvenance=pricing_adjustment_staff_provenance($pricingSnapshot))!==''): ?><p class="pricing-provenance" data-pricing-provenance><?php echo htmlspecialchars($pricingProvenance,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); ?></p><?php endif; ?>
 
   <?php if (!$isGeneralRecipientInvoice): ?>
   <?php

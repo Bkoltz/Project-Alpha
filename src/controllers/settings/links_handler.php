@@ -17,7 +17,7 @@ if (!csrf_validate()) {
 
 try {
     if (isset($_POST['managed_delivery_enabled'], $_POST['provider_enabled_r2'])) {
-        throw new DomainException('LTDS Managed Delivery and the standalone direct-R2 resolver cannot be enabled together. Your saved R2 credentials were not removed.');
+        throw new DomainException('Managed Delivery and the standalone direct-R2 resolver cannot be enabled together. Your saved R2 credentials were not removed.');
     }
     // Ensure app_config table exists
     $pdo->exec("CREATE TABLE IF NOT EXISTS app_config (

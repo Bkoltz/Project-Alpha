@@ -26,6 +26,9 @@ $approved = !empty($_POST['client_approved']);
 $prorationAmount = round(max(0, (float)($_POST['proration_amount'] ?? 0)), 2);
 $prorationDescription = trim((string)($_POST['proration_description'] ?? ''));
 $sendProration = !empty($_POST['send_proration']);
+$prorationRequestKey=strtolower(trim((string)($_POST['generation_key']??'')));
+if(!preg_match('/^[a-f0-9]{32}$/',$prorationRequestKey))$prorationRequestKey=bin2hex(random_bytes(16));
+$prorationGenerationKey=hash('sha256','recurring-proration:'.$contractId.':'.$prorationRequestKey);
 $userId = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
 if ($name === '' || $amount <= 0) {
@@ -77,6 +80,7 @@ if (!empty($_FILES['signed_addendum']) && (int)($_FILES['signed_addendum']['erro
 $addendumUrl = $storedAddendum === null ? null : '/?page=serve-upload&file=' . rawurlencode('contract_amendments/' . $storedAddendum);
 
 $prorationInvoiceId = null;
+$idempotentReplay = false;
 try {
     $pdo->beginTransaction();
     $contractStmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term" FOR UPDATE');
@@ -85,7 +89,9 @@ try {
     if (!$contract || ($contract['pricing_type'] ?? '') !== 'per_invoice') {
         throw new RuntimeException('Recurring services require a per-invoice long-term contract.');
     }
+    if($prorationAmount>0){$existingProration=$pdo->prepare('SELECT id FROM invoices WHERE contract_id=? AND generation_key=? LIMIT 1');$existingProration->execute([$contractId,$prorationGenerationKey]);$existingProrationId=(int)$existingProration->fetchColumn();if($existingProrationId>0){$prorationInvoiceId=$existingProrationId;$idempotentReplay=true;if($storedAddendumPath!==null&&is_file($storedAddendumPath)){if(!unlink($storedAddendumPath)){throw new RuntimeException('Could not discard the duplicate signed addendum upload.');}$storedAddendum=null;$storedAddendumPath=null;$addendumUrl=null;}$pdo->commit();}}
 
+    if (!$idempotentReplay) {
     $oldService = null;
     if ($serviceId > 0) {
         $serviceStmt = $pdo->prepare('SELECT * FROM contract_recurring_services WHERE id=? AND contract_id=? FOR UPDATE');
@@ -154,7 +160,8 @@ try {
         $prorationInvoiceId = generate_recurring_proration_invoice(
             $pdo, $contractId, $serviceId, $prorationAmount,
             $prorationDescription ?: 'Prorated charge for ' . $name,
-            $appConfig
+            $appConfig,
+            $prorationGenerationKey
         );
         pa_recurring_service_record_amendment(
             $pdo, $contractId, $serviceId, 'proration', 'approved', date('Y-m-d'),
@@ -166,6 +173,7 @@ try {
 
     pa_recurring_service_sync_contract_next_date($pdo, $contractId);
     $pdo->commit();
+    }
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
@@ -182,7 +190,7 @@ if ($prorationInvoiceId !== null && $sendProration) {
     $sendResult = invoice_send_finalized($pdo, $prorationInvoiceId, $appConfig, 'amendment_proration') ? '&proration_sent=1' : '&proration_send_error=1';
 }
 $scheduledResult = '';
-if ($approved && ($contract['status'] ?? '') === 'active' && $nextInvoiceDate <= date('Y-m-d')) {
+if (!$idempotentReplay && $approved && ($contract['status'] ?? '') === 'active' && $nextInvoiceDate <= date('Y-m-d')) {
     $freshStmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term"');
     $freshStmt->execute([$contractId]);
     $freshContract = $freshStmt->fetch(PDO::FETCH_ASSOC);
@@ -194,5 +202,6 @@ if ($approved && ($contract['status'] ?? '') === 'active' && $nextInvoiceDate <=
         }
     }
 }
-header('Location: /?page=contract/long-term-contract-details&id=' . $contractId . '&service_saved=1' . $sendResult . $scheduledResult . '#recurring-services');
+$idempotentResult = $idempotentReplay ? '&idempotent=1' : '';
+header('Location: /?page=contract/long-term-contract-details&id=' . $contractId . '&service_saved=1' . $sendResult . $scheduledResult . $idempotentResult . '#recurring-services');
 exit;

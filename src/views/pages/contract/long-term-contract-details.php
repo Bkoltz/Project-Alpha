@@ -8,6 +8,7 @@ $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
 require_once __DIR__ . '/../../../utils/public_links.php';
+require_once __DIR__ . '/../../../utils/document_pricing_adjustments.php';
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'contracts', $id);
 }
@@ -15,6 +16,7 @@ $c = $pdo->prepare('SELECT ltc.*, cl.name client_name, cl.email client_email, cl
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
 if(!$contract){ echo '<p>Long-term contract not found</p>'; return; }
+$pricingSnapshot=(int)($contract['organization_id']??0)>0?pricing_document_snapshot($pdo,(int)$contract['organization_id'],'contract',$id,max(1,(int)($contract['revision_number']??1))):null;
 
 $latestLongTermInvoice = null;
 try {
@@ -87,10 +89,9 @@ $billingInterval = $contract['billing_interval_count'] . ' ' . ucfirst($contract
 if ($contract['billing_interval_count'] > 1) $billingInterval .= 's';
 
 $pricingLabel = '';
-$invoiceAmount = 0;
+$invoiceAmount = (float)($contract['total'] ?? 0);
 if ($contract['pricing_type'] === 'per_invoice') {
     $pricingLabel = 'Recurring Amount (per invoice)';
-    $invoiceAmount = (float)$contract['price_per_invoice'];
 } else {
     $pricingLabel = 'Fixed Total (billed over time)';
     // Calculate invoice amount with tax and discount
@@ -105,7 +106,6 @@ if ($contract['pricing_type'] === 'per_invoice') {
     }
     $taxable = max(0, $subtotal - $discount);
     $tax = max(0, (float)$contract['tax_percent']) * $taxable / 100;
-    $invoiceAmount = max(0, $taxable + $tax);
 }
 
 $depositType = $contract['deposit_type'] ?? 'none';
@@ -299,6 +299,7 @@ $isOngoing = empty($contract['end_date']);
                 <?php if ($serviceStatus !== 'ended'): ?>
                   <tr><td colspan="6" style="padding:0 9px 10px;background:#fff"><details><summary style="cursor:pointer;font-size:12px;color:#2563eb">Edit service terms / attach addendum</summary>
                     <form method="post" action="/?page=long-term-recurring-service-save" enctype="multipart/form-data" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:12px 0 2px">
+                      <input type="hidden" name="generation_key" value="<?php echo bin2hex(random_bytes(16)); ?>">
                       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="contract_id" value="<?php echo (int)$id; ?>"><input type="hidden" name="service_id" value="<?php echo (int)$service['id']; ?>">
                       <label style="display:grid;gap:4px;font-size:12px">Service name<input name="name" required value="<?php echo htmlspecialchars((string)$service['name']); ?>" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px"></label>
                       <label style="display:grid;gap:4px;font-size:12px">Amount<input type="number" name="amount" min="0.01" step="0.01" required value="<?php echo htmlspecialchars(number_format((float)$service['amount'], 2, '.', '')); ?>" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px"></label>
@@ -322,6 +323,7 @@ $isOngoing = empty($contract['end_date']);
 
       <details style="background:#fff;border:1px solid #bfdbfe;border-radius:8px;padding:12px" <?php echo !$recurringServices ? 'open' : ''; ?>><summary style="cursor:pointer;font-weight:700;color:#1d4ed8">Add a recurring service</summary>
         <form method="post" action="/?page=long-term-recurring-service-save" enctype="multipart/form-data" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:14px">
+          <input type="hidden" name="generation_key" value="<?php echo bin2hex(random_bytes(16)); ?>">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="contract_id" value="<?php echo (int)$id; ?>">
           <label style="display:grid;gap:4px;font-size:12px;font-weight:600">Service name<input name="name" required placeholder="Advertising management" style="padding:9px;border:1px solid #cbd5e1;border-radius:6px"></label>
           <label style="display:grid;gap:4px;font-size:12px;font-weight:600">Recurring amount<input type="number" name="amount" min="0.01" step="0.01" required placeholder="500.00" style="padding:9px;border:1px solid #cbd5e1;border-radius:6px"></label>
@@ -504,6 +506,7 @@ $isOngoing = empty($contract['end_date']);
           <td colspan="3" style="padding:12px"><?php echo !empty($contract['scope']) ? htmlspecialchars($contract['scope']) : 'Recurring service fee'; ?> (billed <?php echo htmlspecialchars(strtolower($billingInterval)); ?>)</td>
           <td style="padding:12px;text-align:right;font-weight:600">$<?php echo number_format($contract['price_per_invoice'], 2); ?></td>
         </tr>
+        <?php echo pricing_adjustment_client_row($pricingSnapshot,'padding:10px','font-weight:600',2); ?>
       <?php else: ?>
         <?php if ($items): ?>
           <tr style="border-bottom:1px solid #eee">
@@ -526,6 +529,7 @@ $isOngoing = empty($contract['end_date']);
           <td style="padding:10px;font-weight:600">Subtotal</td>
           <td style="padding:10px">$<?php echo number_format($contract['subtotal'] ?? 0,2); ?></td>
         </tr>
+        <?php echo pricing_adjustment_client_row($pricingSnapshot,'padding:10px','font-weight:600',2); ?>
         <tr>
           <td></td><td></td>
           <td style="padding:10px;font-weight:600">Discount</td>
@@ -558,6 +562,7 @@ $isOngoing = empty($contract['end_date']);
       </tr>
     </tbody>
   </table>
+  <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW') && ($pricingProvenance=pricing_adjustment_staff_provenance($pricingSnapshot))!==''): ?><p class="pricing-provenance" data-pricing-provenance><?php echo htmlspecialchars($pricingProvenance,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); ?></p><?php endif; ?>
 
 
   <div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
