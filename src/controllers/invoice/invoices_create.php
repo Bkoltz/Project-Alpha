@@ -81,6 +81,15 @@ if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_i
 }
 $__orgId = resolve_client_context_org_id($pdo, $client_id, $project_id, $__orgId);
 $showContactOnDocument = $__orgId && !empty($_POST['show_contact_on_document']) ? 1 : 0;
+$isMonthlyProjectBilling = $recipientPresentationMode !== PA_GENERAL_RECIPIENT_MODE
+    && $project_id
+    && project_uses_monthly_invoice_billing($pdo, $project_id);
+if ($isMonthlyProjectBilling && $finalizeAndSend) {
+    // Project-aggregate children are finalized for the statement, never sent
+    // directly. Enforce this server-side even if JS is absent or stale.
+    $finalizeAndSend = false;
+    $finalizeOnly = true;
+}
 
 $items = [];
 $subtotal = 0.0;
@@ -317,7 +326,7 @@ try {
         $paymentTermsDays, $dueDateSource, $customFieldsJson, $__orgId, $__creator,
     ]);
     $invoice_id = (int)$pdo->lastInsertId();
-    if ($recipientPresentationMode !== PA_GENERAL_RECIPIENT_MODE && $project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {
+    if ($isMonthlyProjectBilling) {
         $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
     }
     // Assign a new Project ID and doc_number
@@ -419,6 +428,11 @@ if ($finalizeAndSend || $finalizeOnly) {
         header('Location: /?page=invoice/invoice-details&id=' . $invoice_id . '&error=' . urlencode('Invoice saved, but finalization or email failed.'));
         exit;
     }
+}
+
+if ($isMonthlyProjectBilling && $finalizeOnly) {
+    header('Location: /?page=invoice/invoice-details&id=' . $invoice_id . '&finalized=1&project_billing=1');
+    exit;
 }
 
 header('Location: /?page=invoice/invoices-list&created=1');

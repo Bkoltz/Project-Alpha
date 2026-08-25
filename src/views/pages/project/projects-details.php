@@ -87,7 +87,7 @@ $stmt->execute([$projectId]);
 $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch associated invoices
-$stmt = $pdo->prepare('SELECT id, doc_number, invoice_type, status, total, amount_paid, balance_due, created_at FROM invoices WHERE project_id = ? ORDER BY created_at DESC');
+$stmt = $pdo->prepare('SELECT id, doc_number, invoice_type, status, collection_mode, total, amount_paid, balance_due, created_at FROM invoices WHERE project_id = ? ORDER BY created_at DESC');
 $stmt->execute([$projectId]);
 $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -567,7 +567,12 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
             </div>
 
             <?php if (!empty($_GET['billing_msg'])): ?>
-                <div class="alert alert-info" style="margin-bottom:16px"><?php echo htmlspecialchars((string)$_GET['billing_msg']); ?></div>
+                <div class="alert alert-info" style="margin-bottom:16px">
+                    <?php echo htmlspecialchars((string)$_GET['billing_msg']); ?>
+                    <?php if (!empty($_GET['billing_missing_recipients'])): ?>
+                        <a href="/?page=project/projects-edit&amp;id=<?php echo $projectId; ?>#project-contacts" style="margin-left:8px;font-weight:700">Choose delivery recipients</a>
+                    <?php endif; ?>
+                </div>
             <?php endif; ?>
 
             <div id="team-work" class="project-panel">
@@ -798,6 +803,7 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                                 <div class="document-actions" style="margin-top:8px">
                                     <a href="/?page=invoice/invoice-details&id=<?php echo (int)$invoice['id']; ?>" class="btn btn-sm">View</a>
                                     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$invoice['id']; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
+                                    <?php if (($invoice['collection_mode'] ?? 'direct') === 'direct'): ?>
                                     <form method="post" action="/?page=invoice/email-send" style="display:inline">
                                         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                                         <input type="hidden" name="type" value="invoice">
@@ -805,6 +811,9 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                                         <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($projectReturnUrl); ?>">
                                         <button type="submit" class="btn btn-sm btn-success">Email</button>
                                     </form>
+                                    <?php else: ?>
+                                        <span style="color:var(--muted);font-size:12px">Project statement billing</span>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                             <div style="font-weight:600;color:var(--nav-accent);white-space:nowrap">
@@ -995,9 +1004,9 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                         <div data-project-settings-contact-manager>
                             <script type="application/json" data-project-settings-clients><?php echo json_encode($projectSettingsClients, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?></script>
                             <label class="project-field">
-                                <span>Primary invoice receiver</span>
+                                <span>Primary billed contact</span>
                                 <select name="client_id" data-project-primary-select></select>
-                                <small>Primary receiver must be one of the attached project contacts.</small>
+                                <small>Primary billed contact must be one of the attached project contacts.</small>
                             </label>
                             <div class="project-settings-grid">
                                 <div class="project-settings-picker" data-project-settings-picker="project" data-empty-text="No project contacts selected.">
@@ -1056,7 +1065,7 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                                             <div class="project-contact-options">
                                                 <label class="project-check">
                                                     <input type="radio" name="client_id" value="<?php echo $clientId; ?>" <?php echo $isPrimaryClient ? 'checked' : ''; ?>>
-                                                    <span>Primary invoice receiver</span>
+                                                    <span>Primary billed contact</span>
                                                 </label>
                                                 <label class="project-check">
                                                     <input type="checkbox" name="project_invoice_email_client_ids[]" value="<?php echo $clientId; ?>" <?php echo in_array($clientId, $selectedProjectInvoiceRecipientIds, true) ? 'checked' : ''; ?> <?php echo empty($client['email']) ? 'disabled' : ''; ?>>

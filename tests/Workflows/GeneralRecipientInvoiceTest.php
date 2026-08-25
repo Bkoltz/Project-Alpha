@@ -132,7 +132,8 @@ final class GeneralRecipientInvoiceTest extends TestCase
         self::assertStringContainsString('function loadProjectsForClientInv(clientId)', $createScript);
         self::assertStringNotContainsString('generalRecipientInvoice', $createView);
         self::assertStringNotContainsString('Finalize &amp; Create Link', $createView);
-        self::assertStringContainsString('Finalize &amp; Create Link', $detailView);
+        self::assertStringContainsString("'Finalize & Create Link'", $detailView);
+        self::assertStringContainsString('htmlspecialchars($finalizeLabel', $detailView);
         self::assertStringContainsString('!$isGeneralRecipientInvoice', $detailView);
         self::assertStringContainsString('flash_general_recipient_link', $detailView);
         self::assertStringNotContainsString("\$_GET['general_public_link']", $detailView);

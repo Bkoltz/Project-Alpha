@@ -24,7 +24,6 @@ $projectClientIds = $_POST['project_client_ids'] ?? [];
 if (!is_array($projectClientIds)) { $projectClientIds = []; }
 $projectInvoiceRecipientIds = $_POST['project_invoice_email_client_ids'] ?? [];
 if (!is_array($projectInvoiceRecipientIds)) { $projectInvoiceRecipientIds = []; }
-$projectInvoiceManualEmailsRaw = $_POST['project_invoice_manual_emails'] ?? '';
 $useOrganizationInvoiceEmail = !empty($_POST['project_invoice_use_organization_email']);
 $projectInvoiceLinkClientIds = $_POST['project_invoice_link_client_ids'] ?? [];
 if (!is_array($projectInvoiceLinkClientIds)) { $projectInvoiceLinkClientIds = []; }
@@ -58,6 +57,7 @@ $storedProject = $projectStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 $storedOrganizationId = (int)($storedProject['organization_id'] ?? 0);
 $storedBusinessUnitId = (int)($storedProject['business_unit_id'] ?? 0);
 $storedManagerUserId = (int)($storedProject['manager_user_id'] ?? 0);
+$projectInvoiceManualEmails = [];
 if (!$managerUserIdProvided) {
 	$managerUserId = $storedManagerUserId;
 }
@@ -104,12 +104,6 @@ if ($department_id > 0) {
 
 $projectClientIds = array_values(array_unique(array_filter(array_map('intval', $projectClientIds), static fn($clientId) => $clientId > 0)));
 $projectInvoiceRecipientIds = array_values(array_unique(array_filter(array_map('intval', $projectInvoiceRecipientIds), static fn($clientId) => $clientId > 0)));
-try {
-	$projectInvoiceManualEmails = project_invoice_normalize_manual_recipient_emails($projectInvoiceManualEmailsRaw);
-} catch (InvalidArgumentException $error) {
-	header('Location: '.$editRedirect.'&error=' . urlencode($error->getMessage()));
-	exit;
-}
 if ($useOrganizationInvoiceEmail) {
 	$organizationEmailStmt = $pdo->prepare('SELECT general_email FROM organizations WHERE id = ? LIMIT 1');
 	$organizationEmailStmt->execute([$organization_id]);
@@ -121,12 +115,16 @@ if ($useOrganizationInvoiceEmail) {
 }
 $projectInvoiceLinkClientIds = array_values(array_unique(array_filter(array_map('intval', $projectInvoiceLinkClientIds), static fn($clientId) => $clientId > 0)));
 if ($client_id > 0 && !in_array($client_id, $projectClientIds, true)) {
-	header('Location: '.$editRedirect.'&error=' . urlencode('Primary invoice receiver must remain attached to the project.'));
+	header('Location: '.$editRedirect.'&error=' . urlencode('Primary billed contact must remain attached to the project.'));
 	exit;
 }
 $projectInvoiceLinkClientIds = array_values(array_intersect($projectInvoiceLinkClientIds, $projectClientIds));
 foreach ($projectInvoiceRecipientIds as $recipientClientId) {
 	require_record_ownership($pdo, 'clients', $recipientClientId);
+}
+if (!project_invoice_recipient_client_ids_in_scope($pdo, $projectInvoiceRecipientIds, $organization_id > 0 ? $organization_id : null)) {
+	header('Location: '.$editRedirect.'&error=' . urlencode('Invoice email recipients must be active contacts in the project organization.'));
+	exit;
 }
 
 if ($organization_id > 0) {

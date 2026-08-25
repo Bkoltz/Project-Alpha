@@ -22,7 +22,6 @@ $projectClientIds = $_POST['project_client_ids'] ?? [];
 if (!is_array($projectClientIds)) { $projectClientIds = []; }
 $projectInvoiceRecipientIds = $_POST['project_invoice_email_client_ids'] ?? [];
 if ($projectInvoiceRecipientIds !== null && !is_array($projectInvoiceRecipientIds)) { $projectInvoiceRecipientIds = []; }
-$projectInvoiceManualEmailsRaw = $_POST['project_invoice_manual_emails'] ?? '';
 $useOrganizationInvoiceEmail = !empty($_POST['project_invoice_use_organization_email']);
 $projectInvoiceLinkClientIds = $_POST['project_invoice_link_client_ids'] ?? null;
 if ($projectInvoiceLinkClientIds !== null && !is_array($projectInvoiceLinkClientIds)) { $projectInvoiceLinkClientIds = []; }
@@ -104,12 +103,7 @@ $projectClientIds = array_values(array_unique(array_filter(array_map('intval', $
 $projectInvoiceRecipientIds = $projectInvoiceRecipientIds === null
 	? null
 	: array_values(array_unique(array_filter(array_map('intval', $projectInvoiceRecipientIds), static fn($id) => $id > 0)));
-try {
-	$projectInvoiceManualEmails = project_invoice_normalize_manual_recipient_emails($projectInvoiceManualEmailsRaw);
-} catch (InvalidArgumentException $error) {
-	header('Location: /?page=project/projects-create&error=' . urlencode($error->getMessage()));
-	exit;
-}
+$projectInvoiceManualEmails = [];
 $projectInvoiceLinkClientIds = $projectInvoiceLinkClientIds === null
 	? null
 	: array_values(array_unique(array_filter(array_map('intval', $projectInvoiceLinkClientIds), static fn($id) => $id > 0)));
@@ -140,6 +134,10 @@ if ($organization_id > 0 && $projectClientIds) {
 $projectInvoiceRecipientIds = $projectInvoiceRecipientIds ?? [];
 foreach ($projectInvoiceRecipientIds as $recipientClientId) {
 	require_record_ownership($pdo, 'clients', $recipientClientId);
+}
+if (!project_invoice_recipient_client_ids_in_scope($pdo, $projectInvoiceRecipientIds, $organization_id > 0 ? $organization_id : null)) {
+	header('Location: /?page=project/projects-create&error=' . urlencode('Invoice email recipients must be active contacts in the selected organization.'));
+	exit;
 }
 $projectInvoiceLinkClientIds = $projectInvoiceLinkClientIds === null ? null : array_values(array_intersect($projectInvoiceLinkClientIds, $projectClientIds));
 if ($projectInvoiceAutoEmail && !project_invoice_has_deliverable_recipient_config(

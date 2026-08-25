@@ -19,7 +19,7 @@ if ($scopeWhere !== '') {
     $where[] = trim($scopeWhere);
     $params = array_merge($params, $scopeParams);
 }
-$sql = 'SELECT p.id, p.name, p.status FROM projects p WHERE ' . implode(' AND ', $where) . ' ORDER BY p.name';
+$sql = 'SELECT p.id, p.name, p.status, p.invoice_billing_period FROM projects p WHERE ' . implode(' AND ', $where) . ' ORDER BY p.name';
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $projects = $st->fetchAll(PDO::FETCH_ASSOC);

@@ -118,11 +118,22 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
     <?php if((int)($inv['last_sent_revision']??0)>0&&(int)($inv['revision_number']??1)>(int)$inv['last_sent_revision']): ?><span class="alert alert-warning" style="padding:6px 9px">Revised <?php echo htmlspecialchars((string)($inv['revision_updated_at']??'')); ?> · Resend required</span><?php endif; ?>
     <?php if((float)($inv['credit_due']??0)>0.005): ?><span class="alert alert-warning" style="padding:6px 9px">Credit due: $<?php echo number_format((float)$inv['credit_due'],2); ?>. Collection is disabled; use the audited credit/refund workflow.</span><?php endif; ?>
     <?php if (strtolower((string)$inv['status']) === 'draft'): ?>
-      <form method="post" action="/?page=invoice/invoice-finalize" style="display:inline" onsubmit="return confirm(<?php echo $isGeneralRecipientInvoice ? '\'Finalize this invoice and create its manual public link?\'' : '\'Finalize this invoice and email it to the client?\''; ?>);">
+      <?php
+        $finalizeConfirmation = $isGeneralRecipientInvoice
+          ? 'Finalize this invoice and create its manual public link?'
+          : ($invoiceCollectionMode === 'project_aggregate'
+            ? 'Finalize this invoice for the monthly project statement? It will not be emailed separately.'
+            : 'Finalize this invoice and email it to the client?');
+        $finalizeLabel = $isGeneralRecipientInvoice
+          ? 'Finalize & Create Link'
+          : ($invoiceCollectionMode === 'project_aggregate' ? 'Finalize for Project Billing' : 'Finalize & Send');
+      ?>
+      <form method="post" action="/?page=invoice/invoice-finalize" style="display:inline" onsubmit="return confirm(<?php echo htmlspecialchars(json_encode($finalizeConfirmation), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>);">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" class="btn btn-sm btn-success"><?php echo $isGeneralRecipientInvoice ? 'Finalize &amp; Create Link' : 'Finalize &amp; Send'; ?></button>
+        <button type="submit" class="btn btn-sm btn-success"><?php echo htmlspecialchars($finalizeLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></button>
       </form>
+      <?php if ($invoiceCollectionMode === 'project_aggregate'): ?><span style="color:var(--muted);font-size:12px">Included in the project statement; not emailed separately.</span><?php endif; ?>
     <?php endif; ?>
     <?php if (!$isGeneralRecipientInvoice && !empty($inv['status']) && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true) && $invoiceCollectionMode === 'direct'): ?>
     <form method="post" action="/?page=invoice/email-send" style="display:inline">
@@ -133,7 +144,7 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
       <button type="submit" class="btn btn-sm">Email</button>
     </form>
     <?php endif; ?>
-    <?php if (in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true)): ?>
+    <?php if (in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true) && $invoiceCollectionMode === 'direct'): ?>
       <a href="/?page=payments/payments-create&invoice_id=<?php echo (int)$id; ?>&amount=<?php echo urlencode(number_format($outstanding, 2, '.', '')); ?>" 
          class="btn btn-sm btn-success">Mark as Paid</a>
     <?php endif; ?>
@@ -215,6 +226,9 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
   <?php if (!empty($_GET['emailed'])): ?>
     <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">Invoice emailed.</div>
   <?php endif; ?>
+  <?php if (!empty($_GET['project_billing'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#dbeafe;color:#1e3a8a;border-radius:6px;margin-bottom:8px;font-size:14px">Invoice finalized for project billing. It will be included in the project statement and was not emailed separately.</div>
+  <?php endif; ?>
   <?php if ($generalRecipientToken !== null): ?>
     <?php
       try {
@@ -264,99 +278,12 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
   </div>
   <?php endif; ?>
   <?php
-    $brand = $appConfig['brand_name'] ?? 'Project Alpha';
-    $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
-    $projectRoot = realpath(__DIR__ . '/../../../');
-    $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.png') : '';
-    $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
-
-    $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
-    // Resolve serve-upload URLs to actual file path
-    if (preg_match('/page=serve-upload/i', $logoPath)) {
-      $parsed = parse_url($logoPath);
-      if (!empty($parsed['query'])) {
-        parse_str($parsed['query'], $q);
-        if (!empty($q['file'])) {
-          $fname = basename($q['file']);
-          $bases = [];
-          if ($projectRoot) {
-            $cfg = realpath($projectRoot . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'uploads');
-            if ($cfg) { $bases[] = $cfg; } else { $bases[] = $projectRoot . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'uploads'; }
-            $internal = realpath(__DIR__ . '/../uploads');
-            $bases[] = $internal ? $internal : (__DIR__ . '/../uploads');
-          }
-          $bases[] = '/var/www/config/uploads';
-          foreach ($bases as $b) {
-            $candidate = @realpath(rtrim($b, '/\\') . DIRECTORY_SEPARATOR . $fname);
-            if ($candidate !== false && is_file($candidate)) { $logoPath = $candidate; $isUrl = false; break; }
-          }
-        }
-      }
-    }
-    // Map leading slash /public or /config relative to project root
-    if (!$isUrl) {
-      if ($logoPath !== '' && ($logoPath[0] === '/' || $logoPath[0] === '\\')) {
-        if ($projectRoot) {
-          $candidate = @realpath($projectRoot . $logoPath);
-          if ($candidate) { $logoPath = $candidate; }
-        }
-      } else {
-        if ($projectRoot) {
-          $candidate = @realpath($projectRoot . DIRECTORY_SEPARATOR . $logoPath);
-          if ($candidate) { $logoPath = $candidate; }
-        }
-      }
-    }
-
-    $canShowLogo = $isUrl || ($logoPath !== '' && @is_file($logoPath));
-    $logoSrc = $logoPath;
-    if ($canShowLogo && !$isUrl) {
-      $imgContents = @file_get_contents($logoPath);
-      if ($imgContents !== false) {
-        $mime = null;
-        if (preg_match('/\.svg$/i', $logoPath)) {
-          $mime = 'image/svg+xml';
-        } else if (function_exists('finfo_open')) {
-          $finfo = @finfo_open(FILEINFO_MIME_TYPE);
-          if ($finfo) { $det = @finfo_buffer($finfo, $imgContents); if ($det) { $mime = $det; } if (PHP_VERSION_ID < 80500) { @finfo_close($finfo); } }
-        }
-        if ($mime === null) { $mime = 'image/png'; }
-        $logoSrc = 'data:' . $mime . ';base64,' . base64_encode($imgContents);
-      } else {
-        $normalized = str_replace('\\', '/', $logoPath);
-        if (preg_match('/^[A-Za-z]:\//', $normalized) === 1 || strpos($normalized, '/') === 0) {
-          $logoSrc = 'file:///' . ltrim($normalized, '/');
-        }
-      }
-    }
+    $documentBrandLabel = 'Invoice ' . pa_invoice_label_from_row($inv);
+    $documentBrandMetaLines = [];
+    if (!empty($inv['project_code'])) { $documentBrandMetaLines[] = 'Job ' . $inv['project_code']; }
+    if (!empty($inv['project_id'])) { $documentBrandMetaLines[] = 'Project ' . $inv['project_id']; }
+    require __DIR__ . '/../../components/document_brand_header.php';
   ?>
-  <table style="width:100%;table-layout:fixed;margin-bottom:8px;border-collapse:collapse">
-    <tr>
-      <td style="vertical-align:middle;width:70%">
-        <div style="font-weight:700;font-size:20px"><?php echo htmlspecialchars($brand); ?></div>
-        <div style="color:#374151;font-size:13px;margin-top:2px">Invoice <?php echo htmlspecialchars(pa_invoice_label_from_row($inv)); ?></div>
-        <?php if (!empty($inv['project_code'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Job <?php echo htmlspecialchars($inv['project_code']); ?></div><?php endif; ?>
-        <?php if (!empty($inv['project_id'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Project <?php echo htmlspecialchars($inv['project_id']); ?></div><?php endif; ?>
-      </td>
-      <td style="vertical-align:middle;width:30%;text-align:right">
-        <?php if ($canShowLogo): ?>
-          <?php if (!$isUrl && preg_match('/\.svg$/i', $logoPath) && is_file($logoPath)): ?>
-            <?php if (defined('PDF_MODE')): ?>
-              <?php echo @file_get_contents($logoPath); ?>
-            <?php else: ?>
-              <?php $svgContents = @file_get_contents($logoPath); if ($svgContents !== false) { $svgData = 'data:image/svg+xml;base64,'.base64_encode($svgContents); ?>
-                <img src="<?php echo htmlspecialchars($svgData); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
-              <?php } else { ?>
-                <img src="<?php echo htmlspecialchars($logoSrc); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
-              <?php } ?>
-            <?php endif; ?>
-          <?php else: ?>
-            <img src="<?php echo htmlspecialchars($logoSrc); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
-          <?php endif; ?>
-        <?php endif; ?>
-      </td>
-    </tr>
-  </table>
 
   <?php
     // Get custom fields for display
@@ -408,34 +335,11 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
   </table>
   <?php endif; ?>
 
-  <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
-    <tr>
-      <td style="vertical-align:top;width:50%;padding-right:12px">
-        <div class="font-600">From</div>
-        <?php 
-          $fromLines = document_sender_lines($documentSender);
-        ?>
-        <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
-        <?php if ($fromPhone || $fromEmail): ?>
-          <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if ($fromPhone): ?><div><?php echo htmlspecialchars(format_phone($fromPhone), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
-            <?php if ($fromEmail): ?><div><?php echo htmlspecialchars($fromEmail); ?></div><?php endif; ?>
-          </div>
-        <?php endif; ?>
-      </td>
-      <td style="vertical-align:top;width:50%;padding-left:12px">
-        <div class="font-600">To</div>
-        <?php $recipient = pa_document_recipient($inv, $isGeneralRecipientInvoice); ?>
-        <div><?php foreach ($recipient['lines'] as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
-        <?php if ($recipient['phone'] !== null || $recipient['email'] !== null): ?>
-          <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if ($recipient['phone'] !== null): ?><div><?php echo htmlspecialchars(format_phone($recipient['phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
-            <?php if ($recipient['email'] !== null): ?><div><?php echo htmlspecialchars($recipient['email']); ?></div><?php endif; ?>
-          </div>
-        <?php endif; ?>
-      </td>
-    </tr>
-  </table>
+  <?php
+    $documentPartySender = $documentSender;
+    $documentPartyRecipient = pa_document_recipient($inv, $isGeneralRecipientInvoice);
+    require __DIR__ . '/../../components/document_parties.php';
+  ?>
 
   <?php if (!empty($projectNotes)): ?>
   <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
@@ -487,57 +391,28 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
     $isPartial = $invStatus === 'partial';
     $isPaid = $invStatus === 'paid';
   ?>
-  <table style="width:100%;border-collapse:collapse;margin-top:16px">
-    <tr>
-      <td style="width:60%"></td>
-      <td style="width:40%">
-        <table style="width:100%;border-collapse:collapse">
-          <tr>
-            <td style="padding:8px 10px;font-weight:600;text-align:right">Subtotal</td>
-            <td style="padding:8px 10px;text-align:right;width:120px">$<?php echo number_format($inv['subtotal'],2); ?></td>
-          </tr>
-          <tr>
-            <td style="padding:8px 10px;font-weight:600;text-align:right">Discount</td>
-            <td style="padding:8px 10px;text-align:right">
-              <?php if ($inv['discount_type']==='percent'): ?>
-                <?php echo number_format($inv['discount_value'],2); ?>%
-              <?php elseif ($inv['discount_type']==='fixed'): ?>
-                $<?php echo number_format($inv['discount_value'],2); ?>
-              <?php else: ?>
-                $0.00
-              <?php endif; ?>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:8px 10px;font-weight:600;text-align:right">Tax</td>
-            <td style="padding:8px 10px;text-align:right"><?php echo number_format($inv['tax_percent'],2); ?>%</td>
-          </tr>
-          <tr style="border-top:1px solid #e5e7eb">
-            <td style="padding:8px 10px;font-weight:700;text-align:right"><?php echo $isPartial ? 'Invoice Total' : 'Total'; ?></td>
-            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($invoiceTotal,2); ?></td>
-          </tr>
-          <?php if ($isPartial): ?>
-          <!-- Only show payment breakdown for partial invoices -->
-          <tr style="background:#ecfdf5">
-            <td style="padding:8px 10px;font-weight:600;text-align:right;color:#065f46">Amount Paid</td>
-            <td style="padding:8px 10px;text-align:right;color:#065f46">- $<?php echo number_format($amountPaid,2); ?></td>
-          </tr>
-          <tr style="background:#fef3c7;border-top:2px solid #f59e0b">
-            <td style="padding:10px;font-weight:700;text-align:right;color:#92400e;font-size:15px">Amount Due</td>
-            <td style="padding:10px;font-weight:700;text-align:right;color:#92400e;font-size:15px">$<?php echo number_format($amountDue,2); ?></td>
-          </tr>
-          <?php elseif ($isPaid): ?>
-          <!-- Paid in full -->
-          <tr style="background:#ecfdf5;border-top:2px solid #10b981">
-            <td style="padding:10px;font-weight:700;text-align:right;color:#065f46;font-size:15px">✓ Paid in Full</td>
-            <td style="padding:10px;font-weight:700;text-align:right;color:#065f46;font-size:15px">$0.00</td>
-          </tr>
-          <?php endif; ?>
-          <?php // For unpaid invoices, the Total row above is sufficient ?>
-        </table>
-      </td>
-    </tr>
-  </table>
+  <?php
+    if (($inv['discount_type'] ?? 'none') === 'percent') {
+      $discountDisplay = number_format((float)$inv['discount_value'], 2) . '%';
+    } elseif (($inv['discount_type'] ?? 'none') === 'fixed') {
+      $discountDisplay = '$' . number_format((float)$inv['discount_value'], 2);
+    } else {
+      $discountDisplay = '$0.00';
+    }
+    $documentTotalRows = [
+      ['label' => 'Subtotal', 'value' => '$' . number_format((float)$inv['subtotal'], 2)],
+      ['label' => 'Discount', 'value' => $discountDisplay],
+      ['label' => 'Tax', 'value' => number_format((float)$inv['tax_percent'], 2) . '%'],
+      ['label' => $isPartial ? 'Invoice Total' : 'Total', 'value' => '$' . number_format($invoiceTotal, 2), 'tone' => 'total'],
+    ];
+    if ($isPartial) {
+      $documentTotalRows[] = ['label' => 'Amount Paid', 'value' => '- $' . number_format($amountPaid, 2), 'tone' => 'paid'];
+      $documentTotalRows[] = ['label' => 'Amount Due', 'value' => '$' . number_format($amountDue, 2), 'tone' => 'due'];
+    } elseif ($isPaid) {
+      $documentTotalRows[] = ['label' => '✓ Paid in Full', 'value' => '$0.00', 'tone' => 'paid_full'];
+    }
+    require __DIR__ . '/../../components/document_totals.php';
+  ?>
 
   <?php if (!$isGeneralRecipientInvoice): ?>
   <?php

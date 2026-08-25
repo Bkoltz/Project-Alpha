@@ -118,6 +118,7 @@ function loadProjectsForClientInv(clientId) {
     if (!clientId) {
         if (projectSelect) projectSelect.innerHTML = '<option value="">-- Select Project --</option>';
         if (projectSection) projectSection.style.display = 'none';
+        syncInvoiceProjectBillingPresentation();
         return;
     }
 
@@ -130,6 +131,7 @@ function loadProjectsForClientInv(clientId) {
                 projects.forEach(project => {
                     const option = document.createElement('option');
                     option.value = project.id;
+                    option.dataset.invoiceBillingPeriod = project.invoice_billing_period || 'per_invoice';
                     option.textContent = project.name + ' (' + project.status.replace('_', ' ') + ')';
                     projectSelect.appendChild(option);
                 });
@@ -138,10 +140,30 @@ function loadProjectsForClientInv(clientId) {
                 projectSelect.value = '';
                 projectSection.style.display = 'none';
             }
+            syncInvoiceProjectBillingPresentation();
         })
         .catch(() => {
             projectSection.style.display = 'none';
+            syncInvoiceProjectBillingPresentation();
         });
+}
+
+function syncInvoiceProjectBillingPresentation() {
+    const projectSelect = document.getElementById('projectSelectInv');
+    const actionButton = document.getElementById('finalizeAndSendInvoice');
+    const help = document.getElementById('invoiceProjectBillingHelp');
+    if (!projectSelect || !actionButton || !help) return;
+    const selected = projectSelect.options[projectSelect.selectedIndex];
+    const isMonthly = !!selected && selected.dataset.invoiceBillingPeriod === 'monthly';
+    actionButton.value = isMonthly ? 'finalize' : 'finalize_send';
+    actionButton.textContent = isMonthly ? 'Finalize for Project Billing' : 'Save & Send';
+    help.hidden = !isMonthly;
+}
+
+const invoiceProjectSelect = document.getElementById('projectSelectInv');
+if (invoiceProjectSelect) {
+    invoiceProjectSelect.addEventListener('change', syncInvoiceProjectBillingPresentation);
+    syncInvoiceProjectBillingPresentation();
 }
 
 document.getElementById('createProjectBtnInv').addEventListener('click', function () {
@@ -174,6 +196,7 @@ document.getElementById('createProjectBtnInv').addEventListener('click', functio
                     for (let i = 0; i < projectSelect.options.length; i++) {
                         if (projectSelect.options[i].value == result.project_id) {
                             projectSelect.selectedIndex = i;
+                            projectSelect.dispatchEvent(new Event('change', { bubbles: true }));
                             break;
                         }
                     }

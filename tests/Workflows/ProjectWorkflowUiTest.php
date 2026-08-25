@@ -37,8 +37,14 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('/?page=project/client-options', (string)$script);
         self::assertStringContainsString('is_primary_department_contact', (string)$script);
         self::assertStringNotContainsString('selected.project.add(id)', (string)$script);
-        self::assertStringContainsString('/?page=clients-search&term=', (string)$script);
-        self::assertStringContainsString('project_invoice_manual_emails', (string)$view);
+        self::assertStringNotContainsString('/?page=clients-search&term=', (string)$script);
+        self::assertStringNotContainsString('/?page=clients-search&term=', (string)$settingsScript);
+        self::assertStringNotContainsString('project_invoice_manual_emails', (string)$view);
+        self::assertStringNotContainsString('project_invoice_manual_emails', (string)$edit);
+        self::assertStringContainsString('Primary billed contact', (string)$view);
+        self::assertStringContainsString('Primary billed contact', (string)$edit);
+        self::assertStringContainsString('defaultPrimaryRecipient', (string)$script);
+        self::assertStringContainsString('selected.invoice.add(primaryId)', (string)$settingsScript);
         self::assertStringContainsString('project_invoice_use_organization_email', (string)$view);
         self::assertStringContainsString('project_invoice_use_organization_email', (string)$edit);
         self::assertStringContainsString('initializedNewPicker', (string)$script);
@@ -237,7 +243,8 @@ final class ProjectWorkflowUiTest extends TestCase
         }
         self::assertStringContainsString('organization_address_line2', (string)$projectInvoiceDetail);
         self::assertStringContainsString('pa_document_recipient($pi)', (string)$projectInvoiceDetail);
-        self::assertStringContainsString('$billingRecipient[\'lines\']', (string)$projectInvoiceDetail);
+        self::assertStringContainsString('$documentPartyRecipient = $billingRecipient;', (string)$projectInvoiceDetail);
+        self::assertStringContainsString('components/document_parties.php', (string)$projectInvoiceDetail);
     }
 
     public function testWorkforceTimekeepingUsesTheUnifiedDomainService(): void

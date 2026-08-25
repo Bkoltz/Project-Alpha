@@ -45,6 +45,9 @@ final class ProjectInvoiceBillingPolicyTest extends TestCase
         self::assertStringNotContainsString('ALTER TABLE public_links', $billing);
         self::assertStringContainsString('No project invoice emails were sent.', $generator);
         self::assertStringNotContainsString('saved as a draft because', $generator);
+        self::assertStringContainsString('project_invoice_has_saved_deliverable_recipient', $generator);
+        self::assertStringContainsString('null, false, null, true', $generator);
+        self::assertStringContainsString('billing_missing_recipients=1', $generator);
     }
 
     public function testRecipientTargetsAreIndependentAndManualRetriesHonorQueuedAddress(): void
@@ -71,16 +74,33 @@ final class ProjectInvoiceBillingPolicyTest extends TestCase
         }
         $pdo = new PDO('sqlite::memory:');
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $pdo->exec('CREATE TABLE clients (id INTEGER PRIMARY KEY, email TEXT, archived INTEGER NOT NULL DEFAULT 0)');
-        $pdo->exec('CREATE TABLE organizations (id INTEGER PRIMARY KEY, general_email TEXT)');
-        $pdo->exec("INSERT INTO clients (id,email,archived) VALUES (1,'valid@example.test',0),(2,'invalid',0),(3,'archived@example.test',1)");
-        $pdo->exec("INSERT INTO organizations (id,general_email) VALUES (10,'company@example.test'),(11,'')");
+        $pdo->exec('CREATE TABLE clients (id INTEGER PRIMARY KEY, name TEXT, email TEXT, organization_id INTEGER, archived INTEGER NOT NULL DEFAULT 0)');
+        $pdo->exec('CREATE TABLE organizations (id INTEGER PRIMARY KEY, name TEXT, general_email TEXT)');
+        $pdo->exec('CREATE TABLE project_invoice_recipients (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, client_id INTEGER, organization_id INTEGER, manual_email TEXT, manual_name TEXT, recipient_key TEXT, sort_order INTEGER)');
+        $pdo->exec("INSERT INTO clients (id,name,email,organization_id,archived) VALUES (1,'Valid Contact','valid@example.test',10,0),(2,'Invalid Contact','invalid',10,0),(3,'Archived Contact','archived@example.test',10,1),(4,'Outside Contact','outside@example.test',11,0)");
+        $pdo->exec("INSERT INTO organizations (id,name,general_email) VALUES (10,'Example Co','company@example.test'),(11,'Outside Co','')");
+        $pdo->exec("INSERT INTO project_invoice_recipients (project_id,manual_email,recipient_key,sort_order) VALUES (99,'legacy@example.test','email:legacy@example.test',0)");
 
         self::assertFalse(project_invoice_has_deliverable_recipient_config($pdo, [], [], []));
         self::assertFalse(project_invoice_has_deliverable_recipient_config($pdo, [2, 3], [], [11]));
         self::assertTrue(project_invoice_has_deliverable_recipient_config($pdo, [1], [], []));
         self::assertTrue(project_invoice_has_deliverable_recipient_config($pdo, [], ['manual@example.test'], []));
         self::assertTrue(project_invoice_has_deliverable_recipient_config($pdo, [], [], [10]));
+        self::assertTrue(project_invoice_recipient_client_ids_in_scope($pdo, [1, 2], 10));
+        self::assertFalse(project_invoice_recipient_client_ids_in_scope($pdo, [1, 4], 10));
+        self::assertFalse(project_invoice_recipient_client_ids_in_scope($pdo, [3], 10));
+
+        project_invoice_sync_recipients($pdo, 99, [1], [], [10]);
+        $saved = project_invoice_saved_recipients($pdo, 99);
+        self::assertSame(['client:1', 'organization:10'], array_column($saved, 'recipient_key'));
+        self::assertSame(['valid@example.test', 'company@example.test'], array_column($saved, 'email'));
+
+        $pdo->exec("INSERT INTO project_invoice_recipients (project_id,manual_email,recipient_key,sort_order) VALUES (99,'hidden@example.test','email:hidden@example.test',2)");
+        self::assertSame(
+            ['client:1', 'organization:10'],
+            array_column(project_invoice_saved_recipients($pdo, 99), 'recipient_key'),
+            'Legacy manual addresses must remain inactive after the manual-recipient UI is removed.'
+        );
     }
 
     public function testControllersAndCronSurfaceAutoEmailConfigurationAndDeliveryFailures(): void
@@ -93,6 +113,8 @@ final class ProjectInvoiceBillingPolicyTest extends TestCase
         foreach ([$create, $update] as $controller) {
             self::assertStringContainsString('$projectInvoiceAutoEmail &&', $controller);
             self::assertStringContainsString('Automatic project invoice email requires at least one valid recipient.', $controller);
+            self::assertStringContainsString('project_invoice_recipient_client_ids_in_scope', $controller);
+            self::assertStringNotContainsString("\$_POST['project_invoice_manual_emails']", $controller);
         }
         self::assertStringContainsString('function project_invoice_generate_due_monthly_result', $billing);
         self::assertStringContainsString("'delivery_failed' => 0", $billing);
@@ -100,5 +122,49 @@ final class ProjectInvoiceBillingPolicyTest extends TestCase
         self::assertStringContainsString('project_invoice_generate_due_monthly_result($pdo, $appConfig)', $cron);
         self::assertStringContainsString("\$errors += \$projectBillingResult['delivery_pending'] + \$projectBillingResult['delivery_failed']", $cron);
         self::assertStringContainsString('project delivery {$projectBillingResult[\'delivered\']} sent/', $cron);
+    }
+
+    public function testMonthlyChildInvoiceActionsDescribeProjectBillingInsteadOfDirectEmail(): void
+    {
+        $createView = (string)file_get_contents($this->root . '/src/views/pages/invoice/invoices-create.php');
+        $createScript = (string)file_get_contents($this->root . '/public/assets/js/invoices-create-logic.js');
+        $projectSearch = (string)file_get_contents($this->root . '/src/controllers/project/projects_search.php');
+        $details = (string)file_get_contents($this->root . '/src/views/pages/invoice/invoice-details.php');
+        $finalize = (string)file_get_contents($this->root . '/src/controllers/invoice/invoice_finalize.php');
+        $createController = (string)file_get_contents($this->root . '/src/controllers/invoice/invoices_create.php');
+        $projectDetails = (string)file_get_contents($this->root . '/src/views/pages/project/projects-details.php');
+
+        self::assertStringContainsString('data-invoice-billing-period=', $createView);
+        self::assertStringContainsString('invoice_billing_period', $projectSearch);
+        self::assertStringContainsString("actionButton.value = isMonthly ? 'finalize' : 'finalize_send'", $createScript);
+        self::assertStringContainsString("'Finalize for Project Billing'", $createScript);
+        self::assertStringContainsString('will not be emailed separately', $createView);
+        self::assertStringContainsString("\$invoiceCollectionMode === 'project_aggregate' ? 'Finalize for Project Billing'", $details);
+        self::assertStringContainsString("\$isProjectAggregateInvoice =", $finalize);
+        self::assertStringContainsString("'manual_project_billing_finalize'", $finalize);
+        self::assertStringNotContainsString("invoice_send_finalized(\$pdo, \$id, \$appConfig, 'manual_project_billing_finalize'", $finalize);
+        self::assertStringContainsString('if ($isMonthlyProjectBilling && $finalizeAndSend)', $createController);
+        self::assertStringContainsString('$finalizeAndSend = false;', $createController);
+        self::assertStringContainsString('$finalizeOnly = true;', $createController);
+        self::assertStringContainsString("'&finalized=1&project_billing=1'", $createController);
+        self::assertStringContainsString("&& \$invoiceCollectionMode === 'direct'", $details);
+        self::assertStringContainsString("(\$invoice['collection_mode'] ?? 'direct') === 'direct'", $projectDetails);
+        self::assertStringContainsString('Project statement billing', $projectDetails);
+    }
+
+    public function testAggregatePaymentMethodsPreserveConfiguredKeysAndAllocationIsAtomic(): void
+    {
+        self::assertSame('ach', project_invoice_payment_method_key('ACH'));
+        self::assertSame('check', project_invoice_payment_method_key('Cheque'));
+        self::assertSame('wire_custom', project_invoice_payment_method_key('Wire Custom'));
+
+        $billing = (string)file_get_contents($this->root . '/src/utils/project_invoice_billing.php');
+        $controller = (string)file_get_contents($this->root . '/src/controllers/payments_create.php');
+        $paymentView = (string)file_get_contents($this->root . '/src/views/pages/payments/payments-create.php');
+        self::assertStringContainsString('$ownsTransaction = !$pdo->inTransaction();', $billing);
+        self::assertStringContainsString('UPDATE project_invoice_payments SET status="succeeded"', $billing);
+        self::assertStringContainsString('receipt failed after commit', $controller);
+        self::assertStringContainsString('[$projectScopeWhere, $projectScopeParams] = scope_clause', $paymentView);
+        self::assertStringContainsString('id="noStaffPaymentMethodNotice"', $paymentView);
     }
 }

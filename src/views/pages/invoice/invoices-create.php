@@ -11,7 +11,7 @@ $selectedProject = null;
 $selectedProjectId = (int)($_GET['project_id'] ?? 0);
 if ($selectedProjectId > 0) {
   $projectStmt = $pdo->prepare('
-    SELECT p.id, p.client_id, p.organization_id, p.name, c.name AS client_name, o.name AS organization_name
+    SELECT p.id, p.client_id, p.organization_id, p.name, p.invoice_billing_period, c.name AS client_name, o.name AS organization_name
     FROM projects p
     LEFT JOIN clients c ON c.id = p.client_id
     LEFT JOIN organizations o ON o.id = p.organization_id
@@ -96,7 +96,7 @@ if ($selectedProjectId > 0) {
           <select id="projectSelectInv" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             <option value="">-- Select Project --</option>
             <?php if ($selectedProject): ?>
-              <option value="<?php echo (int)$selectedProject['id']; ?>" selected>
+              <option value="<?php echo (int)$selectedProject['id']; ?>" data-invoice-billing-period="<?php echo htmlspecialchars((string)($selectedProject['invoice_billing_period'] ?? 'per_invoice'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" selected>
                 <?php echo htmlspecialchars((string)$selectedProject['name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>
                 <?php if (!empty($selectedProject['organization_name'])): ?>
                   (<?php echo htmlspecialchars((string)$selectedProject['organization_name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>)
@@ -138,6 +138,7 @@ if ($selectedProjectId > 0) {
       <button type="submit" name="invoice_action" value="save" class="btn">Save Invoice</button>
       <button type="submit" name="invoice_action" id="finalizeAndSendInvoice" style="" value="finalize_send" class="btn btn-primary">Save &amp; Send</button>
     </div>
+    <p id="invoiceProjectBillingHelp" hidden style="margin:-4px 0 0;color:#4b5563;font-size:13px">This invoice will be finalized for the monthly project statement and will not be emailed separately.</p>
   </form>
 </section>
 

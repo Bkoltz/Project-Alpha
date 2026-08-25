@@ -247,7 +247,7 @@ if ($activeOrgId > 0) {
     </label>
 
      <label style="grid-column:1/2;position:relative">
-        <div>Client</div>
+        <div>Primary billed contact</div>
         <input id="clientInput" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         <input id="clientId" type="hidden" name="client_id">
         <div id="clientSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
@@ -276,13 +276,7 @@ if ($activeOrgId > 0) {
         </div>
         <div data-picker-hidden></div>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">Contacts from the selected organization are suggested first. Search can also find another client contact you are allowed to access. Choosing a recipient does not add them to the project.</div>
-    </label>
-
-    <label>
-      <div>Manual Project Invoice Email Recipients</div>
-      <input type="text" name="project_invoice_manual_emails" placeholder="billing@example.com, owner@example.com" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">Optional. Separate multiple email addresses with commas. Manual recipients do not become clients or project contacts.</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Choose one or more saved contacts from this organization. The primary billed contact is added by default when it has an email, but can be removed after another delivery recipient is selected.</div>
     </label>
 
     <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;border:1px solid #dbe3ef;border-radius:8px">

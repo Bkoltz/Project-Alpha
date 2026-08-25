@@ -63,6 +63,22 @@ final class OneTimePaymentPolicyTest extends TestCase
         self::assertStringNotContainsString('INSERT INTO payments (client_id, project_invoice_id', (string)$billing);
     }
 
+    public function testStaffProjectStatementPaymentUsesAggregateAllocationAndPublicLinkForStripe(): void
+    {
+        $view = (string)file_get_contents($this->root . '/src/views/pages/payments/payments-create.php');
+        $controller = (string)file_get_contents($this->root . '/src/controllers/payments_create.php');
+        $detailsController = (string)file_get_contents($this->root . '/src/controllers/project/project_invoice_payment.php');
+
+        self::assertStringContainsString("COALESCE(i.collection_mode,'direct')='direct'", $view);
+        self::assertStringContainsString('name="project_invoice_id"', $view);
+        self::assertStringContainsString("\$prefProjectInvoice <= 0 ? 'checked' : ''", $view);
+        self::assertStringContainsString('Use the project statement payment link to collect a Stripe payment.', $controller);
+        self::assertStringContainsString('project_invoice_record_manual_payment', $controller);
+        self::assertStringContainsString('project_payment_receipt_email_issue', $detailsController);
+        self::assertStringContainsString("audit_log(\$pdo, 'payment.recorded', 'project_invoice'", $detailsController);
+        self::assertStringContainsString("if (scope === 'manual') return;", (string)file_get_contents($this->root . '/public/assets/js/payments-create-logic.js'));
+    }
+
     public function testNoAutoPayControlIsRendered(): void
     {
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($this->root . '/src/views'));

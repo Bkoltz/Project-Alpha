@@ -1,7 +1,9 @@
 var sel = document.getElementById('invoiceSelect');
+var projectSel = document.getElementById('projectInvoiceSelect');
 var amt = document.getElementById('amountInput');
 var recordPaymentForm = document.getElementById('recordPaymentForm');
 var invoiceFields = document.getElementById('invoicePaymentFields');
+var projectInvoiceFields = document.getElementById('projectInvoicePaymentFields');
 var manualFields = document.getElementById('manualPaymentFields');
 var manualClientId = document.getElementById('manualClientId');
 var manualClientSearch = document.getElementById('manualClientSearch');
@@ -32,8 +34,12 @@ function escapeAttribute(text) {
 }
 
 function update() {
-    if (!sel || !amt) return;
-    var opt = sel.options[sel.selectedIndex];
+    if (!amt) return;
+    var scope = selectedScope();
+    if (scope === 'manual') return;
+    var activeSelect = scope === 'project_invoice' ? projectSel : sel;
+    if (!activeSelect) return;
+    var opt = activeSelect.options[activeSelect.selectedIndex];
     if (!opt) return;
     var r = opt.getAttribute('data-remaining');
     if (r) { amt.value = r; }
@@ -43,12 +49,15 @@ if (sel && amt) {
     sel.addEventListener('change', update);
     if (!amt.value) { update(); }
 }
+if (projectSel && amt) projectSel.addEventListener('change', update);
 
 // Toggle check number field based on payment method
 var methodSelect = document.getElementById('paymentMethod');
 var checkField = document.getElementById('checkNumberField');
 var checkInput = document.getElementById('checkNumberInput');
 var stripeNotice = document.getElementById('stripeNotice');
+var noStaffPaymentMethodNotice = document.getElementById('noStaffPaymentMethodNotice');
+var savePaymentButton = document.getElementById('savePaymentButton');
 var referenceLabel = document.getElementById('referenceLabel');
 
 function togglePaymentFields() {
@@ -56,10 +65,10 @@ function togglePaymentFields() {
     var method = methodSelect.value.toLowerCase();
     var scope = selectedScope();
     // Check field
-    if (method === 'check' || method === 'bank_transfer') {
+    if (method === 'check' || method === 'cheque' || method === 'bank' || method === 'bank_transfer' || method === 'ach') {
         checkField.style.display = 'block';
         checkInput.required = true;
-        var isCheck = method === 'check';
+        var isCheck = method === 'check' || method === 'cheque';
         if (referenceLabel) {
             referenceLabel.textContent = isCheck ? 'Check Number' : 'Reference / Transaction Number';
         }
@@ -78,24 +87,32 @@ function togglePaymentFields() {
 function togglePaymentScope() {
     var scope = selectedScope();
     var isManual = scope === 'manual';
-    if (invoiceFields) invoiceFields.style.display = isManual ? 'none' : 'grid';
+    var isProjectInvoice = scope === 'project_invoice';
+    if (invoiceFields) invoiceFields.style.display = !isManual && !isProjectInvoice ? 'grid' : 'none';
+    if (projectInvoiceFields) projectInvoiceFields.style.display = isProjectInvoice ? 'grid' : 'none';
     if (manualFields) manualFields.style.display = isManual ? 'grid' : 'none';
-    if (sel) sel.required = !isManual;
+    if (sel) sel.required = !isManual && !isProjectInvoice;
+    if (projectSel) projectSel.required = isProjectInvoice;
     if (manualClientSearch) manualClientSearch.required = false;
     if (sendReceiptInput) sendReceiptInput.checked = !isManual;
 
     if (methodSelect) {
         Array.from(methodSelect.options).forEach(function (option) {
             if (option.value.toLowerCase() === 'stripe') {
-                option.disabled = isManual;
-                if (isManual && option.selected) {
-                    methodSelect.value = methodSelect.options[0] ? methodSelect.options[0].value : '';
-                }
+                option.disabled = isManual || isProjectInvoice;
             }
         });
+        var enabledOptions = Array.from(methodSelect.options).filter(function (option) { return !option.disabled && option.value; });
+        if (methodSelect.selectedOptions.length === 0 || methodSelect.selectedOptions[0].disabled) {
+            methodSelect.value = enabledOptions.length ? enabledOptions[0].value : '';
+        }
+        var hasStaffMethod = !isManual && !isProjectInvoice || enabledOptions.length > 0;
+        if (noStaffPaymentMethodNotice) noStaffPaymentMethodNotice.style.display = hasStaffMethod ? 'none' : 'block';
+        if (savePaymentButton) savePaymentButton.disabled = !hasStaffMethod;
     }
 
     togglePaymentFields();
+    update();
     updateReceiptAvailability();
 }
 
@@ -184,6 +201,11 @@ function effectiveManualClientEmail() {
 
 function updateReceiptAvailability() {
     if (!sendReceiptInput) return;
+    if (selectedScope() === 'project_invoice') {
+        sendReceiptInput.disabled = false;
+        if (sendReceiptHelp) sendReceiptHelp.textContent = 'A receipt can be emailed to the saved project invoice recipients.';
+        return;
+    }
     if (selectedScope() !== 'manual') {
         var invoiceOption = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
         var isGeneralRecipient = !!invoiceOption && invoiceOption.getAttribute('data-general-recipient') === '1';
