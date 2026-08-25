@@ -131,7 +131,7 @@ if ($selected !== '') {
                 <?php if ($quotes): ?>
                   <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
                     <?php foreach ($quotes as $row): ?>
-                      <li><a href="/?page=quote/quote-print&amp;id=<?php echo (int)$row['id']; ?>">Q-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · $<?php echo number_format((float)$row['total'], 2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
+                      <li><a href="/?page=quote/quote-details&amp;id=<?php echo (int)$row['id']; ?>">Q-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · $<?php echo number_format((float)$row['total'], 2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
                     <?php endforeach; ?>
                   </ul>
                 <?php else: ?>
@@ -144,7 +144,7 @@ if ($selected !== '') {
                   <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
                     <?php foreach ($contracts as $row): ?>
                       <li>
-                        <div><a href="/?page=contract/contract-print&amp;id=<?php echo (int)$row['id']; ?>">C-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · <?php echo htmlspecialchars($row['status']); ?></div>
+                        <div><a href="/?page=contract/contract-details&amp;id=<?php echo (int)$row['id']; ?>">C-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · <?php echo htmlspecialchars($row['status']); ?></div>
                         <?php if (!empty($row['signed_pdf_path'])): ?>
                           <?php $u2 = (string)$row['signed_pdf_path'];
                           $dl2 = $u2 . (strpos($u2, '?') !== false ? '&download=1' : ''); ?>
@@ -165,7 +165,7 @@ if ($selected !== '') {
                 <?php if ($invoices): ?>
                   <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
                     <?php foreach ($invoices as $row): ?>
-                      <li><a href="/?page=invoice/invoice-print&amp;id=<?php echo (int)$row['id']; ?>"><?php echo htmlspecialchars(pa_invoice_label_from_row($row)); ?></a> · $<?php echo number_format((float)$row['total'], 2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
+                      <li><a href="/?page=invoice/invoice-details&amp;id=<?php echo (int)$row['id']; ?>"><?php echo htmlspecialchars(pa_invoice_label_from_row($row)); ?></a> · $<?php echo number_format((float)$row['total'], 2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
                     <?php endforeach; ?>
                   </ul>
                 <?php else: ?>
