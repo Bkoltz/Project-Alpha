@@ -28,11 +28,18 @@ final class DocumentLayoutOrderTest extends TestCase
         $this->assertOrdered($view, 'Line Total', 'Subtotal', 'Terms and Conditions');
     }
 
-    public function testRecurringQuoteTermsPrecedeSignature(): void
+    public function testQuoteViewsDoNotRenderContractSignatureFields(): void
     {
-        $view = $this->view('src/views/pages/quote/long-term-quote-details.php');
+        $regular = $this->view('src/views/pages/quote/quote-details.php');
+        $recurring = $this->view('src/views/pages/quote/long-term-quote-details.php');
 
-        $this->assertOrdered($view, 'Amount Per Invoice', 'Terms and Conditions', '<!-- Signature block -->');
+        $this->assertOrdered($recurring, 'Amount Per Invoice', 'Terms and Conditions');
+        foreach ([$regular, $recurring] as $view) {
+            self::assertStringNotContainsString('Client Signature', $view);
+            self::assertStringNotContainsString('signature_agreement', $view);
+            self::assertStringNotContainsString('<!-- Signature block -->', $view);
+            self::assertStringNotContainsString('<!-- Signature section -->', $view);
+        }
     }
 
     public function testContractAcknowledgementAndSignaturePrecedeNewPageTerms(): void
