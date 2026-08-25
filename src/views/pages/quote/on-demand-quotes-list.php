@@ -150,7 +150,7 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
   $rowStyle = ($r['status']==='approved') ? 'background:#ecfdf5;' : (($r['status']==='rejected') ? 'background:#fef2f2;' : '');
 ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
-            <td style="padding:10px"><a href="/?page=quote/quote-print&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">ODQ-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
+            <td style="padding:10px"><a href="/?page=quote/quote-details&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">ODQ-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['organization_name'] ?: $r['client']); ?></td>
             <td style="padding:10px"><?php if (!empty($r['organization_name'])): ?><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a><?php endif; ?></td>
@@ -159,7 +159,7 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
             <td style="padding:10px"><?php echo $r['start_date'] ? date('M j, Y', strtotime($r['start_date'])) : '—'; ?></td>
             <td style="padding:10px"><?php echo date('M j, Y', strtotime($r['created_at'])); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-              <a href="/?page=quote/quote-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
+              <a href="/?page=quote/quote-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
               <?php if ($r['status'] === 'pending'): ?>
               <form method="post" action="/?page=quote/email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">

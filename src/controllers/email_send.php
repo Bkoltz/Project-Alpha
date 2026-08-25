@@ -38,7 +38,7 @@ try {
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
     $clientName = (string)($row['name'] ?? 'client');
     $subject = 'Quote Q-' . $docnum . ' for ' . $clientName;
-    $baseView = '/?page=quote-print&id='.$id;
+    $baseView = '/?page=quote/quote-details&id='.$id;
   } elseif ($type === 'contract') {
     $st = $pdo->prepare('SELECT co.id, co.doc_number, co.project_code, co.status, co.revision_number, c.email, c.name FROM contracts co JOIN clients c ON c.id=co.client_id WHERE co.id=?');
     $st->execute([$id]);
@@ -46,7 +46,7 @@ try {
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
     $clientName = (string)($row['name'] ?? 'client');
     $subject = 'Contract C-' . $docnum . ' for ' . $clientName;
-    $baseView = '/?page=contract-print&id='.$id;
+    $baseView = '/?page=contract/contract-details&id='.$id;
   } else { // invoice
     $st = $pdo->prepare('SELECT i.id, i.doc_number, i.invoice_type, i.project_code, i.status, i.revision_number, i.due_date, i.payment_terms_days, i.due_date_source, i.recipient_presentation_mode, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
     $st->execute([$id]);
@@ -55,7 +55,7 @@ try {
     $clientName = (string)($row['name'] ?? 'client');
     $invoiceLabel = pa_invoice_label_from_row($row ?: ['id' => $id]);
     $subject = 'Invoice ' . $invoiceLabel . ' for ' . $clientName;
-    $baseView = '/?page=invoice-print&id='.$id;
+    $baseView = '/?page=invoice/invoice-details&id='.$id;
   }
 
   if ($type === 'invoice' && $row && pa_invoice_is_general_recipient($row)) {

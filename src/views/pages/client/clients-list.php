@@ -162,7 +162,7 @@ function client_list_email_html(?string $email): string
                   <?php if ($quotes): ?>
                     <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
                       <?php foreach ($quotes as $row): ?>
-                        <li><a href="/?page=quote-print&id=<?php echo (int)$row['id']; ?>">Q-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · $<?php echo number_format((float)$row['total'],2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
+                        <li><a href="/?page=quote/quote-details&id=<?php echo (int)$row['id']; ?>">Q-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · $<?php echo number_format((float)$row['total'],2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
                       <?php endforeach; ?>
                     </ul>
                   <?php else: ?>
@@ -174,7 +174,7 @@ function client_list_email_html(?string $email): string
                   <?php if ($contracts): ?>
                     <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
                       <?php foreach ($contracts as $row): ?>
-                        <li><a href="/?page=contract-print&id=<?php echo (int)$row['id']; ?>">C-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · <?php echo htmlspecialchars($row['status']); ?></li>
+                        <li><a href="/?page=contract/contract-details&id=<?php echo (int)$row['id']; ?>">C-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · <?php echo htmlspecialchars($row['status']); ?></li>
                       <?php endforeach; ?>
                     </ul>
                   <?php else: ?>
@@ -186,7 +186,7 @@ function client_list_email_html(?string $email): string
                   <?php if ($invoices): ?>
                     <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
                       <?php foreach ($invoices as $row): ?>
-                        <li><a href="/?page=invoice-print&id=<?php echo (int)$row['id']; ?>"><?php echo htmlspecialchars(pa_invoice_label_from_row($row)); ?></a> · $<?php echo number_format((float)$row['total'],2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
+                        <li><a href="/?page=invoice/invoice-details&id=<?php echo (int)$row['id']; ?>"><?php echo htmlspecialchars(pa_invoice_label_from_row($row)); ?></a> · $<?php echo number_format((float)$row['total'],2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
                       <?php endforeach; ?>
                     </ul>
                   <?php else: ?>
