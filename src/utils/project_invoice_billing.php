@@ -579,7 +579,7 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
             $pdo->beginTransaction();
         }
 
-        $parent = $pdo->prepare('SELECT * FROM project_invoices WHERE id=? AND status IN ("unpaid","partial","sent") FOR UPDATE');
+        $parent = $pdo->prepare('SELECT * FROM project_invoices WHERE id=? AND status IN ("unpaid","partial","sent","paid") FOR UPDATE');
         $parent->execute([$projectInvoiceId]);
         $pi = $parent->fetch(PDO::FETCH_ASSOC);
         if (!$pi) {

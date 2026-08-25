@@ -162,6 +162,7 @@ final class ProjectInvoiceBillingPolicyTest extends TestCase
         $controller = (string)file_get_contents($this->root . '/src/controllers/payments_create.php');
         $paymentView = (string)file_get_contents($this->root . '/src/views/pages/payments/payments-create.php');
         self::assertStringContainsString('$ownsTransaction = !$pdo->inTransaction();', $billing);
+        self::assertStringContainsString('status IN ("unpaid","partial","sent","paid") FOR UPDATE', $billing);
         self::assertStringContainsString('UPDATE project_invoice_payments SET status="succeeded"', $billing);
         self::assertStringContainsString('receipt failed after commit', $controller);
         self::assertStringContainsString('[$projectScopeWhere, $projectScopeParams] = scope_clause', $paymentView);
