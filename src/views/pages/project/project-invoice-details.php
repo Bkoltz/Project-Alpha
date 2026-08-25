@@ -3,9 +3,11 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../../../utils/document_sender.php';
 require_once __DIR__ . '/../../../utils/document_recipient.php';
 require_once __DIR__ . '/../../../utils/invoice_content_links.php';
 require_once __DIR__ . '/../../../utils/public_links.php';
@@ -85,8 +87,10 @@ $isPdf = defined('PDF_MODE') && PDF_MODE;
 $isPublic = defined('PUBLIC_VIEW') && PUBLIC_VIEW;
 $showEmailPanel = !empty($_GET['email_panel']) || !empty($_GET['content_link_warning']);
 $billingRecipient = pa_document_recipient($pi);
+$documentSender = document_sender_for_creator($pdo, $appConfig, !empty($pi['created_by']) ? (int)$pi['created_by'] : null);
 ?>
 <section class="document-detail-page" style="max-width:980px;margin:0 auto;padding:<?php echo $isPublic ? '0' : '24px'; ?>">
+  <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Project Invoice</div>
   <?php if (!$isPdf && !$isPublic): ?>
     <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <a class="btn btn-sm" href="/?page=project/projects-details&id=<?php echo (int)$pi['project_id']; ?>">Back to Project</a>
@@ -145,17 +149,22 @@ $billingRecipient = pa_document_recipient($pi);
             <button type="button" class="btn btn-sm" onclick="closeEmailPanel()">Cancel</button>
           </div>
         <?php else: ?>
-          <div style="color:#92400e">No project invoice recipients are saved. Add a company email, client contact, or manual address from Edit Project.</div>
+          <div style="color:#92400e">No project invoice recipients are saved. Add a saved client contact or the company email from Edit Project.</div>
         <?php endif; ?>
       </form>
     </div>
   <?php endif; ?>
 
-  <div style="text-align:center;margin-bottom:18px">
-    <div style="font-size:13px;color:#6b7280;text-transform:uppercase;font-weight:700">Project Invoice</div>
-    <h1 style="margin:4px 0 4px;font-size:26px">PI-<?php echo htmlspecialchars((string)$docNum); ?></h1>
-    <div style="color:#6b7280"><?php echo htmlspecialchars($pi['project_name']); ?></div>
-  </div>
+  <?php
+    $statementPeriod = date('M j, Y', strtotime((string)$pi['billing_period_start']))
+      . ' - ' . date('M j, Y', strtotime((string)$pi['billing_period_end']));
+    $documentBrandLabel = 'Project Invoice PI-' . $docNum;
+    $documentBrandMetaLines = [
+      'Project ' . $pi['project_name'],
+      'Billing Period ' . $statementPeriod,
+    ];
+    require __DIR__ . '/../../components/document_brand_header.php';
+  ?>
 
   <div style="border:1px solid #e5e7eb;border-radius:8px;padding:18px;margin-bottom:18px;background:#fff">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
@@ -178,18 +187,11 @@ $billingRecipient = pa_document_recipient($pi);
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
-    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">
-      <div style="font-weight:700;margin-bottom:8px">Bill To</div>
-      <?php foreach ($billingRecipient['lines'] as $line): ?><div><?php echo htmlspecialchars($line); ?></div><?php endforeach; ?>
-      <?php if ($billingRecipient['phone'] !== null): ?><div style="color:#6b7280"><?php echo htmlspecialchars($billingRecipient['phone']); ?></div><?php endif; ?>
-      <?php if ($billingRecipient['email'] !== null): ?><div style="color:#6b7280"><?php echo htmlspecialchars($billingRecipient['email']); ?></div><?php endif; ?>
-    </div>
-    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">
-      <div style="font-weight:700;margin-bottom:8px">Project</div>
-      <div><?php echo htmlspecialchars($pi['project_name']); ?></div>
-    </div>
-  </div>
+  <?php
+    $documentPartySender = $documentSender;
+    $documentPartyRecipient = $billingRecipient;
+    require __DIR__ . '/../../components/document_parties.php';
+  ?>
 
   <h2 style="font-size:18px;margin:0 0 10px">Included Invoices</h2>
   <table style="width:100%;border-collapse:collapse;margin-bottom:22px;background:#fff">
@@ -214,21 +216,7 @@ $billingRecipient = pa_document_recipient($pi);
   </table>
 
   <?php if (!empty($contentLinks)): ?>
-    <div style="border:1px solid #bfdbfe;border-radius:8px;padding:16px;background:#eff6ff;margin-bottom:22px">
-      <h2 style="font-size:18px;margin:0 0 8px">View your content here</h2>
-      <div style="display:grid;gap:8px">
-        <?php foreach ($contentLinks as $link): ?>
-          <div>
-            <a href="<?php echo htmlspecialchars($link['url']); ?>" target="_blank" rel="noopener" style="font-weight:700;color:#1d4ed8">
-              <?php echo htmlspecialchars($link['title']); ?>
-            </a>
-            <?php if (!$isPublic): ?>
-              <span style="font-size:12px;color:#6b7280"> &middot; <?php echo htmlspecialchars($link['source_label']); ?> link</span>
-            <?php endif; ?>
-          </div>
-        <?php endforeach; ?>
-      </div>
-    </div>
+    <?php echo invoice_content_links_html($contentLinks); ?>
   <?php elseif (!$isPublic && !$isPdf): ?>
     <div class="no-print" style="border:1px dashed #cbd5e1;border-radius:8px;padding:14px;background:#f8fafc;margin-bottom:22px;color:#475569">
       <strong>No invoice content links.</strong>
@@ -237,7 +225,7 @@ $billingRecipient = pa_document_recipient($pi);
   <?php endif; ?>
 
   <?php foreach ($items as $item): ?>
-    <div style="break-inside:avoid;margin-bottom:18px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">
+    <div style="page-break-inside:avoid;break-inside:avoid;margin-bottom:18px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">
       <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:10px">
         <div>
           <div style="font-weight:800">Invoice <?php echo htmlspecialchars(pa_invoice_label($item['invoice_doc_number'] ?? null, $item['invoice_type'] ?? 'regular', $item['invoice_id'])); ?></div>
@@ -264,6 +252,23 @@ $billingRecipient = pa_document_recipient($pi);
     </div>
   <?php endforeach; ?>
 
+  <?php
+    $projectInvoiceTotal = (float)$pi['total'];
+    $projectInvoicePaid = (float)$pi['amount_paid'];
+    $projectInvoiceDue = (float)$pi['balance_due'];
+    $documentTotalRows = [
+      ['label' => 'Subtotal', 'value' => '$' . number_format((float)$pi['subtotal'], 2)],
+      ['label' => $status === 'partial' ? 'Project Invoice Total' : 'Total', 'value' => '$' . number_format($projectInvoiceTotal, 2), 'tone' => 'total'],
+    ];
+    if ($status === 'partial') {
+      $documentTotalRows[] = ['label' => 'Amount Paid', 'value' => '- $' . number_format($projectInvoicePaid, 2), 'tone' => 'paid'];
+      $documentTotalRows[] = ['label' => 'Amount Due', 'value' => '$' . number_format($projectInvoiceDue, 2), 'tone' => 'due'];
+    } elseif ($status === 'paid') {
+      $documentTotalRows[] = ['label' => '✓ Paid in Full', 'value' => '$0.00', 'tone' => 'paid_full'];
+    }
+    require __DIR__ . '/../../components/document_totals.php';
+  ?>
+
   <?php if (!$isPdf && !$isPublic && !in_array($status, ['draft','paid','void'], true)): ?>
     <div class="no-print" style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#fff;margin-top:18px">
       <h3 style="margin:0 0 10px">Record Project Invoice Payment</h3>
@@ -273,6 +278,10 @@ $billingRecipient = pa_document_recipient($pi);
         <label><div>Amount</div><input name="amount" type="number" min="0.01" step="0.01" value="<?php echo htmlspecialchars(number_format((float)$pi['balance_due'], 2, '.', '')); ?>" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px"></label>
         <label><div>Method</div><input name="method" value="check" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px"></label>
         <label><div>Reference</div><input name="reference_number" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px"></label>
+        <label><div>Payment date</div><input name="payment_date" type="date" value="<?php echo htmlspecialchars(date('Y-m-d')); ?>" required style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px"></label>
+        <?php if (!array_key_exists('payment_receipts_enabled', $appConfig) || !empty($appConfig['payment_receipts_enabled'])): ?>
+          <label style="display:flex;gap:7px;align-items:center"><input type="checkbox" name="send_receipt" value="1"><span>Email receipt to saved project invoice recipients</span></label>
+        <?php endif; ?>
         <button type="submit" class="btn btn-sm btn-success">Record Payment</button>
       </form>
     </div>

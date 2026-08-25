@@ -19,6 +19,10 @@ require_record_ownership($pdo, 'projects', $projectId);
 
 $period = (string)($_POST['period'] ?? 'current');
 $sendEmail = !empty($_POST['send_email']);
+if ($sendEmail && !project_invoice_has_saved_deliverable_recipient($pdo, $projectId)) {
+    header('Location: /?page=project/projects-details&id=' . $projectId . '&billing_missing_recipients=1&billing_msg=' . urlencode('Add at least one valid saved contact or the company email before generating and emailing the statement.'));
+    exit;
+}
 if ($period === 'previous') {
     [$start, $end] = project_invoice_period_for_date(date('Y-m-d'), true);
 } else {
@@ -30,7 +34,18 @@ $projectInvoiceId = project_invoice_create_for_period($pdo, $projectId, $start, 
 if ($projectInvoiceId) {
     $emailResult = '';
     if ($sendEmail) {
-        $sent = project_invoice_send_email($pdo, $projectInvoiceId, $appConfig);
+        if (invoice_should_prompt_for_missing_content_links($pdo, 'project_invoice', $projectInvoiceId, $appConfig)) {
+            if (invoice_missing_content_links_behavior($appConfig) === 'block') {
+                header('Location: /?page=project/project-invoice-details&id=' . $projectInvoiceId . '&generated=1&email_err=' . urlencode(invoice_missing_content_links_message()));
+            } else {
+                header('Location: /?page=project/project-invoice-details&id=' . $projectInvoiceId . '&generated=1&content_link_warning=1&email_panel=1');
+            }
+            exit;
+        }
+        // This button is an explicit staff send, even when automatic monthly
+        // delivery is disabled. Keep its stable key so retries and double
+        // submissions remain idempotent.
+        $sent = project_invoice_send_email($pdo, $projectInvoiceId, $appConfig, null, false, null, true);
         $emailResult = $sent > 0
             ? '&emailed=1'
             : '&email_err=' . urlencode('No project invoice emails were sent. Check the saved recipients and delivery status.');

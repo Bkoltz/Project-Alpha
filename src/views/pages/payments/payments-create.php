@@ -26,11 +26,26 @@ $invoices = $pdo->query("
     WHERE status='succeeded'
     GROUP BY invoice_id
   ) p ON p.invoice_id=i.id
-  WHERE i.status IN ('unpaid','partial')
+  WHERE i.status IN ('unpaid','partial') AND COALESCE(i.collection_mode,'direct')='direct'
   ORDER BY i.created_at DESC
   LIMIT 200
 ")->fetchAll(PDO::FETCH_ASSOC);
+$currentUserId = (int)($_SESSION['user']['id'] ?? 0);
+[$projectScopeWhere, $projectScopeParams] = scope_clause($pdo, 'p', $currentUserId);
+$projectScopeSql = $projectScopeWhere !== '' ? ' AND ' . $projectScopeWhere : '';
+$projectInvoiceStmt = $pdo->prepare("
+  SELECT pi.id,pi.project_id,pi.doc_number,pi.total,pi.balance_due,pi.status,p.name AS project_name
+  FROM project_invoices pi
+  JOIN projects p ON p.id=pi.project_id
+  WHERE pi.status IN ('sent','unpaid','partial') AND pi.finalized_at IS NOT NULL AND pi.balance_due>0.005
+  {$projectScopeSql}
+  ORDER BY pi.created_at DESC
+  LIMIT 200
+");
+$projectInvoiceStmt->execute($projectScopeParams);
+$projectInvoices = $projectInvoiceStmt->fetchAll(PDO::FETCH_ASSOC);
 $pref = (int)($_GET['invoice_id'] ?? 0);
+$prefProjectInvoice = (int)($_GET['project_invoice_id'] ?? 0);
 $prefAmount = '';
 if ($pref > 0) {
   $st = $pdo->prepare("
@@ -59,12 +74,30 @@ if ($pref > 0) {
     <div style="display:grid;gap:8px">
       <div style="font-weight:600">Payment Type</div>
       <label style="display:flex;gap:8px;align-items:center">
-        <input type="radio" name="payment_scope" value="invoice" checked>
+        <input type="radio" name="payment_scope" value="invoice" <?php echo $prefProjectInvoice <= 0 ? 'checked' : ''; ?>>
         <span>Apply to an invoice</span>
+      </label>
+      <label style="display:flex;gap:8px;align-items:center">
+        <input type="radio" name="payment_scope" value="project_invoice" <?php echo $prefProjectInvoice > 0 ? 'checked' : ''; ?>>
+        <span>Apply to a project statement</span>
       </label>
       <label style="display:flex;gap:8px;align-items:center">
         <input type="radio" name="payment_scope" value="manual">
         <span>Manual payment not tied to an invoice</span>
+      </label>
+    </div>
+
+    <div id="projectInvoicePaymentFields" style="display:none;gap:12px">
+      <label>
+        <div>Project Statement</div>
+        <select name="project_invoice_id" id="projectInvoiceSelect" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <option value="">Select project statement...</option>
+          <?php foreach ($projectInvoices as $pi): ?>
+            <option value="<?php echo (int)$pi['id']; ?>" data-remaining="<?php echo number_format((float)$pi['balance_due'], 2, '.', ''); ?>" <?php echo $prefProjectInvoice === (int)$pi['id'] ? 'selected' : ''; ?>>
+              PI-<?php echo htmlspecialchars((string)($pi['doc_number'] ?: $pi['id'])); ?> - <?php echo htmlspecialchars((string)$pi['project_name']); ?> - $<?php echo number_format((float)$pi['balance_due'], 2); ?> due
+            </option>
+          <?php endforeach; ?>
+        </select>
       </label>
     </div>
 
@@ -148,7 +181,7 @@ if ($pref > 0) {
         $methods = pa_payment_methods_from_config($appConfig);
         $stripeConfigured = StripeService::isConfigured($appConfig);
       ?>
-      <select name="method" id="paymentMethod" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <select required name="method" id="paymentMethod" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         <?php foreach ($methods as $m): ?>
           <?php if (($m['key'] ?? '') === 'stripe') { continue; } ?>
           <option value="<?php echo htmlspecialchars($m['key']); ?>"><?php echo htmlspecialchars($m['label']); ?></option>
@@ -158,6 +191,10 @@ if ($pref > 0) {
         <?php endif; ?>
       </select>
     </label>
+
+    <div id="noStaffPaymentMethodNotice" style="display:none;padding:12px;background:#fff7ed;border:1px solid #fb923c;border-radius:8px;font-size:14px">
+      No staff-recorded payment method is configured for this payment type. Use the document's public payment link for Stripe, or enable another method in billing settings.
+    </div>
 
     <div id="stripeNotice" style="display:none;padding:12px;background:#e6f4ff;border:1px solid #0284c7;border-radius:8px;font-size:14px">
       <strong>Stripe Checkout:</strong> You will be redirected to Stripe to collect the card payment.
@@ -185,7 +222,7 @@ if ($pref > 0) {
       </label>
     <?php endif; ?>
 
-    <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Payment</button>
+    <button type="submit" id="savePaymentButton" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Payment</button>
   </form>
 </section>
 

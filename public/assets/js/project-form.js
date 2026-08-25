@@ -8,6 +8,7 @@
         invoice: new Set()
     };
     var lastOrgId = '';
+    var primaryRecipientOptOut = new Set();
 
     function byId(id) {
         return document.getElementById(id);
@@ -83,6 +84,9 @@
             button.addEventListener('click', function () {
                 var id = String(button.getAttribute('data-remove-id') || '');
                 selected[type].delete(id);
+                if (type === 'invoice' && byId('clientId') && String(byId('clientId').value || '') === id) {
+                    primaryRecipientOptOut.add(id);
+                }
                 renderPicker(type);
             });
         });
@@ -127,6 +131,13 @@
         if (!clientById(id, type)) return;
         selected[type].add(id);
         renderPicker(type);
+    }
+
+    function defaultPrimaryRecipient() {
+        var primaryId = byId('clientId') ? String(byId('clientId').value || '') : '';
+        var client = clientById(primaryId, 'invoice');
+        if (!client || !client.email || primaryRecipientOptOut.has(primaryId)) return;
+        selected.invoice.add(primaryId);
     }
 
     function setPickerEnabled(enabled) {
@@ -194,6 +205,7 @@
             selected.project.clear();
             selected.invoice.clear();
             invoiceClients = [];
+            primaryRecipientOptOut.clear();
         }
         fetch('/?page=project/client-options&organization_id=' + encodeURIComponent(orgId) + '&department_id=' + encodeURIComponent(departmentId), {
             credentials: 'same-origin'
@@ -210,6 +222,7 @@
                 renderOrganizationRecipient(data.organization_recipient || null);
                 pruneSelections();
                 applyDepartmentDefaults();
+                defaultPrimaryRecipient();
                 setPickerEnabled(true);
                 renderAll();
             })
@@ -230,20 +243,6 @@
             initializedNewPicker = true;
             picker.search.addEventListener('input', function () {
                 renderSuggestions(type, picker.search.value);
-                if (type === 'invoice' && picker.search.value.trim().length >= 2) {
-                    fetch('/?page=clients-search&term=' + encodeURIComponent(picker.search.value.trim()), { credentials: 'same-origin' })
-                        .then(function (response) { return response.ok ? response.json() : []; })
-                        .then(function (rows) {
-                            (Array.isArray(rows) ? rows : []).forEach(function (client) {
-                                client.id = String(client.id);
-                                if (!invoiceClients.some(function (candidate) { return candidate.id === client.id; })) {
-                                    invoiceClients.push(client);
-                                }
-                            });
-                            renderSuggestions(type, picker.search.value);
-                        })
-                        .catch(function () { /* keep local organization matches */ });
-                }
             });
             picker.search.addEventListener('focus', function () {
                 renderSuggestions(type, picker.search.value);
@@ -384,6 +383,16 @@
             departmentSelect.addEventListener('change', loadClientOptions);
         }
         loadClientOptions();
+        var primaryClientId = byId('clientId');
+        if (primaryClientId && primaryClientId.dataset.invoiceRecipientDefaultReady !== '1') {
+            primaryClientId.dataset.invoiceRecipientDefaultReady = '1';
+            primaryClientId.addEventListener('change', function () {
+                var id = String(primaryClientId.value || '');
+                primaryRecipientOptOut.delete(id);
+                defaultPrimaryRecipient();
+                renderPicker('invoice');
+            });
+        }
     }
     initProjectForm.pageInitializerId = 'project-form';
 

@@ -189,6 +189,8 @@
         }
         if (!primaryId && selected.project.has(id)) {
           primaryId = id;
+          var primaryClient = clientById(primaryId);
+          if (primaryClient && primaryClient.email) selected.invoice.add(primaryId);
         }
         renderAll();
       }
@@ -198,21 +200,6 @@
         if (!p) return;
         p.search.addEventListener('input', function () {
           renderSuggestions(type);
-          if (type === 'invoice' && p.search.value.trim().length >= 2) {
-            fetch('/?page=clients-search&term=' + encodeURIComponent(p.search.value.trim()), { credentials: 'same-origin' })
-              .then(function (response) { return response.ok ? response.json() : []; })
-              .then(function (rows) {
-                (Array.isArray(rows) ? rows : []).forEach(function (client) {
-                  client.id = String(client.id);
-                  client.email = client.email || '';
-                  if (!clients.some(function (candidate) { return candidate.id === client.id; })) {
-                    clients.push(client);
-                  }
-                });
-                renderSuggestions(type);
-              })
-              .catch(function () { /* retain already-loaded contacts */ });
-          }
         });
         p.search.addEventListener('focus', function () { renderSuggestions(type); });
         p.suggestions.addEventListener('click', function (event) {
@@ -228,6 +215,11 @@
       if (primarySelect) {
         primarySelect.addEventListener('change', function () {
           primaryId = primarySelect.value || '';
+          var client = clientById(primaryId);
+          if (client && client.email) {
+            selected.invoice.add(primaryId);
+            render('invoice');
+          }
         });
       }
 

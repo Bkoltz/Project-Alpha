@@ -6,14 +6,17 @@ require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../utils/audit.php';
 require_once __DIR__ . '/../utils/csrf.php';
 require_once __DIR__ . '/../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../utils/project_invoice_billing.php';
 require_once __DIR__ . '/../services/ManualPaymentJobService.php';
 
 use App\Services\ManualPaymentJobService;
 
 csrf_verify_post_or_redirect('payments/payments-create');
 
-$payment_scope = ($_POST['payment_scope'] ?? 'invoice') === 'manual' ? 'manual' : 'invoice';
+$payment_scope = (string)($_POST['payment_scope'] ?? 'invoice');
+if (!in_array($payment_scope, ['invoice', 'project_invoice', 'manual'], true)) { $payment_scope = 'invoice'; }
 $invoice_id = (int)($_POST['invoice_id'] ?? 0);
+$project_invoice_id = (int)($_POST['project_invoice_id'] ?? 0);
 $client_id_input = (int)($_POST['client_id'] ?? 0);
 $job_id_input = (int)($_POST['job_id'] ?? 0);
 $amount = (float)($_POST['amount'] ?? 0);
@@ -35,6 +38,10 @@ if (strtolower($method) === 'stripe') {
     header('Location: /?page=payments/payments-create&error=' . urlencode('Stripe payments must be tied to an invoice.'));
     exit;
   }
+  if ($payment_scope === 'project_invoice') {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('Use the project statement payment link to collect a Stripe payment.'));
+    exit;
+  }
   if ($invoice_id <= 0) {
     header('Location: /?page=payments/payments-create&error=Please%20select%20an%20invoice');
     exit;
@@ -49,6 +56,65 @@ if (strtolower($method) === 'stripe') {
 
 if ($amount <= 0) {
   header('Location: /?page=payments/payments-create&error=Invalid%20input');
+  exit;
+}
+
+if ($payment_scope === 'project_invoice') {
+  if ($project_invoice_id <= 0) {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('Select a project statement.'));
+    exit;
+  }
+  $projectStmt = $pdo->prepare(
+    'SELECT pi.project_id,pi.balance_due,pi.status,pi.finalized_at
+     FROM project_invoices pi WHERE pi.id=?'
+  );
+  $projectStmt->execute([$project_invoice_id]);
+  $projectInvoice = $projectStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+  $projectId = (int)($projectInvoice['project_id'] ?? 0);
+  require_record_ownership($pdo, 'projects', $projectId);
+  if (empty($projectInvoice['finalized_at']) || !in_array((string)($projectInvoice['status'] ?? ''), ['sent', 'unpaid', 'partial'], true)) {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('Finalize the project statement before recording payment.'));
+    exit;
+  }
+  if ($amount > (float)($projectInvoice['balance_due'] ?? 0) + 0.005) {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('Payment cannot exceed the project statement balance.'));
+    exit;
+  }
+  if (strtolower($method) === 'check' && $check_number === '') {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('Check number is required.'));
+    exit;
+  }
+  try {
+    invoice_expire_active_checkout($pdo, 'project_invoices', $project_invoice_id, $appConfig);
+    $projectPaymentId = project_invoice_record_manual_payment(
+      $pdo, $project_invoice_id, $amount, $method, $check_number, $notes, $payment_date
+    );
+    if ($projectPaymentId === null) {
+      throw new RuntimeException('Could not allocate the project statement payment.');
+    }
+  } catch (Throwable $e) {
+    @error_log('[PaymentsCreate] Project statement payment error: ' . $e->getMessage());
+    header('Location: /?page=payments/payments-create&error=' . urlencode($e->getMessage()));
+    exit;
+  }
+  try {
+    audit_log($pdo, 'payment.recorded', 'project_invoice', $project_invoice_id, [
+      'project_payment_id' => $projectPaymentId,
+      'amount' => $amount,
+      'method' => $method,
+    ]);
+  } catch (Throwable $auditError) {
+    @error_log('[PaymentsCreate] Project statement payment audit failed after commit: ' . $auditError->getMessage());
+  }
+  if ($send_receipt) {
+    try {
+      require_once __DIR__ . '/../utils/payment_receipts.php';
+      project_payment_receipt_email_issue($pdo, $projectPaymentId, $appConfig ?? []);
+    } catch (Throwable $receiptError) {
+      @error_log('[PaymentsCreate] Project statement receipt failed after commit: ' . $receiptError->getMessage());
+    }
+  }
+  header('Location: /?page=payments/payments-list&saved=1');
   exit;
 }
 

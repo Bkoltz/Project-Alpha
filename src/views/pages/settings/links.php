@@ -299,7 +299,7 @@ $managedDeliveryId = static function (): string {
 
     <!-- Provider Configurations -->
     <h3 style="margin:0 0 12px 0;font-size:16px">Standalone Storage Providers</h3>
-    <div class="pa-provider-note" style="margin-bottom:12px">These direct-storage adapters remain available for standalone installations. Connected installations normally use Managed Delivery above instead of placing storage credentials in Project Alpha.</div>
+    <div class="pa-provider-note" style="margin-bottom:12px">These generic direct-storage adapters remain available for standalone/open-source installations. Connected installations normally use Managed Delivery above instead of placing storage credentials in Project Alpha.</div>
     
     <?php foreach ($providers as $provider): 
         $config = $linkConfigs[$provider] ?? null;

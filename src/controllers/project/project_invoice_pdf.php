@@ -25,11 +25,17 @@ use Dompdf\Options;
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 
+$stmt = $pdo->prepare('SELECT project_id,doc_number,billing_period_end FROM project_invoices WHERE id=?');
+$stmt->execute([$id]);
+$projectInvoice = $stmt->fetch(PDO::FETCH_ASSOC);
+if (!$projectInvoice) { http_response_code(404); echo 'Project invoice not found'; exit; }
 if (!defined('PUBLIC_VIEW')) {
-    $stmt = $pdo->prepare('SELECT project_id FROM project_invoices WHERE id=?');
-    $stmt->execute([$id]);
-    require_record_ownership($pdo, 'projects', (int)($stmt->fetchColumn() ?: 0));
+    require_record_ownership($pdo, 'projects', (int)$projectInvoice['project_id']);
 }
+$statementDate = !empty($projectInvoice['billing_period_end'])
+    ? date('m/d/Y', strtotime((string)$projectInvoice['billing_period_end']))
+    : date('m/d/Y');
+$documentNumber = (int)($projectInvoice['doc_number'] ?? 0) ?: $id;
 
 ob_start();
 if (!defined('PDF_MODE')) { define('PDF_MODE', true); }
@@ -58,12 +64,12 @@ $dompdf->render();
 try {
     $canvas = $dompdf->getCanvas();
     $font = $dompdf->getFontMetrics()->getFont('Helvetica', 'normal');
-    $canvas->page_text(54, 22, date('m/d/Y'), $font, 10, [0,0,0]);
+    $canvas->page_text(54, 22, $statementDate, $font, 10, [0,0,0]);
     $canvas->page_text($canvas->get_width() - 140, 22, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 10, [0,0,0]);
     $canvas->page_text(54, $canvas->get_height() - 30, 'Powered by Project Alpha', $font, 10, [0,0,0]);
 } catch (Throwable $e) {}
 
-$filename = 'project-invoice_PI-' . $id . '.pdf';
+$filename = 'project-invoice_PI-' . $documentNumber . '.pdf';
 header('Content-Type: application/pdf');
 header('Content-Disposition: inline; filename="' . $filename . '"');
 $dompdf->stream($filename, ['Attachment' => false]);

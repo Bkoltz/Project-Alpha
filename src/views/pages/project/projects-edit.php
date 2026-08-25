@@ -124,10 +124,6 @@ if (project_invoice_table_has_column($pdo, 'project_invoice_recipients', 'recipi
         static fn($row) => (int)$row['id'],
         array_filter($savedProjectInvoiceRecipients, static fn($row) => !empty($row['id']))
     ));
-    $projectInvoiceManualEmails = array_values(array_map(
-        static fn($row) => (string)$row['manual_email'],
-        array_filter($savedProjectInvoiceRecipients, static fn($row) => !empty($row['manual_email']))
-    ));
     $useOrganizationInvoiceEmail = count(array_filter(
         $savedProjectInvoiceRecipients,
         static fn($row) => !empty($row['organization_id'])
@@ -137,7 +133,6 @@ if (project_invoice_table_has_column($pdo, 'project_invoice_recipients', 'recipi
         static fn($row) => (int)$row['id'],
         array_values(array_filter($projectClients, static fn($row) => !empty($row['send_project_invoices'])))
     );
-    $projectInvoiceManualEmails = [];
     $useOrganizationInvoiceEmail = false;
 }
 $selectedProjectInvoiceLinkClientIds = array_map(
@@ -305,12 +300,12 @@ $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?
 
       <section id="project-contacts" class="project-edit-section" data-project-settings-contact-manager>
         <h2>Contacts</h2>
-        <p>Project contacts control project access. Invoice recipients are a separate delivery list and may be any accessible saved client contact.</p>
+        <p>The primary billed contact is kept for invoice ownership and history. Delivery recipients are selected separately from saved contacts in this organization or its company email.</p>
         <input type="hidden" name="project_invoice_recipients_present" value="1">
         <script type="application/json" data-project-settings-clients><?php echo json_encode($projectSettingsClients, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?></script>
         <div class="project-info-box">Primary department contacts are marked when the current department has one saved on the organization.</div>
         <label class="project-field">
-          <span>Primary invoice receiver</span>
+          <span>Primary billed contact</span>
           <select name="client_id" data-project-primary-select></select>
           <small>This client appears as the primary billed contact for generated project invoices.</small>
         </label>
@@ -334,11 +329,6 @@ $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?
             <div data-picker-hidden></div>
           </div>
         </div>
-        <label class="project-field">
-          <span>Manual project invoice email recipients</span>
-          <input type="text" name="project_invoice_manual_emails" value="<?php echo htmlspecialchars(implode(', ', $projectInvoiceManualEmails), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" placeholder="billing@example.com, owner@example.com">
-          <small>Optional. Separate multiple addresses with commas. These addresses receive invoices without becoming clients or project contacts.</small>
-        </label>
         <?php $organizationGeneralEmail = trim((string)($project['organization_general_email'] ?? '')); ?>
         <label class="project-check" style="padding:10px;border:1px solid #dfe3e8;border-radius:8px;background:#fff">
           <input type="checkbox" name="project_invoice_use_organization_email" value="1" <?php echo $useOrganizationInvoiceEmail ? 'checked' : ''; ?> <?php echo filter_var($organizationGeneralEmail, FILTER_VALIDATE_EMAIL) ? '' : 'disabled'; ?>>

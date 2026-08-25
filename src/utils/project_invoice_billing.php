@@ -6,6 +6,7 @@ require_once __DIR__ . '/invoice_content_links.php';
 require_once __DIR__ . '/invoice_notifications.php';
 require_once __DIR__ . '/document_pdf.php';
 require_once __DIR__ . '/project_invoice_notifications.php';
+require_once __DIR__ . '/payment_methods.php';
 
 function project_invoice_table_has_column(PDO $pdo, string $table, string $column): bool
 {
@@ -167,6 +168,24 @@ function project_invoice_has_deliverable_recipient_config(
     return false;
 }
 
+function project_invoice_recipient_client_ids_in_scope(PDO $pdo, array $clientIds, ?int $organizationId): bool
+{
+    $clientIds = array_values(array_unique(array_filter(array_map('intval', $clientIds), static fn($id) => $id > 0)));
+    if (!$clientIds) {
+        return true;
+    }
+    $params = $clientIds;
+    $organizationFilter = '';
+    if (($organizationId ?? 0) > 0) {
+        $organizationFilter = ' AND organization_id = ?';
+        $params[] = $organizationId;
+    }
+    $placeholders = implode(',', array_fill(0, count($clientIds), '?'));
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM clients WHERE archived=0 AND id IN ({$placeholders}){$organizationFilter}");
+    $stmt->execute($params);
+    return (int)$stmt->fetchColumn() === count($clientIds);
+}
+
 function project_invoice_has_saved_deliverable_recipient(PDO $pdo, int $projectId): bool
 {
     foreach (project_invoice_saved_recipients($pdo, $projectId) as $recipient) {
@@ -229,6 +248,7 @@ function project_invoice_saved_recipients(PDO $pdo, int $projectId): array
          LEFT JOIN clients c ON c.id = pir.client_id AND c.archived = 0
          LEFT JOIN organizations o ON o.id = pir.organization_id
          WHERE pir.project_id = ?
+           AND (pir.client_id IS NOT NULL OR pir.organization_id IS NOT NULL)
          ORDER BY pir.sort_order ASC, pir.id ASC'
     );
     $stmt->execute([$projectId]);
@@ -492,7 +512,7 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
     }
 }
 
-function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appConfig, ?array $clientIds = null, bool $allowResend = false, ?array $recipientKeys = null): int
+function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appConfig, ?array $clientIds = null, bool $allowResend = false, ?array $recipientKeys = null, bool $manualIntent = false): int
 {
     $stmt = $pdo->prepare('SELECT status,finalized_at FROM project_invoices WHERE id=?');
     $stmt->execute([$projectInvoiceId]);
@@ -523,7 +543,7 @@ function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appC
         )->execute([$projectInvoiceId]);
     }
 
-    $notificationType = $allowResend ? 'manual' : 'on_generate';
+    $notificationType = ($allowResend || $manualIntent) ? 'manual' : 'on_generate';
     foreach ($recipients as $recipient) {
         $email = trim((string)($recipient['email'] ?? ''));
         $status = filter_var($email, FILTER_VALIDATE_EMAIL) ? 'pending' : 'suppressed';
@@ -543,20 +563,29 @@ function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appC
     }
     return $stats['sent'];
 }
-function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float $amount, string $method, string $reference = '', string $notes = '', ?int $projectPaymentId = null): bool
+function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float $amount, string $method, string $reference = '', string $notes = '', ?int $projectPaymentId = null, ?string $paymentDate = null): bool
 {
     if ($amount <= 0) {
         return false;
     }
+    $paymentDate = trim((string)$paymentDate);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $paymentDate)) {
+        $paymentDate = date('Y-m-d');
+    }
 
+    $ownsTransaction = !$pdo->inTransaction();
     try {
-        $pdo->beginTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
 
-        $parent = $pdo->prepare('SELECT * FROM project_invoices WHERE id=? AND status IN ("unpaid","partial","sent") FOR UPDATE');
+        $parent = $pdo->prepare('SELECT * FROM project_invoices WHERE id=? AND status IN ("unpaid","partial","sent","paid") FOR UPDATE');
         $parent->execute([$projectInvoiceId]);
         $pi = $parent->fetch(PDO::FETCH_ASSOC);
         if (!$pi) {
-            $pdo->rollBack();
+            if ($ownsTransaction) {
+                $pdo->rollBack();
+            }
             return false;
         }
 
@@ -564,7 +593,12 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
             $allocated = $pdo->prepare('SELECT COUNT(*) FROM payments WHERE project_invoice_payment_id=?');
             $allocated->execute([$projectPaymentId]);
             if ((int)$allocated->fetchColumn() > 0) {
-                $pdo->rollBack();
+                $pdo->prepare('UPDATE project_invoice_payments SET status="succeeded" WHERE id=?')
+                    ->execute([$projectPaymentId]);
+                project_invoice_refresh_status($pdo, $projectInvoiceId);
+                if ($ownsTransaction) {
+                    $pdo->commit();
+                }
                 return true;
             }
         }
@@ -591,14 +625,16 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
             $available += max(0.0, (float)$child['total'] - (float)$child['paid']);
         }
         if ($amount > $available + 0.005) {
-            $pdo->rollBack();
+            if ($ownsTransaction) {
+                $pdo->rollBack();
+            }
             return false;
         }
 
         $remaining = $amount;
         $pay = $pdo->prepare('
             INSERT INTO payments (client_id, invoice_id, project_invoice_payment_id, contract_id, organization_id, amount, payment_method, reference_number, notes, status, payment_date)
-            VALUES (?,?,?,?,?,?,?,?,?, "succeeded", CURDATE())
+            VALUES (?,?,?,?,?,?,?,?,?, "succeeded", ?)
         ');
         $updateInvoice = $pdo->prepare('UPDATE invoices SET status=?, amount_paid=?, balance_due=?, paid_at = IF(? = "paid", COALESCE(paid_at, NOW()), paid_at) WHERE id=?');
 
@@ -624,6 +660,7 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
                 $method ?: 'cash',
                 $reference ?: null,
                 $paymentNotes ?: null,
+                $paymentDate,
             ]);
 
             $newPaid = $childPaid + $apply;
@@ -635,14 +672,23 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
             $remaining -= $apply;
         }
 
-        $pdo->commit();
         project_invoice_refresh_status($pdo, $projectInvoiceId);
+        if ($projectPaymentId) {
+            $pdo->prepare('UPDATE project_invoice_payments SET status="succeeded" WHERE id=?')
+                ->execute([$projectPaymentId]);
+        }
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
         return true;
     } catch (Throwable $e) {
-        if ($pdo->inTransaction()) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
             $pdo->rollBack();
         }
         @error_log('[project_invoice_billing] payment allocation failed: ' . $e->getMessage());
+        if (!$ownsTransaction) {
+            throw $e;
+        }
         return false;
     }
 }
@@ -863,6 +909,59 @@ function project_invoice_generate_due_monthly_result(PDO $pdo, array $appConfig)
         }
     }
     return $stats;
+}
+
+function project_invoice_record_manual_payment(PDO $pdo, int $projectInvoiceId, float $amount, string $method, string $reference = '', string $notes = '', ?string $paymentDate = null): ?int
+{
+    $paymentDate = trim((string)$paymentDate);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $paymentDate)) {
+        $paymentDate = date('Y-m-d');
+    }
+    $method = project_invoice_payment_method_key($method);
+    $ownsTransaction = !$pdo->inTransaction();
+    try {
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+        $insert = $pdo->prepare(
+            'INSERT INTO project_invoice_payments
+             (project_invoice_id,amount,payment_method,status,payment_date)
+             VALUES (?,?,?,"processing",?)'
+        );
+        $insert->execute([$projectInvoiceId, $amount, $method, $paymentDate]);
+        $projectPaymentId = (int)$pdo->lastInsertId();
+        $ok = project_invoice_allocate_payment(
+            $pdo, $projectInvoiceId, $amount, $method, $reference, $notes, $projectPaymentId, $paymentDate
+        );
+        if (!$ok) {
+            if ($ownsTransaction) {
+                $pdo->rollBack();
+            }
+            return null;
+        }
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+        return $projectPaymentId;
+    } catch (Throwable $e) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        @error_log('[project_invoice_billing] manual project payment failed: ' . $e->getMessage());
+        return null;
+    }
+}
+
+function project_invoice_payment_method_key(string $method): string
+{
+    $method = pa_payment_method_key($method);
+    return match ($method) {
+        'cheque' => 'check',
+        'bank' => 'bank_transfer',
+        'credit_card' => 'card',
+        '' => 'other',
+        default => $method,
+    };
 }
 
 function project_invoice_generate_due_monthly(PDO $pdo, array $appConfig): int

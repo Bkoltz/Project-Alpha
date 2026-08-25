@@ -7,6 +7,7 @@ require_once dirname(__DIR__, 2) . '/src/utils/invoice_due_dates.php';
 require_once dirname(__DIR__, 2) . '/src/utils/invoice_notifications.php';
 require_once dirname(__DIR__, 2) . '/src/utils/recurring_billing.php';
 require_once dirname(__DIR__, 2) . '/src/utils/project_invoice_notifications.php';
+require_once dirname(__DIR__, 2) . '/src/utils/project_invoice_billing.php';
 
 use PHPUnit\Framework\TestCase;
 
@@ -304,6 +305,44 @@ final class InvoiceAutomationTest extends TestCase
         self::assertStringStartsWith('%PDF-', $delivered[0]['options']['attachments'][0]['content']);
         self::assertSame('project_invoice', $delivered[0]['options']['document_type']);
         self::assertStringStartsWith('project-invoice-notification:', $delivered[0]['options']['message_key']);
+    }
+
+    public function testExplicitEarlySendUsesSavedContactWhenMonthlyAutoEmailIsOff(): void
+    {
+        $recipientId = $this->client('early-project-send@example.invalid');
+        $orgId = $this->ids['organizations'][0];
+        $this->pdo->prepare(
+            'INSERT INTO projects (client_id,organization_id,name,status,invoice_billing_period,project_invoice_auto_email)
+             VALUES (?, ?, ?, "active", "monthly", 0)'
+        )->execute([$recipientId, $orgId, 'Early Send Project']);
+        $projectId = (int)$this->pdo->lastInsertId();
+        $this->ids['projects'][] = $projectId;
+        $this->pdo->prepare(
+            'INSERT INTO project_clients (project_id,client_id,is_primary_billing,send_project_invoices,sort_order)
+             VALUES (?,?,1,1,0)'
+        )->execute([$projectId, $recipientId]);
+        project_invoice_sync_recipients($this->pdo, $projectId, [$recipientId]);
+        $this->pdo->prepare(
+            'INSERT INTO project_invoices
+             (project_id,organization_id,primary_client_id,doc_number,status,billing_period_start,billing_period_end,
+              due_date,subtotal,total,amount_paid,balance_due,finalized_at,finalization_source)
+             VALUES (?,?,?,? ,"unpaid","2026-08-01","2026-08-15","2026-09-14",125,125,0,125,NOW(),"manual_send")'
+        )->execute([$projectId, $orgId, $recipientId, random_int(100000, 999999)]);
+        $projectInvoiceId = (int)$this->pdo->lastInsertId();
+        $this->ids['project_invoices'][] = $projectInvoiceId;
+
+        $saved = project_invoice_client_recipients($this->pdo, $projectInvoiceId);
+        self::assertCount(1, $saved);
+        project_invoice_notification_enqueue(
+            $this->pdo, $projectInvoiceId, 'manual', 'generated', (string)$saved[0]['email'], 'pending'
+        );
+        $sent = [];
+        $sender = static function (string $to) use (&$sent): array {
+            $sent[] = $to;
+            return [true, ''];
+        };
+        self::assertSame(1, project_invoice_notification_process($this->pdo, $this->config, $sender)['sent']);
+        self::assertSame(['early-project-send@example.invalid'], $sent);
     }
     public function testCanonicalTenantUrlAndDocumentPdfFailureBoundaries(): void
     {

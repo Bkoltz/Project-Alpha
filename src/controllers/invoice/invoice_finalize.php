@@ -14,13 +14,14 @@ if ($id <= 0) {
     exit;
 }
 require_record_ownership($pdo, 'invoices', $id);
-$invoiceStmt = $pdo->prepare('SELECT recipient_presentation_mode FROM invoices WHERE id=? LIMIT 1');
+$invoiceStmt = $pdo->prepare('SELECT recipient_presentation_mode, collection_mode FROM invoices WHERE id=? LIMIT 1');
 $invoiceStmt->execute([$id]);
 $invoice = $invoiceStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 $isGeneralRecipientInvoice = pa_invoice_is_general_recipient($invoice);
+$isProjectAggregateInvoice = ($invoice['collection_mode'] ?? 'direct') === 'project_aggregate';
 
 try {
-    if (!$isGeneralRecipientInvoice && invoice_should_prompt_for_missing_content_links($pdo, 'invoice', $id, $appConfig)) {
+    if (!$isGeneralRecipientInvoice && !$isProjectAggregateInvoice && invoice_should_prompt_for_missing_content_links($pdo, 'invoice', $id, $appConfig)) {
         $missingLinkBehavior = invoice_missing_content_links_behavior($appConfig);
         if ($missingLinkBehavior === 'block') {
             header('Location: /?page=invoice/invoice-details&id=' . $id . '&email_err=' . urlencode(invoice_missing_content_links_message()));
@@ -37,6 +38,10 @@ try {
         audit_log($pdo, 'invoice.finalize_with_manual_link', 'invoice', $id, ['user_id' => $userId, 'existing_link' => $link['existing']]);
         $_SESSION['flash_general_recipient_link'] = ['invoice_id' => $id, 'token' => $link['token']];
         $message = '&finalized=1';
+    } elseif ($isProjectAggregateInvoice) {
+        invoice_finalize($pdo, $id, $appConfig, 'manual_project_billing_finalize', $userId);
+        audit_log($pdo, 'invoice.finalize', 'invoice', $id, ['sent' => false, 'project_billing' => true, 'user_id' => $userId]);
+        $message = '&finalized=1&project_billing=1';
     } else {
         invoice_finalize($pdo, $id, $appConfig, 'manual_finalize', $userId);
         $sent = invoice_send_finalized($pdo, $id, $appConfig, 'manual_finalize_' . date('YmdHis'));
