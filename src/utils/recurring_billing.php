@@ -6,6 +6,25 @@ require_once __DIR__ . '/recurring_services.php';
 require_once __DIR__ . '/invoice_lifecycle.php';
 require_once __DIR__ . '/project_billing.php';
 require_once __DIR__ . '/invoice_notifications.php';
+require_once __DIR__ . '/document_pricing_adjustments.php';
+require_once __DIR__ . '/../services/DocumentRevisionService.php';
+
+function pa_recurring_money_to_minor(string $amount): int
+{
+    return pricing_money_to_minor($amount);
+}
+function pa_recurring_minor_to_money(int $minor): string
+{
+    if($minor<0)throw new DomainException('Recurring money value cannot be negative.');
+    return pricing_minor_to_money($minor);
+}
+function pa_recurring_fixed_installment_minor(string $total,string $depositPaid,string $totalInvoiced,int $invoiceCount,int $generated): int
+{
+    $count=max(1,$invoiceCount);$slots=$count-$generated;
+    $remaining=max(0,pa_recurring_money_to_minor($total)-pa_recurring_money_to_minor($depositPaid)-pa_recurring_money_to_minor($totalInvoiced));
+    if($generated<0||$slots<=0)return 0;
+    return intdiv($remaining,$slots)+(($remaining%$slots)>0?1:0);
+}
 
 function recurring_invoice_send_on_generate_if_enabled(PDO $pdo, ?int $invoiceId, array $appConfig): bool
 {
@@ -87,12 +106,9 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             // Fixed total - divide total by invoice_count
             $invoiceCount = (int)($contract['invoice_count'] ?? 1);
             $contractInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
-            $contractTotal = (float)$contract['total'];
-            $depositPaid = (float)$contract['deposit_paid'];
-
-            // Calculate amount to invoice: (total - deposit) / invoice_count
-            $amountToInvoice = ($contractTotal - $depositPaid) / $invoiceCount;
-            $subtotal = $amountToInvoice;
+            $subtotal = pa_recurring_minor_to_money(pa_recurring_fixed_installment_minor(
+                (string)$contract['total'],(string)($contract['deposit_paid']??'0'),(string)($contract['total_invoiced']??'0'),$invoiceCount,$contractInvoicesGenerated
+            ));
 
             // Load items for display (will be shown proportionally)
             $itemsQuery = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
@@ -104,6 +120,9 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
         $discountType = $contract['discount_type'] ?? 'none';
         $discountValue = (float)($contract['discount_value'] ?? 0);
         $taxPercent = (float)$contract['tax_percent'];
+        if($contract['pricing_type']==='fixed_total'){
+            $discountType='none';$discountValue=0.0;$taxPercent=0.0;
+        }
 
         // For fixed_total, discount and tax are already calculated in the contract total
         // For per_invoice, apply them per invoice
@@ -165,7 +184,7 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             $documentDate,
             $discountType,
             $discountValue,
-            $contract['tax_percent'],
+            $taxPercent,
             $subtotal,
             $total,
             $total,
@@ -214,36 +233,29 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
                 $itemInsert->execute([$invoiceId, 'Recurring service', $description, 1, $subtotal, $subtotal]);
             }
         } elseif ($contract['pricing_type'] === 'fixed_total') {
-            // For fixed_total, show items proportionally divided
+            // The installment allocates the already-priced final contract total.
+            // A single exact line avoids presenting pre-discount contract items as
+            // though they reconcile to this post-tax installment amount.
             $invoiceCount = (int)($contract['invoice_count'] ?? 1);
             $contractInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
             $invoiceNum = $contractInvoicesGenerated + 1;
-
-            // Calculate proportion for this invoice
-            foreach ($items as $item) {
-                $proportionalQty = (float)$item['quantity'] / $invoiceCount;
-                $proportionalTotal = (float)$item['line_total'] / $invoiceCount;
-
-                $description = $item['description'] . ' (Payment ' . $invoiceNum . ' of ' . $invoiceCount . ')';
-
-                $pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-                    ->execute([
-                        $invoiceId,
-                        $item['item_library_id'] ?? null,
-                        $item['item'] ?? null,
-                        $description,
-                        $proportionalQty,
-                        $item['unit_price'],
-                        $proportionalTotal,
-                        $item['billing_unit'] ?? 'each',
-                        (int)($item['is_travel'] ?? 0),
-                        $item['pricing_status'] ?? 'standard',
-                        $item['catalog_snapshot'] ?? null,
-                    ]);
-            }
+            $description='Payment '.$invoiceNum.' of '.$invoiceCount.' under contract '.($contract['doc_number']??$contractId);
+            $pdo->prepare('INSERT INTO invoice_items (invoice_id,item,description,quantity,unit_price,line_total,billing_unit,pricing_status) VALUES (?,"Contract installment",?,1,?,?,"each","standard")')
+                ->execute([$invoiceId,$description,$subtotal,$subtotal]);
         }
 
-        $newTotalInvoiced = (float)$contract['total_invoiced'] + $total;
+        if($contract['pricing_type']==='per_invoice'){
+            pricing_finalize_derived_document_revision(
+                $pdo,$organizationId,'invoice',$invoiceId,$createdBy,(string)($appConfig['workforce_currency']??'USD'),
+                'contract',(int)$contractId,pricing_contract_source_revision($contract)
+            );
+            $finalTotal=$pdo->prepare('SELECT total FROM invoices WHERE id=?');$finalTotal->execute([$invoiceId]);$totalMoney=(string)$finalTotal->fetchColumn();$total=(float)$totalMoney;
+        }else{
+            DocumentRevisionService::snapshotAndSave($pdo,'invoice',$invoiceId,$createdBy,false);
+            $totalMoney=(string)$subtotal;
+        }
+
+        $newTotalInvoiced = pa_recurring_minor_to_money(pa_recurring_money_to_minor((string)($contract['total_invoiced']??'0'))+pa_recurring_money_to_minor($totalMoney));
         $newInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0) + 1;
 
         if ($usesServiceSchedules) {
@@ -318,7 +330,8 @@ function generate_recurring_proration_invoice(
     int $serviceId,
     float $subtotal,
     string $description,
-    array $appConfig
+    array $appConfig,
+    ?string $generationKey=null
 ): ?int {
     if ($subtotal <= 0) {
         return null;
@@ -340,6 +353,7 @@ function generate_recurring_proration_invoice(
         if (!$contract) {
             throw new RuntimeException('Recurring service not found for proration.');
         }
+        if($generationKey!==null){$existing=$pdo->prepare('SELECT id FROM invoices WHERE contract_id=? AND generation_key=? LIMIT 1');$existing->execute([$contractId,$generationKey]);$existingId=(int)$existing->fetchColumn();if($existingId>0){if($ownsTransaction)$pdo->commit();return$existingId;}}
 
         $discount = 0.0;
         if (($contract['discount_type'] ?? 'none') === 'percent') {
@@ -356,8 +370,8 @@ function generate_recurring_proration_invoice(
             INSERT INTO invoices
                 (contract_id,quote_id,client_id,project_id,job_id,service_location_id,project_code,organization_id,show_contact_on_document,created_by,invoice_type,
                  discount_type,discount_value,tax_percent,subtotal,total,balance_due,status,due_date,
-                 finalized_at,finalization_source,generated_at,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),"amendment_proration",NOW(),NOW())
+                 finalized_at,finalization_source,generated_at,created_at,generation_key)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),"amendment_proration",NOW(),NOW(),?)
         ');
         $insert->execute([
             $contractId,
@@ -379,6 +393,7 @@ function generate_recurring_proration_invoice(
             $total,
             'unpaid',
             $dueDate,
+            $generationKey,
         ]);
         $invoiceId = (int)$pdo->lastInsertId();
         $docNumber = pa_next_invoice_doc_number($pdo, 'long_term');
@@ -395,8 +410,16 @@ function generate_recurring_proration_invoice(
             }
         }
 
-        $pdo->prepare('UPDATE contracts SET total_invoiced=total_invoiced+?,invoices_generated=invoices_generated+1,last_invoice_date=? WHERE id=?')
-            ->execute([$total, date('Y-m-d'), $contractId]);
+        pricing_finalize_derived_document_revision(
+            $pdo,!empty($contract['organization_id'])?(int)$contract['organization_id']:null,'invoice',$invoiceId,
+            !empty($contract['created_by'])?(int)$contract['created_by']:null,(string)($appConfig['workforce_currency']??'USD'),
+            'contract',$contractId,pricing_contract_source_revision($contract)
+        );
+        $finalTotal=$pdo->prepare('SELECT total FROM invoices WHERE id=?');$finalTotal->execute([$invoiceId]);$totalMoney=(string)$finalTotal->fetchColumn();$total=(float)$totalMoney;
+
+        $newTotalInvoiced=pricing_minor_to_money(pricing_money_to_minor((string)($contract['total_invoiced']??'0'))+pricing_money_to_minor($totalMoney));
+        $pdo->prepare('UPDATE contracts SET total_invoiced=?,invoices_generated=invoices_generated+1,last_invoice_date=? WHERE id=?')
+            ->execute([$newTotalInvoiced, date('Y-m-d'), $contractId]);
         if ($ownsTransaction) {
             $pdo->commit();
         }

@@ -48,6 +48,8 @@ test('inline settings scripts are not converted to CSP-blocked blob URLs', async
 
 test('settings refresh layout and repeated-script guards remain present', () => {
   const css = fs.readFileSync(path.join(root, 'public/assets/settings.css'), 'utf8');
+  const settingsScript = fs.readFileSync(path.join(root, 'public/assets/js/settings-page.js'), 'utf8');
+  const settingsSidebar = fs.readFileSync(path.join(root, 'src/views/pages/settings/sidebar.php'), 'utf8');
   const itemLibrary = fs.readFileSync(path.join(root, 'src/views/pages/settings/item-library.php'), 'utf8');
   const documents = fs.readFileSync(path.join(root, 'src/views/pages/settings/documents.php'), 'utf8');
   const links = fs.readFileSync(path.join(root, 'src/views/pages/settings/links.php'), 'utf8');
@@ -57,6 +59,11 @@ test('settings refresh layout and repeated-script guards remain present', () => 
   assert.match(css, /\.settings-page \[hidden\]\s*\{\s*display:\s*none\s*!important;/s);
   assert.match(css, /\.settings-content fieldset\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?min-width:\s*0;/);
   assert.match(css, /\.settings-tab-list\s*\{[\s\S]*?overflow-x:\s*auto;/);
+  assert.match(settingsSidebar, /data-settings-nav-disclosure open/);
+  assert.match(settingsSidebar, /class="settings-nav-toggle"/);
+  assert.match(css, /@media \(max-width: 800px\)[\s\S]*?\.settings-nav-toggle\s*\{[\s\S]*?display:\s*grid;/);
+  assert.match(settingsScript, /window\.matchMedia\('\(max-width: 800px\)'\)/);
+  assert.match(settingsScript, /navigationDisclosure\.open = !compactNavigation\.matches/);
   assert.match(documents, /class="settings-tab-list"/);
   assert.match(links, /repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(customization, /var draggedElement = null;/);

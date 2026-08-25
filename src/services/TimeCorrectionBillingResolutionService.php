@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+require_once __DIR__ . '/../utils/document_pricing_carry_forward.php';
+
 use DomainException;
 use PDO;
 use Throwable;
@@ -56,7 +58,7 @@ final class TimeCorrectionBillingResolutionService
             if (!$source || (string)$source['status'] === 'draft' || $source['finalized_at'] === null) {
                 throw new DomainException('The original finalized invoice is unavailable.');
             }
-            $delta = round((float)$effect['billing_amount_delta'], 2);
+            $deltaMinor = $this->signedMoneyToMinor((string)$effect['billing_amount_delta']);
             $adjustmentId = null;
             $creditId = null;
             $targetInvoiceId = null;
@@ -64,18 +66,56 @@ final class TimeCorrectionBillingResolutionService
             if ($decision === 'move_to_draft') {
                 $target = $this->draftInvoice($targetDraftInvoiceId, (int)$source['client_id'], $source['organization_id']);
                 $targetInvoiceId = (int)$target['id'];
-                $adjustmentId = $this->recordInvoiceAdjustment($target, $delta, $reason, $actorId);
-                $this->applyInvoiceDelta($target, $delta);
-            } elseif ($decision === 'invoice_adjustment') {
-                $adjustmentId = $this->recordInvoiceAdjustment($source, $delta, $reason, $actorId);
-                $newTotal = max(0.0, (float)$source['total'] + $delta);
-                $excessPaid = $delta < 0 ? max(0.0, (float)$source['amount_paid'] - $newTotal) : 0.0;
-                $this->applyInvoiceDelta($source, $delta);
-                if ($excessPaid >= 0.005) {
-                    $creditId = (new ClientCreditLedgerService($this->pdo))->issueFromInvoice(
-                        (int)$source['id'], number_format($excessPaid, 2, '.', ''), (string)$effect['currency'], $reason, $actorId
+                if (\pricing_invoice_is_fixed_total_installment($this->pdo, $targetInvoiceId)) {
+                    throw new DomainException('Fixed-total installment invoices are immutable. Amend and reallocate the contract instead.');
+                }
+                $adjustmentId = $this->recordInvoiceAdjustment($target, $deltaMinor, $reason, $actorId);
+                if ($this->pricingEligible($target)) {
+                    \pricing_finalize_frozen_document_revision(
+                        $this->pdo,
+                        (int)$target['organization_id'],
+                        'invoice',
+                        $targetInvoiceId,
+                        $actorId,
+                        (string)$effect['currency'],
+                    );
+                } else {
+                    $this->applyInvoiceDelta($target, $deltaMinor);
+                    \pricing_carry_forward_document_revision(
+                        $this->pdo,
+                        $target['organization_id'] === null ? null : (int)$target['organization_id'],
+                        'invoice',
+                        $targetInvoiceId,
+                        $actorId,
                     );
                 }
+            } elseif ($decision === 'invoice_adjustment') {
+                if (\pricing_invoice_is_fixed_total_installment($this->pdo, (int)$source['id'])) {
+                    throw new DomainException('Fixed-total installment invoices are immutable. Amend and reallocate the contract instead.');
+                }
+                $newTotalMinor = max(0, \pricing_money_to_minor((string)$source['total']) + $deltaMinor);
+                $paidMinor = \pricing_money_to_minor((string)$source['amount_paid']);
+                $creditAppliedMinor = \pricing_money_to_minor((string)($source['credit_applied'] ?? '0'));
+                if ($creditAppliedMinor > max(0, $newTotalMinor - $paidMinor)) {
+                    throw new DomainException('This correction would over-apply client credit. Reverse or reallocate that credit before adjusting the invoice.');
+                }
+                $adjustmentId = $this->recordInvoiceAdjustment($source, $deltaMinor, $reason, $actorId);
+                $excessPaidMinor = $deltaMinor < 0
+                    ? max(0, $paidMinor - $newTotalMinor)
+                    : 0;
+                $this->applyInvoiceDelta($source, $deltaMinor);
+                if ($excessPaidMinor > 0) {
+                    $creditId = (new ClientCreditLedgerService($this->pdo))->issueFromInvoice(
+                        (int)$source['id'], \pricing_minor_to_money($excessPaidMinor), (string)$effect['currency'], $reason, $actorId
+                    );
+                }
+                \pricing_carry_forward_document_revision(
+                    $this->pdo,
+                    $source['organization_id'] === null ? null : (int)$source['organization_id'],
+                    'invoice',
+                    (int)$source['id'],
+                    $actorId,
+                );
             }
 
             $this->pdo->prepare(
@@ -84,7 +124,7 @@ final class TimeCorrectionBillingResolutionService
                  VALUES (?,?,?,?,?,?,?,?,?)'
             )->execute([
                 $effect['id'], $decision, $source['id'], $targetInvoiceId, $adjustmentId, $creditId,
-                number_format($delta, 2, '.', ''), trim($reason), $actorId,
+                $this->signedMinorToMoney($deltaMinor), trim($reason), $actorId,
             ]);
             return [
                 'id' => (int)$this->pdo->lastInsertId(),
@@ -112,29 +152,65 @@ final class TimeCorrectionBillingResolutionService
     }
 
     /** @param array<string,mixed> $invoice */
-    private function recordInvoiceAdjustment(array $invoice, float $signedDelta, string $reason, int $actorId): int
+    private function recordInvoiceAdjustment(array $invoice, int $signedDeltaMinor, string $reason, int $actorId): int
     {
         $revision = max(1, (int)($invoice['revision_number'] ?? 1)) + 1;
+        $absoluteAmount = \pricing_minor_to_money(abs($signedDeltaMinor));
         $this->pdo->prepare(
             'INSERT INTO invoice_adjustments
-             (invoice_id,adjustment_type,label,description,quantity,unit_price,amount,revision_number,created_by)
-             VALUES (?,?,?,?,1,?,?,?,?)'
+             (invoice_id,adjustment_type,label,description,quantity,unit_price,amount,affects_total,revision_number,created_by)
+             VALUES (?,?,?,?,1,?,?,1,?,?)'
         )->execute([
-            $invoice['id'], $signedDelta < 0 ? 'credit' : 'charge', 'Time correction', trim($reason),
-            number_format(abs($signedDelta), 2, '.', ''), number_format(abs($signedDelta), 2, '.', ''), $revision, $actorId,
+            $invoice['id'], $signedDeltaMinor < 0 ? 'credit' : 'charge', 'Time correction', trim($reason),
+            $absoluteAmount, $absoluteAmount, $revision, $actorId,
         ]);
         return (int)$this->pdo->lastInsertId();
     }
 
     /** @param array<string,mixed> $invoice */
-    private function applyInvoiceDelta(array $invoice, float $delta): void
+    private function applyInvoiceDelta(array $invoice, int $deltaMinor): void
     {
-        $total = max(0.0, (float)$invoice['total'] + $delta);
-        $balance = max(0.0, $total - (float)$invoice['amount_paid']);
-        $status = $balance <= 0.005 ? 'paid' : ((float)$invoice['amount_paid'] > 0 ? 'partial' : ((string)$invoice['status'] === 'draft' ? 'draft' : 'unpaid'));
+        $currentTotalMinor = \pricing_money_to_minor((string)$invoice['total']);
+        if ($deltaMinor > 0 && $currentTotalMinor > PHP_INT_MAX - $deltaMinor) {
+            throw new DomainException('The corrected invoice total exceeds the supported range.');
+        }
+        $totalMinor = max(0, $currentTotalMinor + $deltaMinor);
+        $paidMinor = \pricing_money_to_minor((string)($invoice['amount_paid'] ?? '0'));
+        $creditMinor = \pricing_money_to_minor((string)($invoice['credit_applied'] ?? '0'));
+        $balanceMinor = max(0, $totalMinor - $paidMinor - $creditMinor);
+        $status = match (true) {
+            $paidMinor >= $totalMinor => 'paid',
+            $balanceMinor === 0 => 'credited',
+            $paidMinor > 0 || $creditMinor > 0 => 'partial',
+            (string)$invoice['status'] === 'draft' => 'draft',
+            default => 'unpaid',
+        };
         $this->pdo->prepare(
-            'UPDATE invoices SET total=?,balance_due=?,status=?,revision_number=revision_number+1,revision_updated_at=UTC_TIMESTAMP(6) WHERE id=?'
-        )->execute([number_format($total, 2, '.', ''), number_format($balance, 2, '.', ''), $status, $invoice['id']]);
+            'UPDATE invoices SET total=?,balance_due=?,status=? WHERE id=?'
+        )->execute([\pricing_minor_to_money($totalMinor), \pricing_minor_to_money($balanceMinor), $status, $invoice['id']]);
+    }
+
+    /** @param array<string,mixed> $invoice */
+    private function pricingEligible(array $invoice): bool
+    {
+        return \pricing_adjustments_enabled($this->pdo)
+            && (int)($invoice['organization_id'] ?? 0) > 0
+            && (int)($invoice['project_id'] ?? 0) > 0;
+    }
+
+    private function signedMoneyToMinor(string $amount): int
+    {
+        $amount = trim($amount);
+        if (!preg_match('/^([+-]?)(\d{1,16})(?:\.(\d{1,2}))?$/D', $amount, $match)) {
+            throw new DomainException('The correction billing amount is invalid.');
+        }
+        $minor = ((int)$match[2] * 100) + (int)str_pad($match[3] ?? '', 2, '0');
+        return ($match[1] ?? '') === '-' ? -$minor : $minor;
+    }
+
+    private function signedMinorToMoney(int $minor): string
+    {
+        return ($minor < 0 ? '-' : '') . \pricing_minor_to_money(abs($minor));
     }
 
     private function canManage(int $userId): bool

@@ -11,6 +11,8 @@ use DomainException;
 use PDO;
 use Throwable;
 
+require_once __DIR__ . '/../utils/document_pricing_carry_forward.php';
+
 /**
  * Attaches confirmed Workforce time to an existing invoice without rewriting
  * the immutable approval snapshot. The live time entry receives the invoice's
@@ -109,6 +111,9 @@ final class WorkTimeInvoiceLinkService
             if (!$invoice) {
                 throw new DomainException('Choose a mutable draft invoice.');
             }
+            if (\pricing_invoice_is_fixed_total_installment($this->pdo, $invoiceId)) {
+                throw new DomainException('A fixed-total contract installment cannot accept tracked-time charges. Amend the contract allocation instead.');
+            }
             \DocumentPolicy::assertMutable($this->pdo, 'invoice', $invoiceId, 'monetary_adjustment');
             WorkTimeInvoiceEligibilityService::assertCompatibleDestination($entry, $invoice);
 
@@ -206,24 +211,15 @@ final class WorkTimeInvoiceLinkService
                 'SELECT COALESCE(SUM(line_total),0) FROM invoice_items WHERE invoice_id=' . $invoiceId
                 . " AND COALESCE(pricing_status,'standard')='standard'"
             )->fetchColumn();
-            $discount = match ((string)($invoice['discount_type'] ?? 'none')) {
-                'percent' => max(0.0, min(100.0, (float)$invoice['discount_value'])) * $subtotal / 100,
-                'fixed' => min($subtotal, max(0.0, (float)$invoice['discount_value'])),
-                default => 0.0,
-            };
-            $tax = max(0.0, (float)($invoice['tax_percent'] ?? 0)) * max(0.0, $subtotal - $discount) / 100;
-            $total = max(0.0, $subtotal - $discount + $tax);
             $this->pdo->prepare(
-                'UPDATE invoices
-                 SET subtotal=?,tax_amount=?,total=?,balance_due=GREATEST(0,?-COALESCE(amount_paid,0))
-                 WHERE id=?'
-            )->execute([$subtotal, $tax, $total, $total, $invoiceId]);
+                'UPDATE invoices SET subtotal=? WHERE id=?'
+            )->execute([number_format($subtotal, 2, '.', ''), $invoiceId]);
 
             $nextRevision = max(1, (int)($invoice['revision_number'] ?? 1)) + 1;
             $this->pdo->prepare(
                 'INSERT INTO invoice_adjustments
-                 (invoice_id,adjustment_type,label,description,quantity,unit_price,amount,revision_number,created_by)
-                 VALUES (?,\'charge\',\'Tracked time\',?,?,?,?,?,?)'
+                 (invoice_id,adjustment_type,label,description,quantity,unit_price,amount,affects_total,revision_number,created_by)
+                 VALUES (?,\'charge\',\'Tracked time\',?,?,?,?,0,?,?)'
             )->execute([
                 $invoiceId,
                 $this->formatTimeToken((string)$entry['start_time'], (int)$entry['duration_seconds']),
@@ -233,10 +229,34 @@ final class WorkTimeInvoiceLinkService
                 $nextRevision,
                 $actorId,
             ]);
+            $pricingEligible = \pricing_adjustments_enabled($this->pdo)
+                && (int)($invoice['organization_id'] ?? 0) > 0
+                && (int)($invoice['project_id'] ?? 0) > 0;
+            if ($pricingEligible) {
+                \pricing_finalize_frozen_document_revision(
+                    $this->pdo,
+                    (int)$invoice['organization_id'],
+                    'invoice',
+                    $invoiceId,
+                    $actorId,
+                    strtoupper((string)($entry['snapshot_currency'] ?? 'USD'))
+                );
+            } else {
+                $discount = match ((string)($invoice['discount_type'] ?? 'none')) {
+                    'percent' => max(0.0, min(100.0, (float)$invoice['discount_value'])) * $subtotal / 100,
+                    'fixed' => min($subtotal, max(0.0, (float)$invoice['discount_value'])),
+                    default => 0.0,
+                };
+                $tax = max(0.0, (float)($invoice['tax_percent'] ?? 0)) * max(0.0, $subtotal - $discount) / 100;
+                $total = max(0.0, $subtotal - $discount + $tax);
+                $this->pdo->prepare(
+                    'UPDATE invoices SET tax_amount=?,total=?,balance_due=GREATEST(0,?-COALESCE(amount_paid,0)) WHERE id=?'
+                )->execute([$tax, $total, $total, $invoiceId]);
+                \DocumentRevisionService::snapshotAndSave($this->pdo, 'invoice', $invoiceId, $actorId);
+            }
             if (!empty($invoice['finalized_at']) || \invoice_effective_paid_total($this->pdo, $invoiceId) > 0.005) {
                 \invoice_refresh_payment_totals($this->pdo, $invoiceId, false);
             }
-            \DocumentRevisionService::snapshotAndSave($this->pdo, 'invoice', $invoiceId, $actorId);
             if (strtolower((string)$invoice['status']) !== 'draft') {
                 $this->pdo->prepare(
                     'UPDATE public_links SET revoked=1 WHERE document_type=\'invoice\' AND document_id=?'

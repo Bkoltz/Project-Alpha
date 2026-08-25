@@ -59,9 +59,58 @@ final class PortalAuthorityService
     public function createPrincipal(PDO $pdo,string $email,string $displayName,int $actorId):int
     {
         $email=strtolower(trim($email));if(!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>254)throw new DomainException('A valid portal email is required.');$displayName=trim($displayName);if($displayName===''||mb_strlen($displayName)>150)throw new DomainException('A manager display name is required.');
-        $existing=$pdo->prepare('SELECT id FROM portal_principals WHERE email_hint=?');$existing->execute([$email]);$id=$existing->fetchColumn();
-        if($id){$pdo->prepare('UPDATE portal_principals SET display_name=?,source_version=?,enabled=1,revoked_at=NULL,updated_by=? WHERE id=?')->execute([$displayName,self::version(),$actorId,$id]);return(int)$id;}
         $pdo->prepare('INSERT INTO portal_principals (email_hint,display_name,source_version,enabled,activated_at,created_by,updated_by) VALUES (?,?,?,1,CURRENT_TIMESTAMP,?,?)')->execute([$email,$displayName,self::version(),$actorId,$actorId]);return(int)$pdo->lastInsertId();
+    }
+
+    /**
+     * Save the provider-neutral client identity intent and queue its authoritative
+     * workspace projection in the same transaction. Email is a notification hint,
+     * never an identity key or an implicit grant.
+     *
+     * @param list<int> $clientIds
+     */
+    public function savePrincipalAccess(PDO $pdo,int $profileId,string $workspaceId,?int $principalId,string $email,string $displayName,array $clientIds,int $actorId):int
+    {
+        $this->profileRequired($pdo,$profileId);
+        $workspace=(new PortalWorkspaceAuthorizationService())->requireWorkspace($pdo,$profileId,$workspaceId);
+        $clientIds=array_values(array_unique(array_filter(array_map('intval',$clientIds),static fn(int$id):bool=>$id>0)));
+        $owns=!$pdo->inTransaction();
+        try{
+            if($owns)$pdo->beginTransaction();
+            $affected=$principalId!==null?$this->affectedPrincipalWorkspaces($pdo,$principalId,$workspaceId):[$workspaceId];
+            if($principalId!==null){
+                $this->principalRequired($pdo,$principalId);
+                $email=strtolower(trim($email));
+                if(!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>254)throw new DomainException('A valid portal email hint is required.');
+                $displayName=trim($displayName);
+                if($displayName===''||mb_strlen($displayName)>150)throw new DomainException('A portal display name is required.');
+                $pdo->prepare('UPDATE portal_principals SET email_hint=?,display_name=?,source_version=?,authorization_version=authorization_version+1,enabled=1,revoked_at=NULL,updated_by=? WHERE id=?')->execute([$email,$displayName,self::version(),$actorId,$principalId]);
+            }else{$principalId=$this->createPrincipal($pdo,$email,$displayName,$actorId);}
+            $this->replacePrincipalClientsForWorkspace($pdo,$principalId,$clientIds,$workspace,$actorId);
+            $affected=array_values(array_unique(array_merge($affected,$this->affectedPrincipalWorkspaces($pdo,$principalId,$workspaceId))));
+            $this->audit($pdo,$profileId,null,'portal.principal.saved','principal',$this->principalPublicId($pdo,$principalId),['actor_id'=>$actorId,'client_count'=>count($clientIds),'identity_binding'=>'receiver_verified']);
+            foreach($affected as$affectedWorkspace)$this->queueEveryEnabledProfile($pdo,$affectedWorkspace);
+            if($owns)$pdo->commit();
+            return$principalId;
+        }catch(Throwable$e){if($owns&&$pdo->inTransaction())$pdo->rollBack();throw$e;}
+    }
+
+    public function revokePrincipalAccess(PDO $pdo,int $profileId,string $workspaceId,int $principalId,int $actorId):void
+    {
+        $this->profileRequired($pdo,$profileId);(new PortalWorkspaceAuthorizationService())->requireWorkspace($pdo,$profileId,$workspaceId);$this->principalRequired($pdo,$principalId);
+        $owns=!$pdo->inTransaction();try{if($owns)$pdo->beginTransaction();$affected=$this->affectedPrincipalWorkspaces($pdo,$principalId,$workspaceId);
+            $pdo->prepare('UPDATE portal_principals SET enabled=0,revoked_at=CURRENT_TIMESTAMP,source_version=?,authorization_version=authorization_version+1,updated_by=? WHERE id=?')->execute([self::version(),$actorId,$principalId]);
+            $pdo->prepare('UPDATE portal_identity_bindings SET enabled=0,revoked_at=CURRENT_TIMESTAMP,updated_by=? WHERE portal_principal_id=?')->execute([$actorId,$principalId]);
+            $pdo->prepare('UPDATE portal_v2_entitlements SET active=0,source_version=?,updated_by=? WHERE portal_principal_id=?')->execute([self::version(),$actorId,$principalId]);
+            $this->audit($pdo,$profileId,null,'portal.principal.revoked','principal',$this->principalPublicId($pdo,$principalId),['actor_id'=>$actorId]);foreach($affected as$affectedWorkspace)$this->queueEveryEnabledProfile($pdo,$affectedWorkspace);if($owns)$pdo->commit();
+        }catch(Throwable$e){if($owns&&$pdo->inTransaction())$pdo->rollBack();throw$e;}
+    }
+
+    public function saveScopedEntitlement(PDO $pdo,int $profileId,string $workspaceId,int $principalId,string $capability,string $scopeType,string $scopePublicId,string $effect,bool $active,int $actorId):void
+    {
+        $capabilities=['workspace.view','directory.read','request.create','delivery.view','delegated_share.create'];if(!in_array($capability,$capabilities,true))throw new DomainException('Client portal capability is invalid.');if(!in_array($effect,['allow','deny'],true))throw new DomainException('Entitlement effect is invalid.');
+        $this->profileRequired($pdo,$profileId);(new PortalWorkspaceAuthorizationService())->requireWorkspace($pdo,$profileId,$workspaceId);$this->assertScopeInWorkspace($pdo,$workspaceId,$scopeType,$scopePublicId);$this->principalRequired($pdo,$principalId);
+        $owns=!$pdo->inTransaction();try{if($owns)$pdo->beginTransaction();$existing=$pdo->prepare('SELECT id FROM portal_v2_entitlements WHERE portal_principal_id=? AND capability=? AND effect=? AND scope_type=? AND scope_public_id=?');$existing->execute([$principalId,$capability,$effect,$scopeType,$scopePublicId]);$id=$existing->fetchColumn();if($id)$pdo->prepare('UPDATE portal_v2_entitlements SET active=?,source_version=?,valid_from=CURRENT_TIMESTAMP,expires_at=NULL,updated_by=? WHERE id=?')->execute([$active?1:0,self::version(),$actorId,(int)$id]);elseif($active)$pdo->prepare('INSERT INTO portal_v2_entitlements (public_id,portal_principal_id,capability,effect,scope_type,scope_public_id,source_version,active,valid_from,created_by,updated_by) VALUES (?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,?,?)')->execute([bin2hex(random_bytes(16)),$principalId,$capability,$effect,$scopeType,$scopePublicId,self::version(),$actorId,$actorId]);$this->audit($pdo,$profileId,null,'portal.entitlement.saved',$scopeType,$scopePublicId,['principal_id'=>$principalId,'capability'=>$capability,'effect'=>$effect,'active'=>$active,'actor_id'=>$actorId]);$this->queueEveryEnabledProfile($pdo,$workspaceId);if($owns)$pdo->commit();}catch(Throwable$e){if($owns&&$pdo->inTransaction())$pdo->rollBack();throw$e;}
     }
 
     public function appointManager(PDO $pdo,int $profileId,string $workspaceId,int $principalId,string $scopeType,string $scopePublicId,?int $replacePrincipalId,int $actorId,bool$viewerShareCreate=false):void
@@ -99,13 +148,32 @@ final class PortalAuthorityService
         $w=$pdo->prepare('SELECT * FROM portal_v2_workspaces WHERE public_id=? AND active=1');$w->execute([$workspaceId]);$workspace=$w->fetch(PDO::FETCH_ASSOC);if(!$workspace)throw new DomainException('Workspace not found.');
         if($scopeType==='workspace'){if(!hash_equals($workspaceId,$scopeId))throw new DomainException('Scope is outside the workspace.');return;}
         $rootType=(string)$workspace['root_type'];$root=(string)$workspace['root_public_id'];
-        $sql=match($scopeType){'organization'=>'SELECT COUNT(*) FROM organizations WHERE public_id=? AND ?=\'organization\' AND public_id=?','department'=>'SELECT COUNT(*) FROM organization_departments d JOIN organizations o ON o.id=d.organization_id WHERE d.public_id=? AND ?=\'organization\' AND o.public_id=?','project'=>$rootType==='organization'?'SELECT COUNT(*) FROM projects p JOIN organizations o ON o.id=p.organization_id WHERE p.public_id=? AND ?=\'organization\' AND o.public_id=?':'SELECT COUNT(*) FROM projects p JOIN clients c ON c.id=p.client_id WHERE p.public_id=? AND ?=\'standalone_client\' AND c.public_id=?',default=>throw new DomainException('Scope is invalid.')};$s=$pdo->prepare($sql);$s->execute([$scopeId,$rootType,$root]);if((int)$s->fetchColumn()!==1)throw new DomainException('Scope is outside the workspace.');
+        $sql=match($scopeType){'organization'=>'SELECT COUNT(*) FROM organizations WHERE public_id=? AND ?=\'organization\' AND public_id=?','department'=>'SELECT COUNT(*) FROM organization_departments d JOIN organizations o ON o.id=d.organization_id WHERE d.public_id=? AND ?=\'organization\' AND o.public_id=?','client'=>$rootType==='organization'?'SELECT COUNT(*) FROM clients c JOIN organizations o ON o.id=c.organization_id WHERE c.public_id=? AND ?=\'organization\' AND o.public_id=? AND c.archived=0 AND c.deleted_at IS NULL':'SELECT COUNT(*) FROM clients c WHERE c.public_id=? AND ?=\'standalone_client\' AND c.public_id=? AND c.organization_id IS NULL AND c.archived=0 AND c.deleted_at IS NULL','project'=>$rootType==='organization'?'SELECT COUNT(*) FROM projects p JOIN organizations o ON o.id=p.organization_id WHERE p.public_id=? AND ?=\'organization\' AND o.public_id=?':'SELECT COUNT(*) FROM projects p JOIN clients c ON c.id=p.client_id WHERE p.public_id=? AND ?=\'standalone_client\' AND c.public_id=?',default=>throw new DomainException('Scope is invalid.')};$s=$pdo->prepare($sql);$s->execute([$scopeId,$rootType,$root]);if((int)$s->fetchColumn()!==1)throw new DomainException('Scope is outside the workspace.');
     }
     private function profileRequired(PDO $pdo,int$id):array{$p=$this->profile($pdo,$id);if(!$p)throw new DomainException('Integration profile not found.');return$p;}
     private function profile(PDO$pdo,int$id):array|false{$s=$pdo->prepare('SELECT * FROM portal_integration_profiles WHERE id=?');$s->execute([$id]);return$s->fetch(PDO::FETCH_ASSOC);}
     private function principalRequired(PDO$pdo,int$id):void{$s=$pdo->prepare('SELECT COUNT(*) FROM portal_principals WHERE id=? AND enabled=1 AND revoked_at IS NULL');$s->execute([$id]);if((int)$s->fetchColumn()!==1)throw new DomainException('Active portal principal not found.');}
+    private function principalPublicId(PDO$pdo,int$id):string{$s=$pdo->prepare('SELECT public_id FROM portal_principals WHERE id=?');$s->execute([$id]);$publicId=$s->fetchColumn();if(!$publicId)throw new DomainException('Portal principal not found.');return(string)$publicId;}
+    /** @param list<int> $clientIds @param array<string,mixed> $workspace */
+    private function replacePrincipalClientsForWorkspace(PDO$pdo,int$principalId,array$clientIds,array$workspace,int$actorId):void
+    {
+        $rootType=(string)$workspace['root_type'];$rootId=(string)$workspace['root_public_id'];
+        $predicate=$rootType==='organization'?'c.organization_id=(SELECT id FROM organizations WHERE public_id=?)':'c.organization_id IS NULL AND c.public_id=?';
+        $check=$pdo->prepare("SELECT COUNT(*) FROM clients c WHERE c.id=? AND {$predicate} AND c.archived=0 AND c.deleted_at IS NULL");
+        foreach($clientIds as$clientId){$check->execute([$clientId,$rootId]);if((int)$check->fetchColumn()!==1)throw new DomainException('A selected client record is outside this workspace.');}
+        $delete=$pdo->prepare("DELETE FROM portal_principal_clients WHERE portal_principal_id=? AND client_id IN (SELECT c.id FROM clients c WHERE {$predicate})");$delete->execute([$principalId,$rootId]);
+        $insert=$pdo->prepare('INSERT INTO portal_principal_clients (portal_principal_id,client_id,created_by) VALUES (?,?,?)');foreach($clientIds as$clientId)$insert->execute([$principalId,$clientId,$actorId]);
+    }
     private function upsertViewerShareEffect(PDO$pdo,int$principalId,string$scopeType,string$scopePublicId,string$effect,bool$active,int$actorId):void{$existing=$pdo->prepare("SELECT id FROM portal_v2_entitlements WHERE portal_principal_id=? AND capability='viewer.share.create' AND effect=? AND scope_type=? AND scope_public_id=?");$existing->execute([$principalId,$effect,$scopeType,$scopePublicId]);$id=$existing->fetchColumn();if($id)$pdo->prepare('UPDATE portal_v2_entitlements SET active=?,source_version=?,valid_from=CURRENT_TIMESTAMP,expires_at=NULL,updated_by=? WHERE id=?')->execute([$active?1:0,self::version(),$actorId,(int)$id]);elseif($active)$pdo->prepare("INSERT INTO portal_v2_entitlements (public_id,portal_principal_id,capability,effect,scope_type,scope_public_id,source_version,active,valid_from,created_by,updated_by) VALUES (?,?,'viewer.share.create',?,?,?,?,1,CURRENT_TIMESTAMP,?,?)")->execute([bin2hex(random_bytes(16)),$principalId,$effect,$scopeType,$scopePublicId,self::version(),$actorId,$actorId]);}
     private function queueEveryEnabledProfile(PDO$pdo,string$workspaceId):void{$profiles=$pdo->prepare('SELECT p.* FROM portal_integration_profiles p JOIN portal_integration_profile_workspaces pw ON pw.profile_id=p.id AND pw.active=1 JOIN portal_v2_workspaces w ON w.id=pw.workspace_id WHERE p.enabled=1 AND p.portal_projection_enabled=1 AND w.public_id=? ORDER BY p.id');$profiles->execute([$workspaceId]);$projection=new PortalProjectionService();foreach($profiles->fetchAll(PDO::FETCH_ASSOC)as$profile)$projection->queueWorkspaceChanges($pdo,$profile,$workspaceId);}
+    /** @return list<string> */
+    private function affectedPrincipalWorkspaces(PDO$pdo,int$principalId,string$selectedWorkspace):array
+    {
+        $publicId=$this->principalPublicId($pdo,$principalId);$ids=[$selectedWorkspace=>true];
+        $projected=$pdo->prepare("SELECT DISTINCT workspace_public_id FROM portal_projection_resource_state WHERE resource_type='principal' AND resource_public_id=?");$projected->execute([$publicId]);foreach($projected->fetchAll(PDO::FETCH_COLUMN)as$id)$ids[(string)$id]=true;
+        $linked=$pdo->prepare("SELECT DISTINCT w.public_id FROM portal_principal_clients pc JOIN clients c ON c.id=pc.client_id JOIN portal_v2_workspaces w ON (w.root_type='organization' AND c.organization_id=(SELECT o.id FROM organizations o WHERE o.public_id=w.root_public_id)) OR (w.root_type='standalone_client' AND c.organization_id IS NULL AND c.public_id=w.root_public_id) WHERE pc.portal_principal_id=? AND w.active=1");$linked->execute([$principalId]);foreach($linked->fetchAll(PDO::FETCH_COLUMN)as$id)$ids[(string)$id]=true;
+        return array_keys($ids);
+    }
     private function setManagerScopeState(PDO$pdo,int$profileId,int$workspaceId,string$scopeType,string$scopePublicId,string$state,int$actorId):void{$removed=$state==='recovery_required'?'CURRENT_TIMESTAMP':'NULL';$update=$pdo->prepare("UPDATE portal_manager_scope_state SET state=?,last_manager_removed_at={$removed},updated_by=? WHERE integration_profile_id=? AND workspace_id=? AND scope_type=? AND scope_public_id=?");$update->execute([$state,$actorId,$profileId,$workspaceId,$scopeType,$scopePublicId]);if($update->rowCount()===0){$exists=$pdo->prepare('SELECT COUNT(*) FROM portal_manager_scope_state WHERE integration_profile_id=? AND workspace_id=? AND scope_type=? AND scope_public_id=?');$exists->execute([$profileId,$workspaceId,$scopeType,$scopePublicId]);if((int)$exists->fetchColumn()===0)$pdo->prepare("INSERT INTO portal_manager_scope_state (integration_profile_id,workspace_id,scope_type,scope_public_id,state,last_manager_removed_at,updated_by) VALUES (?,?,?,?,?,{$removed},?)")->execute([$profileId,$workspaceId,$scopeType,$scopePublicId,$state,$actorId]);}}
     private function queueProfileRevocations(PDO$pdo,array$profile):int{$workspaces=$pdo->prepare('SELECT w.public_id FROM portal_integration_profile_workspaces pw JOIN portal_v2_workspaces w ON w.id=pw.workspace_id AND w.active=1 WHERE pw.profile_id=? AND pw.active=1 ORDER BY w.public_id');$workspaces->execute([(int)$profile['id']]);$count=0;$projection=new PortalProjectionService();foreach($workspaces->fetchAll(PDO::FETCH_COLUMN)as$workspaceId)if($projection->queueWorkspaceRevocation($pdo,$profile,(string)$workspaceId)!==null)$count++;return$count;}
     private function supersedePendingNormalRows(PDO$pdo,int$profileId,string$routeType):void{$now=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='sqlite'?'CURRENT_TIMESTAMP':'UTC_TIMESTAMP(6)';$pdo->prepare("UPDATE portal_projection_outbox SET dead_lettered_at={$now},last_error_code='profile_disabled_superseded' WHERE integration_profile_id=? AND route_type=? AND is_revocation=0 AND delivered_at IS NULL AND dead_lettered_at IS NULL AND claimed_at IS NULL")->execute([$profileId,$routeType]);}

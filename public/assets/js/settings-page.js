@@ -48,7 +48,23 @@
     var emptyState = shell.querySelector('[data-settings-empty]');
     var searchStatus = shell.querySelector('[data-settings-search-status]');
     var sidebar = shell.querySelector('.settings-sidebar');
+    var navigationDisclosure = shell.querySelector('[data-settings-nav-disclosure]');
     var sidebarScrollKey = 'project-alpha:settings-sidebar-scroll';
+
+    if (navigationDisclosure && typeof window.matchMedia === 'function') {
+      var compactNavigation = window.matchMedia('(max-width: 800px)');
+      var syncNavigationDisclosure = function () {
+        navigationDisclosure.open = !compactNavigation.matches;
+      };
+      syncNavigationDisclosure();
+      if (typeof compactNavigation.addEventListener === 'function') {
+        compactNavigation.addEventListener('change', syncNavigationDisclosure);
+        cleanupCallbacks.push(function () { compactNavigation.removeEventListener('change', syncNavigationDisclosure); });
+      } else if (typeof compactNavigation.addListener === 'function') {
+        compactNavigation.addListener(syncNavigationDisclosure);
+        cleanupCallbacks.push(function () { compactNavigation.removeListener(syncNavigationDisclosure); });
+      }
+    }
 
     function saveSidebarScroll() {
       if (!sidebar) return;

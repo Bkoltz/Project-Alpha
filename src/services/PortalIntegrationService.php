@@ -10,6 +10,8 @@ use DomainException;
 use PDO;
 use Throwable;
 
+require_once __DIR__ . '/../utils/document_pricing_adjustments.php';
+
 final class PortalIntegrationService
 {
     /** @return array<string,mixed> */
@@ -128,6 +130,15 @@ final class PortalIntegrationService
                     json_encode($lineItem['catalog_snapshot']+['answers'=>$request['services'][$index]['answers']],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),
                 ]);
             }
+            pricing_finalize_document_revision(
+                $pdo,
+                $client['organization_id'] === null ? null : (int)$client['organization_id'],
+                'quote',
+                $quoteId,
+                null,
+                false,
+                (string)($pricing['currency'] ?? 'USD')
+            );
             $receiptPublicId = bin2hex(random_bytes(16));
             $response = [
                 'receiptId' => $receiptPublicId,
@@ -227,5 +238,6 @@ final class PortalIntegrationService
     {
         return 'catalog-' . substr(hash('sha256', json_encode(array_map(fn($s) => [$s['portal_public_id'], $s['portal_source_version']], $services), JSON_THROW_ON_ERROR)), 0, 24);
     }
+
 
 }

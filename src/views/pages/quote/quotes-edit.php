@@ -4,6 +4,7 @@
   require_once __DIR__ . '/../../../utils/document_fields.php';
   require_once __DIR__ . '/../../../utils/acl.php';
   require_once __DIR__ . '/../../../services/DocumentPolicy.php';
+  require_once __DIR__ . '/../../../utils/document_pricing_adjustments.php';
   require_once __DIR__ . '/../../components/tax_lookup_control.php';
   $id = (int)($_GET['id'] ?? 0);
   require_record_ownership($pdo, 'quotes', $id);
@@ -26,6 +27,7 @@
   <form id="quoteEditForm" method="post" action="/?page=quote/quotes-update" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$quote['id']; ?>">
+    <?php echo pricing_adjustment_override_controls($pdo,(int)($quote['organization_id']??0),'quote',$id); ?>
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <div data-document-recipient-picker>
       <label style="display:block">
@@ -222,3 +224,4 @@
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/quotes-edit-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/document-recipient-presentation.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/pricing-adjustments.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

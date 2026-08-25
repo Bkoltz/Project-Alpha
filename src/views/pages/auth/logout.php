@@ -8,7 +8,7 @@
     <p>You have been logged out successfully.</p>
     <a href="/?page=login" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;text-decoration:none;font-weight:600">Login</a>
   </div>
-  <div class="photo-credit">Photo: Ledge Top Drone Services</div>
+  <div class="photo-credit">Photo provided for <?php echo htmlspecialchars((string)($appConfig['brand_name'] ?? 'Project Alpha'), ENT_QUOTES, 'UTF-8'); ?></div>
 </main>
 
 </body>

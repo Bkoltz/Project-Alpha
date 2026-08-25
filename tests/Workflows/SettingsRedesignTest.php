@@ -65,6 +65,7 @@ final class SettingsRedesignTest extends TestCase
     {
         $root = dirname(__DIR__, 2);
         $view = (string)file_get_contents($root . '/src/views/pages/settings.php');
+        $sidebar = (string)file_get_contents($root . '/src/views/pages/settings/sidebar.php');
         $script = (string)file_get_contents($root . '/public/assets/js/settings-page.js');
         $styles = (string)file_get_contents($root . '/public/assets/settings.css');
 
@@ -78,7 +79,12 @@ final class SettingsRedesignTest extends TestCase
         self::assertStringContainsString("beforeunload", $script);
         self::assertStringContainsString('You have unsaved changes.', $script);
         self::assertMatchesRegularExpression('/\.settings-sidebar\s*\{[^}]*max-height:\s*calc\(100vh - 40px\);[^}]*overflow:\s*auto;[^}]*position:\s*sticky;[^}]*top:\s*18px;/s', $styles);
-        self::assertStringContainsString('.settings-sidebar { margin-bottom: 20px; max-height: none; padding: 10px; position: static; }', $styles);
+        self::assertStringContainsString('data-settings-nav-disclosure open', $sidebar);
+        self::assertStringContainsString('class="settings-nav-toggle"', $sidebar);
+        self::assertStringContainsString('.settings-sidebar { margin-bottom: 14px; max-height: none; padding: 0; position: static; }', $styles);
+        self::assertMatchesRegularExpression('/@media \(max-width: 800px\)[\s\S]*?\.settings-nav-toggle\s*\{[\s\S]*?display:\s*grid;/', $styles);
+        self::assertStringContainsString("window.matchMedia('(max-width: 800px)')", $script);
+        self::assertStringContainsString('navigationDisclosure.open = !compactNavigation.matches', $script);
         self::assertStringContainsString("'project-alpha:settings-sidebar-scroll'", $script);
         self::assertStringContainsString("sidebar.addEventListener('scroll', saveSidebarScroll", $script);
         self::assertStringContainsString("sidebar.removeEventListener('scroll', saveSidebarScroll", $script);

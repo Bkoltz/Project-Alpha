@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../../utils/invoice_notifications.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
@@ -13,6 +14,9 @@ require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
 $contract_id = (int)($_POST['id'] ?? 0);
 $sendEmail = !empty($_POST['send_email']);
+$requestGenerationKey=strtolower(trim((string)($_POST['generation_key']??'')));
+if(!preg_match('/^[a-f0-9]{32}$/',$requestGenerationKey))$requestGenerationKey=bin2hex(random_bytes(16));
+$generationKey=hash('sha256','on-demand:'.$contract_id.':'.$requestGenerationKey);
 
 if ($contract_id <= 0) {
     @error_log('[on_demand_invoice_generate] invalid contract_id', 0);
@@ -26,12 +30,41 @@ $pdo->beginTransaction();
 
 try {
     // Fetch the on-demand contract
-    $stmt = $pdo->prepare('SELECT * FROM contracts WHERE id = ? AND contract_type = "on_demand"');
+    $stmt = $pdo->prepare('SELECT * FROM contracts WHERE id = ? AND contract_type = "on_demand" FOR UPDATE');
     $stmt->execute([$contract_id]);
     $contract = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$contract) {
         throw new Exception('Contract not found');
+    }
+    $existingGeneration=$pdo->prepare('SELECT id FROM invoices WHERE contract_id=? AND generation_key=? LIMIT 1');
+    $existingGeneration->execute([$contract_id,$generationKey]);$existingInvoiceId=(int)$existingGeneration->fetchColumn();
+    if($existingInvoiceId>0){
+        $pdo->commit();
+        // A prior request may have committed the invoice and then crashed before
+        // finalization/delivery. Replays must finish those idempotent side effects.
+        if ($sendEmail) {
+            $contractCreator = (int)($contract['created_by'] ?? 0) ?: 1;
+            invoice_finalize($pdo, $existingInvoiceId, $appConfig, 'on_demand_send', $contractCreator);
+            $projectId = !empty($contract['project_id']) ? (int)$contract['project_id'] : null;
+            if (!project_uses_monthly_invoice_billing($pdo, $projectId)) {
+                $clientStmt = $pdo->prepare('SELECT email FROM clients WHERE id = ?');
+                $clientStmt->execute([(int)$contract['client_id']]);
+                $to = trim((string)$clientStmt->fetchColumn());
+                $deliveryStatus = filter_var($to, FILTER_VALIDATE_EMAIL) ? 'pending' : 'suppressed';
+                invoice_notification_enqueue(
+                    $pdo,
+                    $existingInvoiceId,
+                    'on_demand_generate',
+                    'generated',
+                    $to,
+                    $deliveryStatus,
+                    $deliveryStatus === 'suppressed' ? 'Missing or invalid client email.' : null
+                );
+                invoice_notification_process($pdo, $appConfig, null, null, 10, $existingInvoiceId);
+            }
+        }
+        header('Location: /?page=contract/on-demand-invoices-list&contract_id='.$contract_id.'&invoice_generated=1&idempotent=1');exit;
     }
     
     // Check if contract is active
@@ -85,8 +118,8 @@ try {
         INSERT INTO invoices (
             contract_id, client_id, project_id, project_code, invoice_type, billing_mode,
             discount_type, discount_value, tax_percent, 
-            subtotal, total, balance_due, status, due_date, payment_terms_days, due_date_source, created_at, organization_id, show_contact_on_document, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "terms", ?, ?, ?, ?)
+            subtotal, total, balance_due, status, due_date, payment_terms_days, due_date_source, created_at, organization_id, show_contact_on_document, created_by, generation_key
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "terms", ?, ?, ?, ?, ?)
     ');
     
     $insertInvoice->execute([
@@ -108,7 +141,8 @@ try {
         date('Y-m-d H:i:s'),
         $contractOrgId,
         (int)($contract['show_contact_on_document'] ?? 0),
-        $contractCreator
+        $contractCreator,
+        $generationKey
     ]);
     
     $invoiceId = (int)$pdo->lastInsertId();
@@ -152,13 +186,17 @@ try {
             ->execute([$invoiceId, $description, 1, $subtotal, $subtotal, $billingMode === 'hourly' ? 'hour' : 'each']);
     }
     
-    // Update contract
-    $newTotalInvoiced = (float)$contract['total_invoiced'] + $total;
+    pricing_finalize_derived_document_revision(
+        $pdo,$contractOrgId,'invoice',$invoiceId,$contractCreator,(string)($appConfig['workforce_currency']??'USD'),
+        'contract',$contract_id,pricing_contract_source_revision($contract)
+    );
+    $finalTotal=$pdo->prepare('SELECT total FROM invoices WHERE id=?');$finalTotal->execute([$invoiceId]);$totalMoney=(string)$finalTotal->fetchColumn();$total=(float)$totalMoney;
+
+    // Update contract from the exact frozen-contract invoice result.
+    $newTotalInvoiced = pricing_minor_to_money(pricing_money_to_minor((string)($contract['total_invoiced']??'0'))+pricing_money_to_minor($totalMoney));
     $newInvoiceCount = (int)$contract['invoice_count'] + 1;
-    
     $pdo->prepare('UPDATE contracts SET total_invoiced=?, invoice_count=?, last_invoice_date=? WHERE id=? AND contract_type = "on_demand"')
         ->execute([$newTotalInvoiced, $newInvoiceCount, date('Y-m-d'), $contract_id]);
-    DocumentRevisionService::snapshotAndSave($pdo,'invoice',$invoiceId,$contractCreator,false);
     
     $pdo->commit();
     

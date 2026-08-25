@@ -3,6 +3,8 @@
 /** @var string $activeCategoryKey */
 /** @var string $tab */
 
+$settingsNavigationLabel = (string)($activeItem['title'] ?? $activeCategory['short_title'] ?? 'Settings');
+
 $_sidebarIcons = [
   'account'   => '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
   'business'  => '<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>',
@@ -13,11 +15,18 @@ $_sidebarIcons = [
 ];
 ?>
 <aside class="settings-sidebar" aria-label="Settings navigation">
-  <a class="settings-all-link" href="/?page=settings">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-    All settings
-  </a>
-  <nav>
+  <details class="settings-nav-disclosure" data-settings-nav-disclosure open>
+    <summary class="settings-nav-toggle">
+      <span>Settings sections</span>
+      <strong><?php echo htmlspecialchars($settingsNavigationLabel); ?></strong>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+    </summary>
+    <div class="settings-nav-panel">
+      <a class="settings-all-link" href="/?page=settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        All settings
+      </a>
+      <nav>
     <?php foreach ($settingsRegistry as $categoryKey => $category): ?>
       <div class="settings-nav-group<?php echo $categoryKey === $activeCategoryKey ? ' is-active' : ''; ?>">
         <div class="settings-nav-heading">
@@ -38,5 +47,7 @@ $_sidebarIcons = [
         </ul>
       </div>
     <?php endforeach; ?>
-  </nav>
+      </nav>
+    </div>
+  </details>
 </aside>

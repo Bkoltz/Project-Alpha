@@ -14,6 +14,7 @@ require_once __DIR__ . '/../../../services/StripeService.php';
 require_once __DIR__ . '/../../../utils/invoice_due_dates.php';
 require_once __DIR__ . '/../../../utils/general_recipient_invoices.php';
 require_once __DIR__ . '/../../../utils/document_recipient.php';
+require_once __DIR__ . '/../../../utils/document_pricing_adjustments.php';
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'invoices', $id);
@@ -22,6 +23,10 @@ $st = $pdo->prepare('SELECT i.*, c.name client_name, c.email client_email, c.pho
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
+$pricingSnapshot=(int)($inv['organization_id']??0)>0?pricing_document_snapshot($pdo,(int)$inv['organization_id'],'invoice',$id,max(1,(int)($inv['revision_number']??1))):null;
+$invoiceOrganizationId=($inv['organization_id']??null)===null?null:(int)$inv['organization_id'];
+$invoiceTotalAdjustments=pricing_invoice_total_adjustments($pdo,$invoiceOrganizationId,$id);
+$invoiceCurrency=(string)($pricingSnapshot['currency']??$inv['currency']??$appConfig['document_currency']??$appConfig['currency']??$appConfig['workforce_currency']??'USD');
 $isGeneralRecipientInvoice = pa_invoice_is_general_recipient($inv);
 $generalRecipientToken = null;
 if (!defined('PUBLIC_VIEW') && !defined('PDF_MODE')) {
@@ -392,27 +397,40 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
     $isPaid = $invStatus === 'paid';
   ?>
   <?php
+    $pricingRowsFromHtml = static function (string $html): array {
+      if ($html === '') return [];
+      preg_match_all('~<tr[^>]*>\s*<td[^>]*>(.*?)</td>\s*<td[^>]*>(.*?)</td>\s*</tr>~si', $html, $matches, PREG_SET_ORDER);
+      return array_map(static fn(array $match): array => [
+        'label' => html_entity_decode(strip_tags((string)$match[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+        'value' => html_entity_decode(strip_tags((string)$match[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+      ], $matches);
+    };
+    $pricingAdjustmentRows = $pricingRowsFromHtml(pricing_adjustment_client_row($pricingSnapshot));
+    $invoiceAdjustmentRows = $pricingRowsFromHtml(pricing_invoice_adjustment_client_rows($invoiceTotalAdjustments,$invoiceCurrency));
     if (($inv['discount_type'] ?? 'none') === 'percent') {
       $discountDisplay = number_format((float)$inv['discount_value'], 2) . '%';
     } elseif (($inv['discount_type'] ?? 'none') === 'fixed') {
-      $discountDisplay = '$' . number_format((float)$inv['discount_value'], 2);
+      $discountDisplay = pricing_currency_amount($inv['discount_value'], $invoiceCurrency);
     } else {
-      $discountDisplay = '$0.00';
+      $discountDisplay = pricing_currency_amount(0, $invoiceCurrency);
     }
     $documentTotalRows = [
-      ['label' => 'Subtotal', 'value' => '$' . number_format((float)$inv['subtotal'], 2)],
+      ['label' => 'Subtotal', 'value' => pricing_currency_amount($inv['subtotal'], $invoiceCurrency)],
+      ...$pricingAdjustmentRows,
       ['label' => 'Discount', 'value' => $discountDisplay],
       ['label' => 'Tax', 'value' => number_format((float)$inv['tax_percent'], 2) . '%'],
-      ['label' => $isPartial ? 'Invoice Total' : 'Total', 'value' => '$' . number_format($invoiceTotal, 2), 'tone' => 'total'],
+      ...$invoiceAdjustmentRows,
+      ['label' => $isPartial ? 'Invoice Total' : 'Total', 'value' => pricing_currency_amount($invoiceTotal, $invoiceCurrency), 'tone' => 'total'],
     ];
     if ($isPartial) {
-      $documentTotalRows[] = ['label' => 'Amount Paid', 'value' => '- $' . number_format($amountPaid, 2), 'tone' => 'paid'];
-      $documentTotalRows[] = ['label' => 'Amount Due', 'value' => '$' . number_format($amountDue, 2), 'tone' => 'due'];
+      $documentTotalRows[] = ['label' => 'Amount Paid', 'value' => pricing_currency_amount($amountPaid, $invoiceCurrency, true), 'tone' => 'paid'];
+      $documentTotalRows[] = ['label' => 'Amount Due', 'value' => pricing_currency_amount($amountDue, $invoiceCurrency), 'tone' => 'due'];
     } elseif ($isPaid) {
-      $documentTotalRows[] = ['label' => '✓ Paid in Full', 'value' => '$0.00', 'tone' => 'paid_full'];
+      $documentTotalRows[] = ['label' => '✓ Paid in Full', 'value' => pricing_currency_amount(0, $invoiceCurrency), 'tone' => 'paid_full'];
     }
     require __DIR__ . '/../../components/document_totals.php';
   ?>
+  <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW') && ($pricingProvenance=pricing_adjustment_staff_provenance($pricingSnapshot))!==''): ?><p class="pricing-provenance" data-pricing-provenance><?php echo htmlspecialchars($pricingProvenance,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); ?></p><?php endif; ?>
 
   <?php if (!$isGeneralRecipientInvoice): ?>
   <?php

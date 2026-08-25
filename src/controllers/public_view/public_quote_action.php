@@ -20,6 +20,8 @@ require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../utils/public_links.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/job_work_materialization.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
+require_once __DIR__ . '/../../services/ProjectContractEligibilityGuardService.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('public_quote_action', $submitted)) {
   header('Location: /?page=public-doc&error=' . urlencode('Invalid request'));
@@ -27,24 +29,41 @@ if (!csrf_sf_is_valid('public_quote_action', $submitted)) {
 }
 
 try {
+  $qid = 0;
   $token = isset($_POST['token']) ? (string)$_POST['token'] : '';
   $action = isset($_POST['action']) ? strtolower((string)$_POST['action']) : '';
   if (!in_array($action, ['approve','deny'], true)) { throw new Exception('badaction'); }
 
-  // Load and validate public link
-  $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+  // This first read locates the quote only. Authority is revalidated under
+  // locks below, after locking the quote first to match staff approval order.
+  $st = $pdo->prepare('SELECT document_type, document_id FROM public_links WHERE token=? LIMIT 1');
   $st->execute([$token]);
   $row = $st->fetch(PDO::FETCH_ASSOC);
   if (!$row) { throw new Exception('notfound'); }
-  if ((int)$row['revoked'] === 1 || strtotime((string)$row['expires_at']) < time()) { throw new Exception('expired'); }
   if ($row['document_type'] !== 'quote') { throw new Exception('notquote'); }
   $qid = (int)$row['document_id'];
 
-  // Load quote, client, etc.
-  $q = $pdo->prepare('SELECT q.*, c.name AS client_name, c.email AS client_email FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
+  $pdo->beginTransaction();
+  $q = $pdo->prepare('SELECT q.*, c.name AS client_name, c.email AS client_email FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=? FOR UPDATE');
   $q->execute([$qid]);
   $quote = $q->fetch(PDO::FETCH_ASSOC);
   if (!$quote) { throw new Exception('nofile'); }
+  $lockedLink=$pdo->prepare('SELECT document_type,document_id,expires_at,revoked FROM public_links WHERE token=? LIMIT 1 FOR UPDATE');
+  $lockedLink->execute([$token]);$authority=$lockedLink->fetch(PDO::FETCH_ASSOC);
+  if(!$authority||$authority['document_type']!=='quote'||(int)$authority['document_id']!==$qid)throw new DomainException('Public quote authority changed.');
+
+  $expectedStatus=$action==='approve'?'approved':'rejected';
+  $currentStatus=(string)$quote['status'];
+  if($currentStatus!=='pending'){
+    if($currentStatus===$expectedStatus){
+      pa_public_link_terminalize($pdo,'quote',$qid,$action==='approve'?'approved':'denied');
+      $pdo->commit();header('Location: /?page=public-doc&token='.rawurlencode($token).'&ok=1');exit;
+    }
+    $pdo->rollBack();http_response_code(409);header('Content-Type: text/plain; charset=utf-8');echo 'This quote already has a different response.';exit;
+  }
+  if((int)$authority['revoked']===1||strtotime((string)$authority['expires_at'])<time()){
+    $pdo->rollBack();http_response_code(410);header('Content-Type: text/plain; charset=utf-8');echo 'This quote link is no longer active.';exit;
+  }
 
   $changed = false;
   if ($action === 'deny') {
@@ -54,9 +73,7 @@ try {
     }
   } else {
     if ((string)$quote['status'] === 'pending') {
-      // Approve quote by reusing minimal sequence
-      $pdo->beginTransaction();
-      try {
+      // Approve quote by reusing minimal sequence under the authority locks.
         // Load items
         $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=?');
         $items->execute([$qid]);
@@ -89,12 +106,15 @@ try {
           $contractDepositAmount = min(max(0, $depositValue), $quoteTotal);
         }
 
+        $projectId = !empty($quote['project_id']) ? (int)$quote['project_id'] : null;
+        (new App\Services\ProjectContractEligibilityGuardService($pdo))->assertCanCreateOrAttach($projectId);
+
         // Create contract (pending)
         $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, billing_start_mode, scope, organization_id, show_contact_on_document, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
            ->execute([
              $qid,
              (int)$quote['client_id'],
-             !empty($quote['project_id']) ? (int)$quote['project_id'] : null,
+             $projectId,
              'pending',
              $quoteType,
              $billingMode,
@@ -190,16 +210,25 @@ try {
           $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
         }
 
+        pricing_finalize_derived_document_revision(
+          $pdo,$quoteOrgId!==null?(int)$quoteOrgId:null,'contract',$contract_id,$quoteCreator,
+          (string)($appConfig['workforce_currency']??'USD'),'quote',$qid,(int)($quote['revision_number']??1),
+          $depositType==='percent'&&$quoteOrgId!==null
+            ? static fn(array $pricing)=>pricing_recompute_contract_percentage_deposit($pdo,(int)$quoteOrgId,$contract_id,(string)$depositValue)
+            : null
+        );
+        if(!empty($invoice_id))pricing_finalize_derived_document_revision(
+          $pdo,$quoteOrgId!==null?(int)$quoteOrgId:null,'invoice',(int)$invoice_id,$quoteCreator,
+          (string)($appConfig['workforce_currency']??'USD'),'quote',$qid,(int)($quote['revision_number']??1)
+        );
+
         catalog_plan_document_work($pdo,'quote',$qid,$quoteCreator);
-        $pdo->commit();
         $changed = true;
-      } catch (Throwable $e) {
-        if ($pdo->inTransaction()) { $pdo->rollBack(); }
-        // Do not treat as fatal for the public UX; we'll still redirect with error below
-        throw $e;
-      }
     }
   }
+
+  pa_public_link_terminalize($pdo, 'quote', $qid, $action === 'approve' ? 'approved' : 'denied');
+  $pdo->commit();
 
   // Email admin only if status changed via public link
   if ($changed) {
@@ -212,12 +241,11 @@ try {
     }
   }
 
-  pa_public_link_terminalize($pdo, 'quote', $qid, $action === 'approve' ? 'approved' : 'denied');
-
   // Redirect back to public view with success notice always (even if no change due to non-pending)
   header('Location: /?page=public-doc&token=' . rawurlencode($token) . '&ok=1');
   exit;
 } catch (Throwable $e) {
+  if ($pdo->inTransaction()) { $pdo->rollBack(); }
   // If an exception occurred after we updated the quote status (e.g. while creating contract/invoice),
   // prefer to show the user success if the quote actually changed. This avoids confusing the client
   // when backend follow-up tasks fail but the primary action succeeded.

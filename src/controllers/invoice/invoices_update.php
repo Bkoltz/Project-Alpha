@@ -10,16 +10,22 @@ require_once __DIR__ . '/../../utils/general_recipient_invoices.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 require_once __DIR__ . '/../../services/WorkTimeBillingContextService.php';
 
 use App\Services\WorkTimeBillingContextService;
 $id = (int)($_POST['id'] ?? 0);
+$fixedTotalLockMessage='A fixed-total contract installment is an immutable allocation. Amend the contract instead.';
 require_record_ownership($pdo, 'invoices', $id);
 $statusStmt = $pdo->prepare('SELECT * FROM invoices WHERE id=?');
 $statusStmt->execute([$id]);
 $invoiceState = $statusStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+$fixedTotalInstallment = pricing_invoice_is_fixed_total_installment($pdo,$id);
+if($fixedTotalInstallment){
+  http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'fixed_total_installment_locked','message'=>$fixedTotalLockMessage,'request_id'=>bin2hex(random_bytes(8))]);exit;
+}
 $invoiceStatus = strtolower((string)($invoiceState['status'] ?? ''));
 $isDraft = $invoiceStatus === 'draft';
 try { $invoiceState=DocumentPolicy::assertMutable($pdo,'invoice',$id,'monetary_adjustment'); } catch(DocumentLockedException $locked){http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'document_locked','message'=>$locked->getMessage(),'request_id'=>bin2hex(random_bytes(8))]);exit;}
@@ -143,6 +149,18 @@ $showContactOnDocument = $organizationId && !empty($_POST['show_contact_on_docum
 
 $pdo->beginTransaction();
 try {
+  $invoiceState=DocumentPolicy::assertMutable($pdo,'invoice',$id,'monetary_adjustment',true);
+  require_record_ownership($pdo,'invoices',$id);
+  if(pricing_invoice_is_fixed_total_installment($pdo,$id))throw new DomainException($fixedTotalLockMessage);
+  $invoiceStatus=strtolower((string)($invoiceState['status']??''));
+  $isDraft=$invoiceStatus==='draft';
+  $isGeneralRecipientInvoice=pa_invoice_is_general_recipient($invoiceState);
+  if(!empty($invoiceState['job_id'])&&$client_id!==(int)$invoiceState['client_id'])throw new DomainException('A document cannot be moved to another client while it belongs to a Job. Create it under a new Job instead.');
+  if($isGeneralRecipientInvoice&&($client_id!==(int)($invoiceState['client_id']??0)||$requestedServiceLocationId!==null||!pa_general_recipient_invoice_is_eligible($invoiceState)))throw new DomainException('General-recipient invoices cannot be assigned to a private client relationship.');
+  $storedDueDate=$invoiceState['due_date']?:null;
+  $dueDateSource=$normalizedDueDate===$storedDueDate?(string)($invoiceState['due_date_source']??'manual'):'manual';
+  $organizationId=$isGeneralRecipientInvoice?null:resolve_client_context_org_id($pdo,$client_id,!empty($invoiceState['project_id'])?(int)$invoiceState['project_id']:null,request_client_org_id()?:null);
+  $showContactOnDocument=$organizationId&&!empty($_POST['show_contact_on_document'])?1:0;
   $serviceLocationId = $isGeneralRecipientInvoice
     ? null
     : document_resolve_service_location($pdo,$client_id,!empty($invoiceState['project_id'])?(int)$invoiceState['project_id']:null,!empty($invoiceState['job_id'])?(int)$invoiceState['job_id']:null,$requestedServiceLocationId);
@@ -222,13 +240,17 @@ try {
   if (!empty($invoiceState['finalized_at']) || invoice_effective_paid_total($pdo,$id)>0.005) {
     invoice_refresh_payment_totals($pdo, $id, false);
   }
-  DocumentRevisionService::snapshotAndSave($pdo,'invoice',$id,(int)($_SESSION['user']['id']??0));
+  if ($organizationId !== null) {
+    pricing_apply_posted_override($pdo,(int)$organizationId,'invoice',$id,(int)($_SESSION['user']['id']??0),$_POST);
+  }
+  pricing_finalize_document_revision($pdo,$organizationId !== null ? (int)$organizationId : null,'invoice',$id,(int)($_SESSION['user']['id']??0),true,(string)($appConfig['workforce_currency']??'USD'));
   if(!$isDraft)$pdo->prepare('UPDATE public_links SET revoked=1 WHERE document_type="invoice" AND document_id=?')->execute([$id]);
   
   $pdo->commit();
 } catch (Throwable $e) {
   $pdo->rollBack();
-  header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=Update%20failed');
+  $error=$e instanceof DocumentLockedException||($e instanceof DomainException&&hash_equals($fixedTotalLockMessage,$e->getMessage()))?$e->getMessage():'Update failed';
+  header('Location: /?page=invoice/invoice-details&id='.$id.'&error='.rawurlencode($error));
   exit;
 }
 header('Location: /?page=invoice/invoice-details&id=' . $id . '&updated=1');

@@ -399,6 +399,98 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('client_id IN (SELECT id FROM clients WHERE organization_id = ?)', (string)$details);
     }
 
+    public function testContractEditPostsActualDepositValue(): void
+    {
+        $view=(string)file_get_contents($this->root.'/src/views/pages/contract/contracts-edit.php');
+        $controller=(string)file_get_contents($this->root.'/src/controllers/contract/contracts_update.php');
+        self::assertStringContainsString('depositEditValue/$contractTotal*100',$view);
+        self::assertStringContainsString('name="deposit_value"',$view);
+        self::assertStringNotContainsString('name="deposit_amount" value=',$view);
+        self::assertStringContainsString("\$deposit_value = (float)(\$_POST['deposit_value'] ?? \$_POST['deposit_amount'] ?? 0);",$controller);
+        self::assertStringNotContainsString('deposit_percentage',$controller);
+        self::assertStringContainsString('pricing_recompute_contract_percentage_deposit($pdo,(int)$organizationId,$id,(string)$deposit_value)',$controller);
+    }
+
+    public function testDocumentEditorsRevalidateLockedStateBeforeMutation(): void
+    {
+        $quote=(string)file_get_contents($this->root.'/src/controllers/quote/quotes_update.php');
+        $contract=(string)file_get_contents($this->root.'/src/controllers/contract/contracts_update.php');
+        $invoice=(string)file_get_contents($this->root.'/src/controllers/invoice/invoices_update.php');
+        $date=(string)file_get_contents($this->root.'/src/controllers/document_date_update_handler.php');
+        foreach([[$quote,"DocumentPolicy::assertMutable(\$pdo,'quote',\$id,'commercial',true)",'UPDATE quotes SET'],[$contract,"DocumentPolicy::assertMutable(\$pdo,'contract',\$id,'commercial',true)",'UPDATE contracts'],[$invoice,"DocumentPolicy::assertMutable(\$pdo,'invoice',\$id,'monetary_adjustment',true)",'UPDATE invoices']] as [$source,$locked,$update]){
+            $begin=strpos($source,'$pdo->beginTransaction();');$lock=strpos($source,$locked,$begin);$ownership=strpos($source,'require_record_ownership',$lock);$mutation=strpos($source,$update,$ownership);
+            self::assertNotFalse($begin);self::assertNotFalse($lock);self::assertNotFalse($ownership);self::assertNotFalse($mutation);self::assertTrue($begin<$lock&&$lock<$ownership&&$ownership<$mutation);
+        }
+        self::assertGreaterThanOrEqual(3,substr_count($quote,'$jobClientLockMessage'));
+        self::assertGreaterThanOrEqual(3,substr_count($contract,'$jobClientLockMessage'));
+        self::assertStringContainsString('status,finalized_at,last_sent_revision FROM invoices WHERE contract_id=?',$contract);
+        self::assertStringContainsString("\$linkedInvoiceLockSuffix=\$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql'?' FOR UPDATE':''",$contract);
+        self::assertStringContainsString("(int)(\$linkedInvoice['last_sent_revision']??0)>0",$contract);
+        self::assertGreaterThanOrEqual(2,substr_count($invoice,'pricing_invoice_is_fixed_total_installment($pdo,$id)'));
+        self::assertTrue(strpos($invoice,"\$isDraft=\$invoiceStatus==='draft'",strpos($invoice,"DocumentPolicy::assertMutable(\$pdo,'invoice',\$id,'monetary_adjustment',true)"))!==false);
+        $dateBegin=strpos($date,'$pdo->beginTransaction();');$dateLock=strpos($date,"DocumentPolicy::assertMutable(\$pdo,\$policyType,\$id,'administrative',true)",$dateBegin);$dateOwner=strpos($date,'require_record_ownership',$dateLock);$dateUpdate=strpos($date,'switch ($type)',$dateOwner);
+        self::assertTrue($dateBegin<$dateLock&&$dateLock<$dateOwner&&$dateOwner<$dateUpdate);
+        self::assertStringContainsString('$allowedRedirects=',$date);self::assertStringNotContainsString('urlencode($e->getMessage())',$date);
+    }
+
+    public function testStaffAndPublicQuoteConversionsUseFrozenPricingLineage(): void
+    {
+        $staff=(string)file_get_contents($this->root.'/src/controllers/quote/quote_approve.php');
+        $public=(string)file_get_contents($this->root.'/src/controllers/public_view/public_quote_action.php');
+        foreach([$staff,$public] as $controller){
+            self::assertStringContainsString('pricing_finalize_derived_document_revision(',$controller);
+            self::assertStringContainsString("'quote'",$controller);
+            self::assertStringNotContainsString('pricing_copy_document_override',$controller);
+        }
+        self::assertStringContainsString('FOR UPDATE',$staff);
+        self::assertStringContainsString("WHERE q.id=? FOR UPDATE",$public);
+        self::assertStringContainsString('WHERE token=? LIMIT 1 FOR UPDATE',$public);
+        self::assertSame(1,substr_count($public,'$pdo->beginTransaction();'));
+        self::assertLessThan(strpos($public,'WHERE token=? LIMIT 1 FOR UPDATE'),strpos($public,'WHERE q.id=? FOR UPDATE'));
+        self::assertStringContainsString("if(\$currentStatus===\$expectedStatus)",$public);
+        self::assertStringContainsString("http_response_code(409)",$public);
+        self::assertStringContainsString('This quote already has a different response.',$public);
+        self::assertStringContainsString("http_response_code(410)",$public);
+        $terminalizePosition=strrpos($public,'pa_public_link_terminalize($pdo, \'quote\'');
+        self::assertNotFalse($terminalizePosition);
+        self::assertGreaterThan($terminalizePosition,strpos($public,'$pdo->commit();',$terminalizePosition));
+        self::assertStringContainsString('if ($pdo->inTransaction()) { $pdo->rollBack(); }',$public);
+        self::assertStringContainsString('pricing_recompute_contract_percentage_deposit',$staff);
+        self::assertStringContainsString('pricing_recompute_contract_percentage_deposit',$public);
+    }
+
+    public function testRecurringAndOnDemandInvoicesFreezeContractPricingButFixedTotalDoesNotReapply(): void
+    {
+        $recurring=(string)file_get_contents($this->root.'/src/utils/recurring_billing.php');
+        $onDemand=(string)file_get_contents($this->root.'/src/controllers/contract/on_demand_invoice_generate.php');
+        $proration=(string)file_get_contents($this->root.'/src/controllers/contract/long_term_recurring_service_save.php');
+        self::assertGreaterThanOrEqual(2,substr_count($recurring,'pricing_finalize_derived_document_revision('));
+        self::assertStringContainsString("'contract',(int)\$contractId,pricing_contract_source_revision(\$contract)",$recurring);
+        self::assertStringContainsString('pa_recurring_fixed_installment_minor',$recurring);
+        self::assertStringContainsString('DocumentRevisionService::snapshotAndSave($pdo,\'invoice\',$invoiceId,$createdBy,false)',$recurring);
+        self::assertStringContainsString('Contract installment',$recurring);
+        self::assertStringContainsString("if(\$contract['pricing_type']==='fixed_total')",$recurring);
+        self::assertStringContainsString("\$discountType='none';\$discountValue=0.0;\$taxPercent=0.0;",$recurring);
+        self::assertStringContainsString('pricing_finalize_derived_document_revision(',$onDemand);
+        self::assertStringContainsString('contract_type = "on_demand" FOR UPDATE',$onDemand);
+        self::assertStringContainsString("'contract',\$contract_id,pricing_contract_source_revision(\$contract)",$onDemand);
+        self::assertStringContainsString('contract_type = "on_demand" FOR UPDATE',$onDemand);
+        self::assertStringContainsString("generation_key=? LIMIT 1",$onDemand);
+        self::assertStringContainsString("&idempotent=1",$onDemand);
+        self::assertStringContainsString('prorationGenerationKey',$proration);
+        self::assertStringContainsString('generation_key=? LIMIT 1',$proration);
+        self::assertStringContainsString('$idempotentResult = $idempotentReplay ? \'&idempotent=1\' : \'\';',$proration);
+        self::assertStringContainsString('$generationKey',$recurring);
+        self::assertStringContainsString('created_at,generation_key',$recurring);
+        $onDemandView=(string)file_get_contents($this->root.'/src/views/pages/contract/on-demand-contracts-list.php');
+        self::assertMatchesRegularExpression('/<form[^>]+class="od-generate-form"[\\s\\S]*?<input[^>]+name="generation_key"[^>]+value="<\\?php echo bin2hex\\(random_bytes\\(16\\)\\); \\?>"[\\s\\S]*?<\\/form>/', $onDemandView);
+        self::assertStringContainsString('name="generation_key"',(string)file_get_contents($this->root.'/src/views/pages/contract/long-term-contract-details.php'));
+        self::assertStringContainsString("pricing_money_to_minor((string)(\$contract['total_invoiced']??'0'))",$onDemand);
+        self::assertStringContainsString("pricing_money_to_minor((string)(\$contract['total_invoiced']??'0'))",$recurring);
+        foreach(['long_term_contracts_create.php','on_demand_contracts_create.php'] as $create){$source=(string)file_get_contents($this->root.'/src/controllers/contract/'.$create);self::assertStringContainsString('pricing_finalize_document_revision(',$source);self::assertStringContainsString('pricing_recompute_contract_percentage_deposit',$source);}
+        self::assertStringNotContainsString('pricing_finalize_document_revision(',(string)file_get_contents($this->root.'/src/utils/project_invoice_billing.php'));
+    }
+
     public function testLongTermAndOnDemandBillingBehaviorsAreExplicit(): void
     {
         $baseline = file_get_contents($this->root . '/database/baseline.sql');
@@ -786,5 +878,170 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("\$statusValue === 'paid' ? 'paid' : 'partial', true, true", (string)$projectBilling);
         self::assertStringContainsString('notify_admin_invoice_paid($pdo, $GLOBALS[\'appConfig\'] ?? [], $invoiceId, $paymentAmount, $status)', (string)$legacyWebhook);
         self::assertStringNotContainsString('notify_admin_invoice_paid', (string)$manualPayments);
+    }
+
+    public function testGeneratedInvoiceRequestKeysReplayDeliveryWithoutDuplicatingMoney(): void
+    {
+        $pdo = new PDO('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('CREATE TABLE contracts (id INTEGER PRIMARY KEY, invoice_count INTEGER NOT NULL, total_invoiced TEXT NOT NULL)');
+        $pdo->exec('CREATE TABLE invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, contract_id INTEGER NOT NULL, generation_key TEXT UNIQUE NOT NULL, total TEXT NOT NULL)');
+        $pdo->exec("INSERT INTO contracts VALUES (1,0,'0.00')");
+        $generate = static function (PDO $db, string $key): array {
+            $lookup = $db->prepare('SELECT id FROM invoices WHERE contract_id=1 AND generation_key=?');
+            $lookup->execute([$key]);
+            $existing = (int)$lookup->fetchColumn();
+            if ($existing > 0) return [$existing, true];
+            $db->prepare("INSERT INTO invoices(contract_id,generation_key,total) VALUES(1,?,'12.34')")->execute([$key]);
+            $id = (int)$db->lastInsertId();
+            $db->exec("UPDATE contracts SET invoice_count=invoice_count+1,total_invoiced='12.34' WHERE id=1");
+            return [$id, false];
+        };
+        [$firstId, $firstReplay] = $generate($pdo, 'same-key');
+        [$replayedId, $sameKeyReplay] = $generate($pdo, 'same-key');
+        self::assertFalse($firstReplay);
+        self::assertTrue($sameKeyReplay);
+        self::assertSame($firstId, $replayedId);
+        self::assertSame(1, (int)$pdo->query('SELECT invoice_count FROM contracts WHERE id=1')->fetchColumn());
+        self::assertSame(1, (int)$pdo->query('SELECT COUNT(*) FROM invoices')->fetchColumn());
+        $finalized = [$replayedId];
+        $delivered = [$replayedId];
+        self::assertSame([$firstId], $finalized);
+        self::assertSame([$firstId], $delivered);
+        self::assertSame(1, (int)$pdo->query('SELECT invoice_count FROM contracts WHERE id=1')->fetchColumn());
+        [$secondId, $differentKeyReplay] = $generate($pdo, 'different-key');
+        self::assertFalse($differentKeyReplay);
+        self::assertNotSame($firstId, $secondId);
+        self::assertSame(2, (int)$pdo->query('SELECT COUNT(*) FROM invoices')->fetchColumn());
+
+        $onDemand = (string)file_get_contents($this->root . '/src/controllers/contract/on_demand_invoice_generate.php');
+        $proration = (string)file_get_contents($this->root . '/src/controllers/contract/long_term_recurring_service_save.php');
+        self::assertStringContainsString('invoice_finalize($pdo, $existingInvoiceId', $onDemand);
+        self::assertStringContainsString('invoice_notification_process($pdo, $appConfig, null, null, 10, $existingInvoiceId)', $onDemand);
+        self::assertStringContainsString('$prorationInvoiceId=$existingProrationId;$idempotentReplay=true;', $proration);
+        self::assertStringContainsString('Could not discard the duplicate signed addendum upload.', $proration);
+        self::assertStringContainsString('$storedAddendum=null;$storedAddendumPath=null;$addendumUrl=null;', $proration);
+        self::assertStringContainsString('if (!$idempotentReplay && $approved', $proration);
+        self::assertStringContainsString('invoice_send_finalized($pdo, $prorationInvoiceId', $proration);
+        self::assertStringNotContainsString('$pdo->commit();header(\'Location: /?page=contract/long-term-contract-details', $proration);
+    }
+
+    public function testProjectCloseOutGuardIsTransactionalScopedAndActionable(): void
+    {
+        $service = (string)file_get_contents($this->root . '/src/services/ProjectCloseGuardService.php');
+        $eligibility = (string)file_get_contents($this->root . '/src/services/ProjectContractEligibilityGuardService.php');
+        $receivables = (string)file_get_contents($this->root . '/src/services/ProjectReceivablesSummaryService.php');
+        $controller = (string)file_get_contents($this->root . '/src/controllers/project/projects_update_status.php');
+        $details = (string)file_get_contents($this->root . '/src/views/pages/project/projects-details.php');
+        $projectsList = (string)file_get_contents($this->root . '/src/views/pages/project/projects-list.php');
+        $dashboard = (string)file_get_contents($this->root . '/src/controllers/api/dashboard_summary.php');
+        $acl = (string)file_get_contents($this->root . '/src/utils/acl_middleware.php');
+        $appConfig = (string)file_get_contents($this->root . '/src/config/app.php');
+
+        self::assertStringContainsString("['completed','cancelled']", $service);
+        self::assertStringContainsString("['completed','cancelled','denied','void']", $service);
+        self::assertStringContainsString('Project status transitions require an active transaction.', $service);
+        self::assertStringContainsString("\\require_record_ownership(\$pdo, 'projects', \$projectId)", $service);
+        self::assertStringContainsString('FROM contracts WHERE project_id=? ORDER BY id', $service);
+        self::assertStringContainsString('project.closeout.blocked', $service);
+        self::assertStringContainsString('closed_with_outstanding_receivables', $service);
+        self::assertStringContainsString('outstanding_receivables_minor', $service);
+        self::assertStringContainsString('UTC_TIMESTAMP(6)', $service);
+        self::assertStringContainsString('INSERT INTO system_audit', $service);
+        self::assertStringNotContainsString('FROM invoices', $service);
+        self::assertStringNotContainsString('UPDATE invoices', $service);
+        self::assertStringContainsString("config_key='contract_settlement_enabled'", $eligibility);
+        self::assertStringContainsString('SELECT id,status FROM projects WHERE id=?', $eligibility);
+        self::assertStringContainsString('ORDER BY id', $eligibility);
+        self::assertStringNotContainsString('catch (', $eligibility);
+        self::assertStringContainsString("collection_mode='direct'", $receivables);
+        self::assertStringContainsString("status IN ('sent','unpaid','partial','overdue')", $receivables);
+        self::assertStringContainsString("status IN ('sent','unpaid','partial')", $receivables);
+        self::assertStringContainsString('balance_due>0.005', $receivables);
+        self::assertStringContainsString('summarizeProjects', $receivables);
+
+        self::assertStringContainsString('ProjectCloseGuardService($pdo))->transition(', $controller);
+        self::assertStringContainsString('&closeout_blocked=1', $controller);
+        self::assertStringContainsString('&closeout_target=', $controller);
+        self::assertStringContainsString('#project-closeout-alert', $controller);
+        self::assertStringNotContainsString("\$_POST['redirect']", $controller);
+        self::assertStringNotContainsString('UPDATE projects', $controller);
+        $transitionAt = strpos($controller, 'ProjectCloseGuardService($pdo))->transition(');
+        $scheduleAt = strpos($controller, 'ScheduleService::syncProject');
+        $projectionAt = strpos($controller, 'queueProject($pdo,$id)');
+        $commitAt = strrpos($controller, '$pdo->commit()');
+        self::assertIsInt($transitionAt);
+        self::assertIsInt($scheduleAt);
+        self::assertIsInt($projectionAt);
+        self::assertIsInt($commitAt);
+        self::assertLessThan($scheduleAt, $transitionAt);
+        self::assertLessThan($projectionAt, $scheduleAt);
+        self::assertLessThan($commitAt, $projectionAt);
+        $blockedAt = (int)strpos($controller, "if (!\$transition['transitioned'])");
+        $blockedBranch = substr($controller, $blockedAt, $scheduleAt - $blockedAt);
+        self::assertStringContainsString('$pdo->commit()', $blockedBranch);
+        self::assertStringNotContainsString('ScheduleService::syncProject', $blockedBranch);
+        self::assertStringNotContainsString('queueProject', $blockedBranch);
+
+        self::assertStringContainsString("'project/projects-update-status' => 'projects.edit'", $acl);
+        self::assertStringContainsString("'contract_settlement_enabled'", $appConfig);
+        self::assertStringContainsString('$canEditProjectStatus && $contractSettlementEnabled', $details);
+        self::assertStringContainsString('Project <?php echo $closeoutActionNoun; ?> is blocked', $details);
+        self::assertStringContainsString('Review close-out', $details);
+        self::assertStringContainsString('Open invoices do not block project close-out.', $details);
+        self::assertStringContainsString('contract_type, total', $details);
+        self::assertStringContainsString('ProjectReceivablesSummaryService($pdo))->summarize($projectId)', $details);
+        /* Retired mojibake assertion from the first close-out prototype:
+        self::assertStringContainsString('Closed · Outstanding $', $details);
+        */
+        self::assertStringContainsString("'completed' ? 'Completed' : 'Cancelled'", $details);
+        self::assertStringContainsString('role="alert"', $details);
+        self::assertStringContainsString('aria-labelledby="project-closeout-alert-title"', $details);
+        self::assertStringContainsString('tabindex="-1"', $details);
+        self::assertStringContainsString('aria-label="Review close-out for Contract', $details);
+        self::assertStringContainsString('project-closeout-action{min-height:44px', $details);
+        self::assertStringContainsString('.project-closeout-row{align-items:stretch;flex-direction:column}', $details);
+        self::assertStringContainsString('Retry <?php echo $closeoutActionNoun; ?>', $details);
+        self::assertStringContainsString('Project status updated.', $details);
+        self::assertStringContainsString('Complete this Project? Collectible receivables remain due', $details);
+        self::assertStringContainsString('Cancel this Project? Collectible receivables remain due', $details);
+        self::assertStringContainsString('summarizeProjects(', $projectsList);
+        self::assertStringNotContainsString('SUM(GREATEST(0, i.balance_due))', $projectsList);
+        self::assertStringContainsString('summarizeAll()', $dashboard);
+        self::assertStringNotContainsString('SUM(balance_due)', $dashboard);
+
+        $guardedPaths = [
+            'src/controllers/contract/contracts_create.php',
+            'src/controllers/contract/long_term_contracts_create.php',
+            'src/controllers/contract/on_demand_contracts_create.php',
+            'src/controllers/contract/contracts_update.php',
+            'src/controllers/quote/quote_approve.php',
+            'src/controllers/public_view/public_quote_action.php',
+            'src/controllers/project/project_add_document.php',
+            'src/controllers/document_reenable_handler.php',
+            'src/services/JobAssignmentService.php',
+        ];
+        foreach ($guardedPaths as $path) {
+            $source = (string)file_get_contents($this->root . '/' . $path);
+            self::assertStringContainsString('ProjectContractEligibilityGuardService', $source, $path);
+            self::assertStringContainsString('assertCanCreateOrAttach', $source, $path);
+        }
+        foreach ([
+            'src/controllers/contract/contracts_create.php',
+            'src/controllers/contract/long_term_contracts_create.php',
+            'src/controllers/contract/on_demand_contracts_create.php',
+            'src/controllers/quote/quote_approve.php',
+            'src/controllers/public_view/public_quote_action.php',
+        ] as $path) {
+            $source = (string)file_get_contents($this->root . '/' . $path);
+            self::assertLessThan(strpos($source, 'INSERT INTO contracts'), strpos($source, 'assertCanCreateOrAttach'), $path);
+        }
+        $contractUpdate = (string)file_get_contents($this->root . '/src/controllers/contract/contracts_update.php');
+        self::assertLessThan(strpos($contractUpdate, "DocumentPolicy::assertMutable(\$pdo,'contract',\$id,'commercial',true)"), strpos($contractUpdate, 'assertCanCreateOrAttach'));
+        $jobAssignment = (string)file_get_contents($this->root . '/src/services/JobAssignmentService.php');
+        self::assertLessThan(strpos($jobAssignment, 'SELECT * FROM jobs WHERE id=? FOR UPDATE'), strpos($jobAssignment, 'assertCanCreateOrAttach'));
+        $reenable = (string)file_get_contents($this->root . '/src/controllers/document_reenable_handler.php');
+        self::assertLessThan(strpos($reenable, 'SELECT * FROM contracts WHERE id=? FOR UPDATE'), strpos($reenable, 'assertCanCreateOrAttach'));
+        self::assertStringContainsString('Contract Project assignment changed. Retry the request.', $reenable);
     }
 }

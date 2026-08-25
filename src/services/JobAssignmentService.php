@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/ProjectContractEligibilityGuardService.php';
+
 final class JobAssignmentService
 {
     public static function ensureForCode(PDO $pdo, int $clientId, string $jobCode, ?int $projectId = null, ?int $userId = null): int
@@ -35,6 +37,8 @@ final class JobAssignmentService
         $ownTransaction = !$pdo->inTransaction();
         if ($ownTransaction) $pdo->beginTransaction();
         try {
+            (new App\Services\ProjectContractEligibilityGuardService($pdo))
+                ->assertCanCreateOrAttach($projectId, [], $jobId);
             $jobStmt = $pdo->prepare('SELECT * FROM jobs WHERE id=? FOR UPDATE');
             $jobStmt->execute([$jobId]);
             $job = $jobStmt->fetch(PDO::FETCH_ASSOC);

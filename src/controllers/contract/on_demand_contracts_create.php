@@ -7,8 +7,10 @@ require_once __DIR__ . '/../../utils/contract_signatures.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
+require_once __DIR__ . '/../../services/ProjectContractEligibilityGuardService.php';
 
 @error_log('[on_demand_contracts_create] POST received', 0);
 
@@ -135,6 +137,7 @@ $showContactOnDocument = $contractOrgId && !empty($_POST['show_contact_on_docume
 
 $pdo->beginTransaction();
 try{
+    (new App\Services\ProjectContractEligibilityGuardService($pdo))->assertCanCreateOrAttach($project_id);
     // Get project code
     $projectCode = 'PA-'.date('Y').'-001';
     try { 
@@ -205,7 +208,14 @@ try{
         $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "contract", ?)')->execute([$project_id, $contract_id]);
     }
 
-    DocumentRevisionService::snapshotAndSave($pdo,'contract',$contract_id,$sessionUserId,false);
+    pricing_apply_posted_override($pdo,(int)$contractOrgId,'contract',$contract_id,$sessionUserId,$_POST);
+    pricing_finalize_document_revision(
+        $pdo,$contractOrgId!==null?(int)$contractOrgId:null,'contract',$contract_id,$sessionUserId,false,
+        (string)($appConfig['workforce_currency']??'USD'),
+        $deposit_type==='percent'&&$contractOrgId!==null
+          ? static fn(array $pricing)=>pricing_recompute_contract_percentage_deposit($pdo,(int)$contractOrgId,$contract_id,(string)$deposit_value)
+          : null
+    );
     $pdo->commit();
 } catch(Throwable $e){
     if ($pdo->inTransaction()) $pdo->rollBack();

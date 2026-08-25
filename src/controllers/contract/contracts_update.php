@@ -10,12 +10,15 @@ require_once __DIR__ . '/../../utils/recurring_services.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
+require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 require_once __DIR__ . '/../../services/ScheduleService.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
+require_once __DIR__ . '/../../services/ProjectContractEligibilityGuardService.php';
 $id = (int)($_POST['id'] ?? 0);
+$jobClientLockMessage='A contract cannot be moved to another client while it belongs to a Job. Clone it into a new Job instead.';
 require_record_ownership($pdo, 'contracts', $id);
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
@@ -25,7 +28,7 @@ $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 $deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
-$deposit_amount = (float)($_POST['deposit_amount'] ?? 0);
+$deposit_value = (float)($_POST['deposit_value'] ?? $_POST['deposit_amount'] ?? 0);
 $deposit_paid = (float)($_POST['deposit_paid'] ?? 0);
 $fulfillment_date = !empty($_POST['fulfillment_date']) ? $_POST['fulfillment_date'] : null;
 $item = $_POST['item'] ?? [];
@@ -41,7 +44,7 @@ $contractTypeStmt->execute([$id]);
 $existingContract = $contractTypeStmt->fetch(PDO::FETCH_ASSOC);
 try { $existingContract=DocumentPolicy::assertMutable($pdo,'contract',$id,'commercial'); } catch(DocumentLockedException $locked){http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'document_locked','message'=>$locked->getMessage(),'request_id'=>bin2hex(random_bytes(8))]);exit;}
 if (!empty($existingContract['job_id']) && $client_id !== (int)$existingContract['client_id']) {
-  http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'job_client_conflict','message'=>'A contract cannot be moved to another client while it belongs to a Job. Clone it into a new Job instead.','request_id'=>bin2hex(random_bytes(8))]);exit;
+  http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'job_client_conflict','message'=>$jobClientLockMessage,'request_id'=>bin2hex(random_bytes(8))]);exit;
 }
 $contractType = (string)($existingContract['contract_type'] ?? '');
 $isLongTermContract = $contractType === 'long_term';
@@ -114,6 +117,9 @@ $travelItem=mileage_document_travel_item($travelRule);if($travelItem&&$travelIte
 $invoiceSubtotal=$billing_mode==='hourly'?0.0:array_sum(array_column($items,'t'));
 if($travelItem&&$travelItem['pricing_status']==='standard')$invoiceSubtotal+=(float)$travelItem['line_total'];
 $discount_amount=0.0; if($discount_type==='percent'){$discount_amount=max(0,min(100,$discount_value))*$subtotal/100;} elseif($discount_type==='fixed'){$discount_amount=max(0,$discount_value);} $tax=max(0,$tax_percent)*max(0,$subtotal-$discount_amount)/100; $total=max(0,$subtotal-$discount_amount+$tax);
+$deposit_amount=0.0;
+if($deposit_type==='percent'){$deposit_amount=max(0,min(100,$deposit_value))*$total/100;}
+elseif($deposit_type==='fixed'){$deposit_amount=max(0,$deposit_value);}
 $terms = trim((string)($_POST['terms'] ?? '')) ?: null;
 $estimated = trim((string)($_POST['estimated_completion'] ?? '')) ?: null;
 $weather = isset($_POST['weather_pending']) ? 1 : 0;
@@ -124,9 +130,30 @@ $customFieldValues = extractCustomFieldValues($_POST);
 $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues) : null;
 $organizationId = resolve_client_context_org_id($pdo, $client_id, $project_id, request_client_org_id() ?: null);
 $showContactOnDocument = $organizationId && !empty($_POST['show_contact_on_document']) ? 1 : 0;
+$linkedInvoiceLockMessage='This contract has a finalized or delivered linked invoice and can no longer be edited. Create an amendment or replacement contract instead.';
 
 $pdo->beginTransaction();
 try{
+  (new App\Services\ProjectContractEligibilityGuardService($pdo))->assertCanCreateOrAttach(
+    $project_id,
+    [$id],
+    !empty($existingContract['job_id']) ? (int)$existingContract['job_id'] : null
+  );
+  $existingContract=DocumentPolicy::assertMutable($pdo,'contract',$id,'commercial',true);
+  require_record_ownership($pdo,'contracts',$id);
+  if(!empty($existingContract['job_id'])&&$client_id!==(int)$existingContract['client_id'])throw new DomainException($jobClientLockMessage);
+  $mutableLinkedInvoices=[];
+  if(!$isLongTermContract){
+    $linkedInvoiceLockSuffix=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql'?' FOR UPDATE':'';
+    $linkedInvoiceLock=$pdo->prepare('SELECT id,status,finalized_at,last_sent_revision FROM invoices WHERE contract_id=?'.$linkedInvoiceLockSuffix);
+    $linkedInvoiceLock->execute([$id]);
+    $mutableLinkedInvoices=$linkedInvoiceLock->fetchAll(PDO::FETCH_ASSOC);
+    foreach($mutableLinkedInvoices as $linkedInvoice){
+      if((string)$linkedInvoice['status']!=='draft'||$linkedInvoice['finalized_at']!==null||(int)($linkedInvoice['last_sent_revision']??0)>0){
+        throw new DomainException($linkedInvoiceLockMessage);
+      }
+    }
+  }
   if (!empty($existingContract['job_id']) && (int)($existingContract['project_id'] ?? 0) !== (int)($project_id ?? 0)) {
     JobAssignmentService::assignProject($pdo,(int)$existingContract['job_id'],$project_id);
   }
@@ -185,16 +212,15 @@ try{
   // Sync changes to regular linked invoices. Long-term recurring invoices are historical billing records and must not be rewritten.
   if (!$isLongTermContract) {
     $invoiceDiscount=$discount_type==='percent'?max(0,min(100,$discount_value))*$invoiceSubtotal/100:($discount_type==='fixed'?min($invoiceSubtotal,max(0,$discount_value)):0);$invoiceTotal=max(0,$invoiceSubtotal-$invoiceDiscount+max(0,$tax_percent)*max(0,$invoiceSubtotal-$invoiceDiscount)/100);
-    $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, organization_id=?, show_contact_on_document=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=?, service_location_id=? WHERE contract_id=?')->execute([$client_id,$project_id,$organizationId,$showContactOnDocument,$billing_mode,$discount_type,$discount_value,$tax_percent,$invoiceSubtotal,$invoiceTotal,$estimated,$fulfillment_date,$weather,$scope,$serviceLocationId,$id]);
+    $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, organization_id=?, show_contact_on_document=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=?, service_location_id=? WHERE contract_id=? AND status="draft" AND finalized_at IS NULL')->execute([$client_id,$project_id,$organizationId,$showContactOnDocument,$billing_mode,$discount_type,$discount_value,$tax_percent,$invoiceSubtotal,$invoiceTotal,$estimated,$fulfillment_date,$weather,$scope,$serviceLocationId,$id]);
   }
   $pdo->prepare('DELETE FROM project_documents WHERE document_type="contract" AND document_id=?')->execute([$id]);
   if ($project_id) {
     $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "contract", ?)')->execute([$project_id, $id]);
   }
   if (!$isLongTermContract) {
-    $linkedInvoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
-    $linkedInvoiceIds->execute([$id]);
-    foreach ($linkedInvoiceIds->fetchAll(PDO::FETCH_COLUMN) as $linkedInvoiceId) {
+    foreach ($mutableLinkedInvoices as $linkedInvoice) {
+      $linkedInvoiceId=(int)$linkedInvoice['id'];
       $pdo->prepare('DELETE FROM project_documents WHERE document_type="invoice" AND document_id=?')->execute([(int)$linkedInvoiceId]);
       if ($project_id) {
         $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "invoice", ?)')->execute([$project_id, (int)$linkedInvoiceId]);
@@ -204,9 +230,8 @@ try{
   
   // Sync items to regular linked invoices only.
   if (!$isLongTermContract) {
-    $invoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
-    $invoiceIds->execute([$id]);
-    foreach($invoiceIds->fetchAll(PDO::FETCH_COLUMN) as $invId) {
+    foreach($mutableLinkedInvoices as $linkedInvoice) {
+      $invId=(int)$linkedInvoice['id'];
       if($billing_mode==='hourly'){
         $pdo->prepare('DELETE ii FROM invoice_items ii WHERE ii.invoice_id=? AND ii.time_entry_id IS NULL AND NOT EXISTS (SELECT 1 FROM work_time_billing_allocations a WHERE a.invoice_id=? AND a.invoice_item_id=ii.id AND a.status="invoiced")')->execute([$invId,$invId]);
       }else{
@@ -248,19 +273,24 @@ try{
       @error_log('contracts_update signature insert failed: ' . $sigErr->getMessage());
   }
   if (!$isLongTermContract) {
-    $linkedRevisions = $pdo->prepare('SELECT id,last_sent_revision FROM invoices WHERE contract_id=?');
-    $linkedRevisions->execute([$id]);
-    foreach ($linkedRevisions->fetchAll(PDO::FETCH_ASSOC) as $linkedInvoice) {
-      DocumentRevisionService::snapshotAndSave($pdo,'invoice',(int)$linkedInvoice['id'],(int)($_SESSION['user']['id']??0));
+    foreach ($mutableLinkedInvoices as $linkedInvoice) {
+      pricing_finalize_document_revision($pdo,$organizationId!==null?(int)$organizationId:null,'invoice',(int)$linkedInvoice['id'],(int)($_SESSION['user']['id']??0),true,(string)($appConfig['workforce_currency']??'USD'));
       if (!empty($linkedInvoice['last_sent_revision'])) {
         $pdo->prepare('UPDATE public_links SET revoked=1 WHERE document_type="invoice" AND document_id=?')->execute([(int)$linkedInvoice['id']]);
       }
     }
   }
-  DocumentRevisionService::snapshotAndSave($pdo,'contract',$id,(int)($_SESSION['user']['id']??0));
+  pricing_apply_posted_override($pdo,(int)$organizationId,'contract',$id,(int)($_SESSION['user']['id']??0),$_POST);
+  pricing_finalize_document_revision(
+    $pdo,$organizationId!==null?(int)$organizationId:null,'contract',$id,(int)($_SESSION['user']['id']??0),true,
+    (string)($appConfig['workforce_currency']??'USD'),
+    $deposit_type==='percent'&&$organizationId!==null
+      ? static fn(array $pricing)=>pricing_recompute_contract_percentage_deposit($pdo,(int)$organizationId,$id,(string)$deposit_value)
+      : null
+  );
   if(!empty($existingContract['job_id']))ScheduleService::syncJob($pdo,(int)$existingContract['job_id'],(string)($appConfig['timezone']??'UTC'),(int)($_SESSION['user']['id']??0));
   
   $pdo->commit();
-}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=' . $detailPage . '&id=' . $id . '&error=Update%20failed'); exit; }
+}catch(Throwable $e){$pdo->rollBack();$error=$e instanceof DocumentLockedException?$e->getMessage():($e instanceof DomainException&&hash_equals($linkedInvoiceLockMessage,$e->getMessage())?$linkedInvoiceLockMessage:($e instanceof DomainException&&hash_equals($jobClientLockMessage,$e->getMessage())?$jobClientLockMessage:'Update failed'));header('Location: /?page='.$detailPage.'&id='.$id.'&error='.rawurlencode($error));exit;}
 header('Location: /?page=' . $detailPage . '&id=' . $id . '&updated=1');
 exit;

@@ -4,6 +4,7 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../services/ProjectContractEligibilityGuardService.php';
 
 // CSRF is already verified by the router (index.php)
 // No need to verify again here
@@ -16,18 +17,43 @@ if ($id <= 0 || !in_array($type, ['quote', 'contract', 'invoice', 'long_term_con
     exit;
 }
 
+$contractTypes = ['contract', 'long_term_contract', 'on_demand_contract'];
+$preReadProjectId = null;
+if (in_array($type, $contractTypes, true)) {
+    $preRead = $pdo->prepare('SELECT project_id FROM contracts WHERE id=?');
+    $preRead->execute([$id]);
+    $projectValue = $preRead->fetchColumn();
+    if ($projectValue === false) {
+        header('Location: /?page=dashboard&error=Contract%20not%20found');
+        exit;
+    }
+    $preReadProjectId = $projectValue !== null ? (int)$projectValue : null;
+}
+
 $pdo->beginTransaction();
 try {
+    $guardedContract = null;
+    if (in_array($type, $contractTypes, true)) {
+        (new App\Services\ProjectContractEligibilityGuardService($pdo))
+            ->assertCanCreateOrAttach($preReadProjectId, [$id]);
+        $locked = $pdo->prepare('SELECT * FROM contracts WHERE id=? FOR UPDATE');
+        $locked->execute([$id]);
+        $guardedContract = $locked->fetch(PDO::FETCH_ASSOC);
+        if (!$guardedContract) {
+            throw new Exception('Contract not found');
+        }
+        $lockedProjectId = $guardedContract['project_id'] !== null ? (int)$guardedContract['project_id'] : null;
+        if ($lockedProjectId !== $preReadProjectId) {
+            throw new DomainException('Contract Project assignment changed. Retry the request.');
+        }
+    }
     switch ($type) {
         case 'quote':
             throw new Exception('Terminal quotes cannot be reopened. Clone the quote into a new draft.');
 
         case 'contract':
             // Re-enable contract (change from cancelled/denied/void back to pending)
-            $st = $pdo->prepare('SELECT * FROM contracts WHERE id=? FOR UPDATE');
-            $st->execute([$id]);
-            $doc = $st->fetch(PDO::FETCH_ASSOC);
-            if (!$doc) throw new Exception('Contract not found');
+            $doc = $guardedContract;
             
             // Only allow re-enabling cancelled/denied contracts
             if (!in_array($doc['status'], ['cancelled', 'denied', 'void'])) {
@@ -62,10 +88,8 @@ try {
 
         case 'long_term_contract':
             // Re-enable long-term contract
-            $st = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term" FOR UPDATE');
-            $st->execute([$id]);
-            $doc = $st->fetch(PDO::FETCH_ASSOC);
-            if (!$doc) throw new Exception('Long-term contract not found');
+            $doc = $guardedContract;
+            if (($doc['contract_type'] ?? '') !== 'long_term') throw new Exception('Long-term contract not found');
             
             // Only allow re-enabling cancelled/denied/void contracts
             if (!in_array($doc['status'], ['cancelled', 'denied', 'void'], true)) {
@@ -81,10 +105,8 @@ try {
 
         case 'on_demand_contract':
             // Re-enable on-demand contract
-            $st = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="on_demand" FOR UPDATE');
-            $st->execute([$id]);
-            $doc = $st->fetch(PDO::FETCH_ASSOC);
-            if (!$doc) throw new Exception('On-demand contract not found');
+            $doc = $guardedContract;
+            if (($doc['contract_type'] ?? '') !== 'on_demand') throw new Exception('On-demand contract not found');
             
             // Only allow re-enabling cancelled/denied/void contracts
             if (!in_array($doc['status'], ['cancelled', 'denied', 'void'], true)) {

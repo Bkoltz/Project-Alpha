@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
 require_once __DIR__ . '/../../../utils/public_project_links.php';
+require_once __DIR__ . '/../../../utils/document_pricing_adjustments.php';
 require_once __DIR__ . '/../../../config/app.php';
 
 $projectId = (int)($_GET['id'] ?? 0);
@@ -227,6 +228,8 @@ $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?
   <?php if (!empty($_GET['error'])): ?>
     <div class="alert alert-danger" style="margin-bottom:14px"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
   <?php endif; ?>
+
+  <?php echo pricing_adjustment_assignment_controls($pdo,$projectOrganizationId,'project',$projectId,'/?page=project/projects-edit&id='.$projectId,csrf_token()); ?>
 
   <div class="project-edit-layout">
     <nav class="project-edit-nav" aria-label="Project edit sections">

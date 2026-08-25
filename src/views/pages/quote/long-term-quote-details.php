@@ -8,6 +8,7 @@ $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
 require_once __DIR__ . '/../../../utils/public_links.php';
+require_once __DIR__ . '/../../../utils/document_pricing_adjustments.php';
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'quotes', $id);
 }
@@ -15,6 +16,7 @@ $q = $pdo->prepare('SELECT q.*, cl.name client_name, cl.email client_email, cl.p
 $q->execute([$id]);
 $quote = $q->fetch(PDO::FETCH_ASSOC);
 if(!$quote){ echo '<p>Long-term quote not found</p>'; return; }
+$pricingSnapshot=(int)($quote['organization_id']??0)>0?pricing_document_snapshot($pdo,(int)$quote['organization_id'],'quote',$id,max(1,(int)($quote['revision_number']??1))):null;
 
 // Get items if fixed_total pricing
 $items = [];
@@ -49,10 +51,9 @@ $billingInterval = $quote['billing_interval_count'] . ' ' . ucfirst($quote['bill
 if ($quote['billing_interval_count'] > 1) $billingInterval .= 's';
 
 $pricingLabel = '';
-$invoiceAmount = 0;
+$invoiceAmount = (float)($quote['total'] ?? 0);
 if ($quote['pricing_type'] === 'per_invoice') {
     $pricingLabel = 'Recurring Amount (per invoice)';
-    $invoiceAmount = (float)$quote['price_per_invoice'];
 } else {
     $pricingLabel = 'Fixed Total (billed over time)';
     // Calculate invoice amount with tax and discount
@@ -67,7 +68,6 @@ if ($quote['pricing_type'] === 'per_invoice') {
     }
     $taxable = max(0, $subtotal - $discount);
     $tax = max(0, (float)$quote['tax_percent']) * $taxable / 100;
-    $invoiceAmount = max(0, $taxable + $tax);
 }
 
 $depositType = $quote['deposit_type'] ?? 'none';
@@ -298,6 +298,7 @@ $isOngoing = empty($quote['end_date']);
           <td colspan="3" style="padding:12px"><?php echo !empty($quote['scope']) ? htmlspecialchars($quote['scope']) : 'Recurring service fee'; ?> (billed <?php echo htmlspecialchars(strtolower($billingInterval)); ?>)</td>
           <td style="padding:12px;text-align:right;font-weight:600">$<?php echo number_format($quote['price_per_invoice'], 2); ?></td>
         </tr>
+        <?php echo pricing_adjustment_client_row($pricingSnapshot,'padding:10px','font-weight:600',2); ?>
       <?php else: ?>
         <?php if ($items): ?>
           <tr style="border-bottom:1px solid #eee">
@@ -320,6 +321,7 @@ $isOngoing = empty($quote['end_date']);
           <td style="padding:10px;font-weight:600">Subtotal</td>
           <td style="padding:10px">$<?php echo number_format($quote['subtotal'] ?? 0,2); ?></td>
         </tr>
+        <?php echo pricing_adjustment_client_row($pricingSnapshot,'padding:10px','font-weight:600',2); ?>
         <tr>
           <td></td><td></td>
           <td style="padding:10px;font-weight:600">Discount</td>
@@ -352,6 +354,7 @@ $isOngoing = empty($quote['end_date']);
       </tr>
     </tbody>
   </table>
+  <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW') && ($pricingProvenance=pricing_adjustment_staff_provenance($pricingSnapshot))!==''): ?><p class="pricing-provenance" data-pricing-provenance><?php echo htmlspecialchars($pricingProvenance,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); ?></p><?php endif; ?>
 
   <?php if (!isset($appConfig['quotes_show_terms']) || (int)$appConfig['quotes_show_terms'] === 1): ?>
   <div style="page-break-after:always"></div>
