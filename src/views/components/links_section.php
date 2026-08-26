@@ -44,10 +44,12 @@ try {
     $includeSelect = invoice_content_links_table_has_column($pdo, 'entity_links', 'include_on_invoices') ? 'include_on_invoices' : '0 AS include_on_invoices';
     $visibilitySelect = invoice_content_links_table_has_column($pdo, 'entity_links', 'visibility_scope') ? 'visibility_scope' : '"entity_only" AS visibility_scope';
     $departmentSelect = invoice_content_links_table_has_column($pdo, 'entity_links', 'selected_department_ids') ? 'selected_department_ids' : 'NULL AS selected_department_ids';
+    $resolverVisibility = pa_resolver_link_visibility_sql();
     $stmt = $pdo->prepare("
         SELECT id, title, link_type, {$sourceSelect}, {$includeSelect}, {$visibilitySelect}, {$departmentSelect}, url, expiration_date, is_expired, ignore_auto_generation, last_verified
         FROM entity_links
         WHERE entity_type = ? AND entity_id = ?
+          AND {$resolverVisibility}
         ORDER BY include_on_invoices DESC, link_type ASC, title ASC
     ");
     $stmt->execute([(string)$entityType, (int)$entityId]);

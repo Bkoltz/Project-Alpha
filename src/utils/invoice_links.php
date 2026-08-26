@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/escaper.php';
+require_once __DIR__ . '/resolver_link_policy.php';
 
 function pa_config_value(PDO $pdo, string $key, $default = null)
 {
@@ -232,6 +233,7 @@ function pa_invoice_links_query_for_context(
         FROM entity_links el
         WHERE el.include_on_invoices = 1
           AND el.is_expired = 0
+          AND ' . pa_resolver_link_visibility_sql('el') . '
           AND (' . implode(' OR ', $candidateClauses) . ')
         ORDER BY
           CASE el.entity_type

@@ -4,6 +4,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/link_provider_config.php';
+require_once __DIR__ . '/../../utils/resolver_link_policy.php';
 
 if (empty($_SESSION['user'])) {
     http_response_code(401);
@@ -87,6 +88,9 @@ try {
         $globalSettings['dropbox_app_secret'] = trim((string)$_POST['dropbox_app_secret']);
     }
     
+    $pdo->beginTransaction();
+    // Discard old disabled-provider URLs before re-enabling any provider.
+    pa_remove_disabled_resolver_links($pdo);
     foreach ($globalSettings as $key => $value) {
         $stmt = $pdo->prepare("
             INSERT INTO app_config (organization_id, config_key, config_value)
@@ -117,8 +121,8 @@ try {
                     'access_token' => $accessToken,
                     'root_path' => $_POST["{$provider}_root_path"] ?? '/'
                 ];
-            } elseif (!empty($existingCredentials['refresh_token'])) {
-                // Keep existing OAuth credentials
+            } elseif ($existingCredentials) {
+                // Preserve saved OAuth or legacy credentials when no replacement is supplied.
                 $credentials = $existingCredentials;
                 // Update root path if changed
                 $credentials['root_path'] = $_POST["{$provider}_root_path"] ?? ($existingCredentials['root_path'] ?? '/');
@@ -166,6 +170,9 @@ try {
         }
         
         $expirationDays = (int)($globalSettings['default_link_expiration_days'] ?? $readConfig('default_link_expiration_days', 365));
+        if ($existingRow && (!$globalSettings['link_resolver_enabled'] || !$isEnabled)) {
+            $credentials = $existingCredentials;
+        }
         pa_link_provider_save($pdo, $provider, $isEnabled, $credentials, $expirationDays);
     }
 
@@ -175,11 +182,16 @@ try {
         'profile_id' => (int)($_POST['managed_delivery_profile_id'] ?? 0),
         'guest_links_enabled' => isset($_POST['managed_delivery_guest_links_enabled']),
     ]);
+    pa_remove_disabled_resolver_links($pdo);
+    $pdo->commit();
     
     header('Location: /?page=settings&tab=links&saved=1');
     exit;
     
 } catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     @error_log('[LinksHandler] Error: ' . $e->getMessage());
     header('Location: /?page=settings&tab=links&saved=0&error=' . urlencode($e->getMessage()));
     exit;

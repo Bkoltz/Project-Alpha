@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
 require_once __DIR__ . '/../../../utils/link_provider_config.php';
+require_once __DIR__ . '/../../../utils/resolver_link_policy.php';
 require_once __DIR__ . '/../../../utils/cron_state.php';
 
 // Fetch global app config
@@ -34,10 +35,11 @@ $linkStats = [
 ];
 
 try {
-    $linkStats['total_links'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links')->fetchColumn();
-    $linkStats['expired_links'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links WHERE is_expired = 1')->fetchColumn();
+    $visibleLinkCondition = 'link_type <> "resolver_blacklist" AND ' . pa_resolver_link_visibility_sql();
+    $linkStats['total_links'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links WHERE ' . $visibleLinkCondition)->fetchColumn();
+    $linkStats['expired_links'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links WHERE is_expired = 1 AND ' . $visibleLinkCondition)->fetchColumn();
     $linkStats['ignored_clients'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links WHERE ignore_auto_generation = 1')->fetchColumn();
-    $linkStats['auto_links'] = (int)$pdo->query("SELECT COUNT(*) FROM entity_links WHERE link_type IN ('auto_dropbox','auto_gdrive','auto_s3','auto_r2')")->fetchColumn();
+    $linkStats['auto_links'] = (int)$pdo->query("SELECT COUNT(*) FROM entity_links WHERE link_source = 'resolver' AND " . $visibleLinkCondition)->fetchColumn();
 } catch (Throwable $e) {
     @error_log('[links] Error fetching link stats: ' . $e->getMessage());
 }
@@ -192,7 +194,7 @@ $managedDeliveryId = static function (): string {
         <div style="display:grid;gap:16px">
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="link_resolver_enabled" value="1" <?php echo !empty($appConfig['link_resolver_enabled']) ? 'checked' : ''; ?>>
-                <span class="font-600">Enable Link Resolver System<?php echo $helpIcon('Disabled by default. Turn this on only if PA should look for cloud folders automatically.'); ?></span>
+                <span class="font-600">Enable Link Resolver System<?php echo $helpIcon('Disabling removes resolver-generated links from Project Alpha but keeps provider credentials. Re-enable and scan to generate fresh links. Manual links are not removed.'); ?></span>
             </label>
 
             <label style="display:flex;align-items:center;gap:10px">
@@ -328,6 +330,7 @@ $managedDeliveryId = static function (): string {
             </label>
             <div class="pa-provider-note">
                 Manual links do not require auto-generation. Enable this provider only when PA should scan for exact organization, department, or standalone-client folders and create share links automatically.
+                Disabling removes this provider's generated links while retaining its saved credentials. Disconnecting Dropbox also revokes its credentials.
             </div>
 
             <div id="fields_<?php echo e($provider); ?>" style="<?php echo !$isEnabled ? 'display:none' : ''; ?>">

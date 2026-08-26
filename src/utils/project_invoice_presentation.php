@@ -79,6 +79,5 @@ function project_invoice_item_total_rows(array $item, ?array $pricingSnapshot = 
     if ((float)$item['amount_paid_at_generation'] > 0) {
         $rows[] = ['label' => 'Paid before this statement', 'value' => $money(-(float)$item['amount_paid_at_generation'])];
     }
-    $rows[] = ['label' => 'Included in this statement', 'value' => $money((float)$item['amount_due_at_generation']), 'total' => true];
     return $rows;
 }
