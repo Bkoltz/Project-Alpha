@@ -40,16 +40,21 @@ final class ProjectInvoiceDocumentLayoutTest extends TestCase
         foreach ([
             'project_invoice_refresh_status($pdo, $id)',
             'FROM project_invoice_items pii',
-            "\$item['amount_due_at_generation']",
             "\$pi['amount_paid']",
             "\$pi['balance_due']",
             'name="recipient_keys[]"',
-            'page-break-inside:avoid',
             'Included Invoices',
             'project/project-invoice-payment',
         ] as $marker) {
             self::assertStringContainsString($marker, $project, $marker);
         }
+        $section = $this->read('src/views/components/project_invoice_item.php');
+        self::assertStringContainsString("\$item['amount_due_at_generation']", $section);
+        self::assertStringContainsString('page-break-inside:avoid', $section);
+        self::assertStringContainsString('page-break-inside:auto', $section);
+        self::assertSame(1, substr_count($project, 'foreach ($items as '), 'Render each invoice in a single grouped section.');
+        self::assertStringContainsString('components/project_invoice_item.php', $project);
+        self::assertStringNotContainsString("['label' => 'Subtotal'", $project, 'Statement balances already include child taxes and discounts.');
     }
 
     public function testProjectPdfUsesStatementPeriodEndAndDocumentNumber(): void

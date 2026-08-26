@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../../../utils/project_invoice_presentation.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
 require_once __DIR__ . '/../../../utils/document_recipient.php';
 require_once __DIR__ . '/../../../utils/invoice_content_links.php';
@@ -53,6 +54,7 @@ if (!defined('PUBLIC_VIEW') && !defined('PDF_MODE')) {
 
 $itemsStmt = $pdo->prepare('
     SELECT pii.*, i.project_code, i.invoice_type, i.status AS current_status, i.total AS current_total, i.amount_paid AS current_paid,
+           i.subtotal, i.discount_type, i.discount_value, i.tax_percent, i.tax_amount, i.organization_id, i.revision_number,
            c.name AS client_name
     FROM project_invoice_items pii
     JOIN invoices i ON i.id = pii.invoice_id
@@ -167,20 +169,20 @@ $documentSender = document_sender_for_creator($pdo, $appConfig, !empty($pi['crea
   ?>
 
   <div style="border:1px solid #e5e7eb;border-radius:8px;padding:18px;margin-bottom:18px;background:#fff">
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
-      <div>
+    <div style="<?php echo $isPdf ? 'display:table;width:100%;table-layout:fixed' : 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px'; ?>">
+      <div style="<?php echo $isPdf ? 'display:table-cell;vertical-align:top;width:25%;padding-right:10px' : ''; ?>">
         <div style="font-size:12px;color:#6b7280">Total Due</div>
-        <div style="font-size:28px;font-weight:800">$<?php echo number_format((float)$pi['balance_due'], 2); ?></div>
+        <div style="font-size:24px;font-weight:700">$<?php echo number_format((float)$pi['balance_due'], 2); ?></div>
       </div>
-      <div>
+      <div style="<?php echo $isPdf ? 'display:table-cell;vertical-align:top;width:35%;padding-right:10px' : ''; ?>">
         <div style="font-size:12px;color:#6b7280">Billing Period</div>
         <div style="font-weight:700"><?php echo htmlspecialchars(date('M j, Y', strtotime($pi['billing_period_start']))); ?> - <?php echo htmlspecialchars(date('M j, Y', strtotime($pi['billing_period_end']))); ?></div>
       </div>
-      <div>
+      <div style="<?php echo $isPdf ? 'display:table-cell;vertical-align:top;width:25%;padding-right:10px' : ''; ?>">
         <div style="font-size:12px;color:#6b7280">Due Date</div>
         <div style="font-weight:700"><?php echo $pi['due_date'] ? htmlspecialchars(date('M j, Y', strtotime($pi['due_date']))) : 'Not set'; ?></div>
       </div>
-      <div>
+      <div style="<?php echo $isPdf ? 'display:table-cell;vertical-align:top;width:15%' : ''; ?>">
         <div style="font-size:12px;color:#6b7280">Status</div>
         <div style="font-weight:700;text-transform:capitalize"><?php echo htmlspecialchars($status); ?></div>
       </div>
@@ -193,27 +195,20 @@ $documentSender = document_sender_for_creator($pdo, $appConfig, !empty($pi['crea
     require __DIR__ . '/../../components/document_parties.php';
   ?>
 
-  <h2 style="font-size:18px;margin:0 0 10px">Included Invoices</h2>
-  <table style="width:100%;border-collapse:collapse;margin-bottom:22px;background:#fff">
-    <thead>
-      <tr style="background:#f9fafb">
-        <th style="text-align:left;padding:9px;border:1px solid #e5e7eb">Invoice</th>
-        <th style="text-align:left;padding:9px;border:1px solid #e5e7eb">Client</th>
-        <th style="text-align:left;padding:9px;border:1px solid #e5e7eb">Date</th>
-        <th style="text-align:right;padding:9px;border:1px solid #e5e7eb">Amount Due</th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php foreach ($items as $item): ?>
-        <tr>
-          <td style="padding:9px;border:1px solid #e5e7eb"><?php echo htmlspecialchars(pa_invoice_label($item['invoice_doc_number'] ?? null, $item['invoice_type'] ?? 'regular', $item['invoice_id'])); ?></td>
-          <td style="padding:9px;border:1px solid #e5e7eb"><?php echo htmlspecialchars($item['client_name']); ?></td>
-          <td style="padding:9px;border:1px solid #e5e7eb"><?php echo $item['invoice_date'] ? htmlspecialchars(date('M j, Y', strtotime($item['invoice_date']))) : ''; ?></td>
-          <td style="padding:9px;border:1px solid #e5e7eb;text-align:right">$<?php echo number_format((float)$item['amount_due_at_generation'], 2); ?></td>
-        </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
+  <h2 style="font-size:18px;margin:0 0 10px;page-break-after:avoid">Included Invoices</h2>
+  <?php foreach ($items as $invoiceSectionIndex => $item): ?>
+    <?php
+      $lineStmt->execute([(int)$item['invoice_id']]);
+      $lines = $lineStmt->fetchAll(PDO::FETCH_ASSOC);
+      $itemOrganizationId = isset($item['organization_id']) ? (int)$item['organization_id'] : null;
+      $itemPricingSnapshot = $itemOrganizationId > 0
+        ? pricing_document_snapshot($pdo, $itemOrganizationId, 'invoice', (int)$item['invoice_id'], max(1, (int)$item['revision_number']))
+        : null;
+      $itemAdjustments = pricing_invoice_total_adjustments($pdo, $itemOrganizationId, (int)$item['invoice_id']);
+      $invoiceSectionTotalRows = project_invoice_item_total_rows($item, $itemPricingSnapshot, $itemAdjustments);
+      require __DIR__ . '/../../components/project_invoice_item.php';
+    ?>
+  <?php endforeach; ?>
 
   <?php if (!empty($contentLinks)): ?>
     <?php echo invoice_content_links_html($contentLinks); ?>
@@ -224,41 +219,12 @@ $documentSender = document_sender_for_creator($pdo, $appConfig, !empty($pi['crea
     </div>
   <?php endif; ?>
 
-  <?php foreach ($items as $item): ?>
-    <div style="page-break-inside:avoid;break-inside:avoid;margin-bottom:18px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">
-      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:10px">
-        <div>
-          <div style="font-weight:800">Invoice <?php echo htmlspecialchars(pa_invoice_label($item['invoice_doc_number'] ?? null, $item['invoice_type'] ?? 'regular', $item['invoice_id'])); ?></div>
-          <div style="font-size:13px;color:#6b7280"><?php echo htmlspecialchars($item['client_name']); ?></div>
-        </div>
-        <div style="font-weight:800">$<?php echo number_format((float)$item['amount_due_at_generation'], 2); ?></div>
-      </div>
-      <?php $lineStmt->execute([(int)$item['invoice_id']]); $lines = $lineStmt->fetchAll(PDO::FETCH_ASSOC); ?>
-      <?php if ($lines): ?>
-        <table style="width:100%;border-collapse:collapse">
-          <thead><tr style="background:#f9fafb"><th style="text-align:left;padding:8px;border:1px solid #e5e7eb">Description</th><th style="text-align:right;padding:8px;border:1px solid #e5e7eb">Qty</th><th style="text-align:right;padding:8px;border:1px solid #e5e7eb">Rate</th><th style="text-align:right;padding:8px;border:1px solid #e5e7eb">Total</th></tr></thead>
-          <tbody>
-            <?php foreach ($lines as $line): ?>
-              <tr>
-                <td style="padding:8px;border:1px solid #e5e7eb"><?php echo htmlspecialchars(($line['item'] ? $line['item'] . ' - ' : '') . ($line['description'] ?? '')); ?></td>
-                <td style="padding:8px;border:1px solid #e5e7eb;text-align:right"><?php echo number_format((float)$line['quantity'], 2); ?> <?php echo htmlspecialchars($line['billing_unit'] ?? 'each'); ?></td>
-                <td style="padding:8px;border:1px solid #e5e7eb;text-align:right">$<?php echo number_format((float)$line['unit_price'], 2); ?></td>
-                <td style="padding:8px;border:1px solid #e5e7eb;text-align:right">$<?php echo number_format((float)$line['line_total'], 2); ?></td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      <?php endif; ?>
-    </div>
-  <?php endforeach; ?>
-
   <?php
     $projectInvoiceTotal = (float)$pi['total'];
     $projectInvoicePaid = (float)$pi['amount_paid'];
     $projectInvoiceDue = (float)$pi['balance_due'];
     $documentTotalRows = [
-      ['label' => 'Subtotal', 'value' => '$' . number_format((float)$pi['subtotal'], 2)],
-      ['label' => $status === 'partial' ? 'Project Invoice Total' : 'Total', 'value' => '$' . number_format($projectInvoiceTotal, 2), 'tone' => 'total'],
+      ['label' => 'Project Invoice Total', 'value' => '$' . number_format($projectInvoiceTotal, 2), 'tone' => 'total'],
     ];
     if ($status === 'partial') {
       $documentTotalRows[] = ['label' => 'Amount Paid', 'value' => '- $' . number_format($projectInvoicePaid, 2), 'tone' => 'paid'];
