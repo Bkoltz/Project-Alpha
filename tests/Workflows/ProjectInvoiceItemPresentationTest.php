@@ -25,7 +25,7 @@ final class ProjectInvoiceItemPresentationTest extends TestCase
         $rows = array_column(project_invoice_item_total_rows($this->item()), 'value', 'label');
         self::assertSame([
             'Subtotal' => '$350.00', 'Tax (5.50%)' => '$19.25',
-            'Invoice total' => '$369.25', 'Included in this statement' => '$369.25',
+            'Invoice total' => '$369.25',
         ], $rows);
     }
 
@@ -48,7 +48,7 @@ final class ProjectInvoiceItemPresentationTest extends TestCase
         $rows = array_column(project_invoice_item_total_rows($item), 'value', 'label');
         self::assertSame('-$50.00', $rows['Discount']);
         self::assertSame('-$100.00', $rows['Paid before this statement']);
-        self::assertSame('$216.50', $rows['Included in this statement']);
+        self::assertArrayNotHasKey('Included in this statement', $rows);
     }
 
     public function testInheritedDiscountPrecedesManualDiscountAndKeepsPrivateMetadataOut(): void
@@ -63,7 +63,7 @@ final class ProjectInvoiceItemPresentationTest extends TestCase
         self::assertSame([
             'Subtotal' => '$100.00', 'Pricing adjustment' => '-$20.00', 'Discount (10%)' => '-$8.00',
             'Tax (5.00%)' => '$3.60', 'Invoice charge' => '$5.00', 'Invoice credit' => '-$2.00',
-            'Invoice total' => '$78.60', 'Included in this statement' => '$78.60',
+            'Invoice total' => '$78.60',
         ], array_column($rows, 'value', 'label'));
         self::assertStringNotContainsString('PRIVATE', json_encode($rows));
     }
@@ -74,7 +74,7 @@ final class ProjectInvoiceItemPresentationTest extends TestCase
         $rows = array_column(project_invoice_item_total_rows($item), 'value', 'label');
         self::assertSame('$422.00', $rows['Current invoice total']);
         self::assertSame('$369.25', $rows['Invoice total at statement creation']);
-        self::assertSame('$369.25', $rows['Included in this statement']);
+        self::assertArrayNotHasKey('Included in this statement', $rows);
     }
 
     public function testLegacyTaxIsShownOnlyWhenItReconcilesToSavedTotal(): void
@@ -95,7 +95,7 @@ final class ProjectInvoiceItemPresentationTest extends TestCase
         $rows = array_column(project_invoice_item_total_rows($item), 'value', 'label');
         self::assertSame('-$350.00', $rows['Discount (100%)']);
         self::assertSame('$0.00', $rows['Tax']);
-        self::assertSame('$0.00', $rows['Included in this statement']);
+        self::assertArrayNotHasKey('Included in this statement', $rows);
     }
 
     public function testLegacyFractionalCentDiscountReconcilesWithoutChangingSavedTotals(): void
