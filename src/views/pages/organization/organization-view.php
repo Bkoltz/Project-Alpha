@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/resolver_link_policy.php';
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) {
@@ -82,6 +83,8 @@ if ($departments) {
         SELECT entity_id, id, title, url, link_type, include_on_invoices
         FROM entity_links
         WHERE entity_type = "department" AND entity_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')
+          AND link_type <> "resolver_blacklist"
+          AND ' . pa_resolver_link_visibility_sql() . '
         ORDER BY include_on_invoices DESC, title ASC, id ASC
     ');
     $linkStmt->execute($ids);

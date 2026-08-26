@@ -9,6 +9,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/logger.php';
 require_once __DIR__ . '/../../utils/link_provider_config.php';
+require_once __DIR__ . '/../../utils/resolver_link_policy.php';
 require_once __DIR__ . '/../../utils/request_security.php';
 
 // Require authenticated user
@@ -246,18 +247,25 @@ if ($action === 'disconnect') {
             }
         }
         
-        // Clear credentials from database
+        // Explicit disconnect revokes credentials; disabling auto-generation
+        // through settings keeps them. Both remove cached resolver URLs.
+        $pdo->beginTransaction();
         $stmt = $pdo->prepare("
             UPDATE link_resolver_config 
             SET credentials = NULL, is_enabled = 0 
             WHERE provider = 'dropbox'
         ");
         $stmt->execute();
+        pa_remove_disabled_resolver_links($pdo, 'dropbox');
+        $pdo->commit();
         
         app_log('dropbox_oauth', 'Disconnected successfully', ['user_id' => $userId]);
         header('Location: /?page=settings&tab=links&saved=1');
         exit;
     } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         app_log('dropbox_oauth', 'Disconnect error', ['error' => $e->getMessage()]);
         header('Location: /?page=settings&tab=links&error=' . urlencode('Failed to disconnect'));
         exit;

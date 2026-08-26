@@ -80,6 +80,10 @@ function pa_link_provider_save(PDO $pdo, string $provider, int $isEnabled, array
             WHERE id = ?
         ');
         $stmt->execute([$isEnabled, $credentialsJson, $expirationDays, (int)$row['id']]);
+        // Older installations can have duplicate provider rows. Keep their
+        // enabled state aligned so an older credential row cannot reactivate it.
+        $pdo->prepare('UPDATE link_resolver_config SET is_enabled = ? WHERE provider = ?')
+            ->execute([$isEnabled, $provider]);
         return;
     }
 

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../services/LinkResolverService.php';
 require_once __DIR__ . '/../utils/cron_state.php';
+require_once __DIR__ . '/../utils/resolver_link_policy.php';
 
 $jobName = 'daily_link_resolver';
 $logPrefix = '[daily_link_resolver]';
@@ -15,6 +16,14 @@ if (empty($appConfig['cron_enabled'])) {
 }
 
 if (empty($appConfig['link_resolver_enabled'])) {
+    // Also clean up installations that disabled the resolver before this policy existed.
+    try {
+        pa_remove_disabled_resolver_links($pdo);
+    } catch (Throwable $e) {
+        @error_log($logPrefix . ' Cleanup failed: ' . $e->getMessage());
+        cron_state_mark_failure($pdo, $jobName, $e);
+        exit(1);
+    }
     @error_log($logPrefix . ' Link resolver is disabled.');
     cron_state_mark_success($pdo, $jobName, 'Link resolver disabled');
     exit(0);
