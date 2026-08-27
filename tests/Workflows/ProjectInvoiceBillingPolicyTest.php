@@ -43,7 +43,7 @@ final class ProjectInvoiceBillingPolicyTest extends TestCase
         self::assertStringContainsString('$validRecipientCount === 0', $billing);
         self::assertStringContainsString('COALESCE(i.collection_mode, "direct") = "project_aggregate"', $billing);
         self::assertStringNotContainsString('ALTER TABLE public_links', $billing);
-        self::assertStringContainsString('No project invoice emails were sent.', $generator);
+        self::assertStringContainsString('project_invoice_send_email_result', $generator);
         self::assertStringNotContainsString('saved as a draft because', $generator);
         self::assertStringContainsString('project_invoice_has_saved_deliverable_recipient', $generator);
         self::assertStringContainsString('null, false, null, true', $generator);
@@ -63,6 +63,10 @@ final class ProjectInvoiceBillingPolicyTest extends TestCase
         self::assertStringContainsString("'organization:' . \$organizationId", $billing);
         self::assertStringContainsString("\$row['notification_type'] === 'manual'", $notifications);
         self::assertStringContainsString("\$queuedEmail = trim", $notifications);
+        self::assertStringContainsString("'document_revision'", $notifications);
+        self::assertStringContainsString('function project_invoice_send_email_result', $billing);
+        self::assertStringContainsString("'already_sent' => 0", $billing);
+        self::assertStringContainsString('queued for retry', $billing);
         self::assertStringContainsString('name="recipient_keys[]"', $details);
         self::assertStringContainsString('saved project invoice recipients', $details);
     }

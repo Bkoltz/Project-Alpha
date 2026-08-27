@@ -117,7 +117,7 @@ function project_invoice_notification_process(
         }
         $stats['claimed']++;
         $stmt = $pdo->prepare(
-            'SELECT n.*,pi.doc_number,pi.status AS invoice_status,pi.finalized_at,pi.balance_due,pi.due_date,
+            'SELECT n.*,pi.doc_number,pi.revision_number,pi.status AS invoice_status,pi.finalized_at,pi.balance_due,pi.due_date,
                     pi.project_id,p.name AS project_name,p.invoice_net_terms_days,p.project_invoice_auto_email
              FROM project_invoice_notifications n
              JOIN project_invoices pi ON pi.id=n.project_invoice_id
@@ -224,6 +224,7 @@ function project_invoice_notification_process(
                 'attachments' => [$attachment],
                 'document_type' => 'project_invoice',
                 'document_id' => (int)$row['project_invoice_id'],
+                'document_revision' => (int)($row['revision_number'] ?? 1),
                 'message_key' => 'project-invoice-notification:' . $id,
             ]);
             if (!$ok) {

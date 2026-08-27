@@ -512,13 +512,18 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
     }
 }
 
-function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appConfig, ?array $clientIds = null, bool $allowResend = false, ?array $recipientKeys = null, bool $manualIntent = false): int
+/**
+ * @return array{sent:int,already_sent:int,retry:int,suppressed:int,message:string}
+ */
+function project_invoice_send_email_result(PDO $pdo, int $projectInvoiceId, array $appConfig, ?array $clientIds = null, bool $allowResend = false, ?array $recipientKeys = null, bool $manualIntent = false): array
 {
+    $result = ['sent' => 0, 'already_sent' => 0, 'retry' => 0, 'suppressed' => 0, 'message' => ''];
     $stmt = $pdo->prepare('SELECT status,finalized_at FROM project_invoices WHERE id=?');
     $stmt->execute([$projectInvoiceId]);
     $projectInvoice = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$projectInvoice || ($projectInvoice['status'] ?? '') === 'void') {
-        return 0;
+        $result['message'] = 'This project invoice is not available for email delivery.';
+        return $result;
     }
     $recipients = project_invoice_client_recipients($pdo, $projectInvoiceId, $clientIds);
     if ($recipientKeys !== null) {
@@ -531,7 +536,8 @@ function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appC
         return filter_var(trim((string)($recipient['email'] ?? '')), FILTER_VALIDATE_EMAIL) !== false;
     }));
     if ($validRecipientCount === 0) {
-        return 0;
+        $result['message'] = 'Select at least one saved recipient with a valid email address.';
+        return $result;
     }
 
     if (($projectInvoice['status'] ?? '') === 'draft' || empty($projectInvoice['finalized_at'])) {
@@ -556,12 +562,63 @@ function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appC
         );
     }
     $stats = project_invoice_notification_process($pdo, $appConfig, null, null, 100, $projectInvoiceId);
+    $result['sent'] = (int)$stats['sent'];
+    $result['retry'] = (int)$stats['retry'];
+    $result['suppressed'] = (int)$stats['suppressed'];
     if ($stats['sent'] > 0) {
         $pdo->prepare(
             'UPDATE project_invoices SET status=IF(status="draft","sent",status),sent_at=COALESCE(sent_at,NOW()) WHERE id=?'
         )->execute([$projectInvoiceId]);
+        return $result;
     }
-    return $stats['sent'];
+
+    // Match the regular invoice delivery path: an idempotent repeat of a
+    // successful generated send is success, not a misleading zero-send error.
+    if (!$allowResend) {
+        $recipientHashes = [];
+        foreach ($recipients as $recipient) {
+            $email = trim((string)($recipient['email'] ?? ''));
+            if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $recipientHashes[] = invoice_notification_recipient_key($email);
+            }
+        }
+        if ($recipientHashes) {
+            $placeholders = implode(',', array_fill(0, count($recipientHashes), '?'));
+            $check = $pdo->prepare(
+                'SELECT COUNT(*) FROM project_invoice_notifications
+                 WHERE project_invoice_id=? AND notification_type=? AND delivery_key="generated"
+                   AND delivery_status="sent" AND recipient_key IN (' . $placeholders . ')'
+            );
+            $check->execute(array_merge([$projectInvoiceId, $notificationType], $recipientHashes));
+            $result['already_sent'] = (int)$check->fetchColumn();
+            if ($result['already_sent'] > 0) {
+                return $result;
+            }
+        }
+    }
+
+    $latest = $pdo->prepare(
+        'SELECT delivery_status,last_error FROM project_invoice_notifications
+         WHERE project_invoice_id=? ORDER BY id DESC LIMIT 1'
+    );
+    $latest->execute([$projectInvoiceId]);
+    $delivery = $latest->fetch(PDO::FETCH_ASSOC) ?: [];
+    if (($delivery['delivery_status'] ?? '') === 'retry') {
+        $result['message'] = 'The email could not be delivered and is queued for retry. Check outgoing email settings and the delivery log.';
+    } elseif (($delivery['delivery_status'] ?? '') === 'suppressed') {
+        $result['message'] = trim((string)($delivery['last_error'] ?? '')) ?: 'The email was not sent because this delivery is no longer eligible.';
+    } else {
+        $result['message'] = 'No project invoice emails were sent. Check the saved recipients and delivery status.';
+    }
+    return $result;
+}
+
+function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appConfig, ?array $clientIds = null, bool $allowResend = false, ?array $recipientKeys = null, bool $manualIntent = false): int
+{
+    $result = project_invoice_send_email_result(
+        $pdo, $projectInvoiceId, $appConfig, $clientIds, $allowResend, $recipientKeys, $manualIntent
+    );
+    return (int)$result['sent'];
 }
 function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float $amount, string $method, string $reference = '', string $notes = '', ?int $projectPaymentId = null, ?string $paymentDate = null): bool
 {
