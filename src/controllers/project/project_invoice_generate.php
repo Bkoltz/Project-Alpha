@@ -45,10 +45,10 @@ if ($projectInvoiceId) {
         // This button is an explicit staff send, even when automatic monthly
         // delivery is disabled. Keep its stable key so retries and double
         // submissions remain idempotent.
-        $sent = project_invoice_send_email($pdo, $projectInvoiceId, $appConfig, null, false, null, true);
-        $emailResult = $sent > 0
+        $delivery = project_invoice_send_email_result($pdo, $projectInvoiceId, $appConfig, null, false, null, true);
+        $emailResult = ($delivery['sent'] + $delivery['already_sent']) > 0
             ? '&emailed=1'
-            : '&email_err=' . urlencode('No project invoice emails were sent. Check the saved recipients and delivery status.');
+            : '&email_err=' . urlencode((string)$delivery['message']);
     }
     header('Location: /?page=project/project-invoice-details&id=' . $projectInvoiceId . '&generated=1' . $emailResult);
     exit;
