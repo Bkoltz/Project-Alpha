@@ -13,6 +13,20 @@ final class ProjectWorkflowUiTest extends TestCase
         $this->root = dirname(__DIR__, 2);
     }
 
+    public function testProjectListCardsAreKeyboardAccessibleLinksWithoutHijackingActions(): void
+    {
+        $view = (string)file_get_contents($this->root . '/src/views/pages/project/projects-list.php');
+
+        self::assertStringContainsString('class="project-row-link"', $view);
+        self::assertStringContainsString('/?page=project/projects-details&amp;id=<?php echo (int)$project[\'id\']; ?>', $view);
+        self::assertStringContainsString('.project-row-link::after{content:"";position:absolute;inset:0;z-index:1}', $view);
+        self::assertStringContainsString('.project-row-link:focus-visible::after', $view);
+        self::assertStringContainsString('.project-row-actions>a,.project-row-actions>form{position:relative;z-index:2}', $view);
+        self::assertStringContainsString('<form method="post" action="/?page=project/projects-delete"', $view);
+        self::assertStringContainsString('type="submit">Delete</button>', $view);
+        self::assertStringContainsString('>View Project</a>', $view);
+    }
+
     public function testProjectCreateUsesDynamicClientTagPickers(): void
     {
         $view = file_get_contents($this->root . '/src/views/pages/project/projects-create.php');

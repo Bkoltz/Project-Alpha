@@ -70,6 +70,7 @@ try {
         'processed' => 0,
         'generated' => 0,
         'existing' => 0,
+        'empty' => 0,
         'drafted' => 0,
         'delivered' => 0,
         'already_delivered' => 0,
@@ -81,10 +82,11 @@ try {
         $projectInvoicesGenerated = $projectBillingResult['generated'];
         $errors += $projectBillingResult['delivery_pending'] + $projectBillingResult['delivery_failed'];
         @error_log(sprintf(
-            '%s Project monthly billing: %d generated, %d existing, %d drafted, %d delivered, %d already delivered, %d pending/retrying, %d failed',
+            '%s Project monthly billing: %d generated, %d existing, %d empty, %d drafted, %d delivered, %d already delivered, %d pending/retrying, %d failed',
             $logPrefix,
             $projectBillingResult['generated'],
             $projectBillingResult['existing'],
+            $projectBillingResult['empty'],
             $projectBillingResult['drafted'],
             $projectBillingResult['delivered'],
             $projectBillingResult['already_delivered'],

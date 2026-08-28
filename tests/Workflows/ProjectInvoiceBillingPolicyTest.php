@@ -172,4 +172,30 @@ final class ProjectInvoiceBillingPolicyTest extends TestCase
         self::assertStringContainsString('[$projectScopeWhere, $projectScopeParams] = scope_clause', $paymentView);
         self::assertStringContainsString('id="noStaffPaymentMethodNotice"', $paymentView);
     }
+
+    public function testProjectStatementGenerationUsesLockedExplicitLifecycleResults(): void
+    {
+        $billing = (string)file_get_contents($this->root . '/src/utils/project_invoice_billing.php');
+        $baseline = (string)file_get_contents($this->root . '/database/baseline.sql');
+        $generator = (string)file_get_contents($this->root . '/src/controllers/project/project_invoice_generate.php');
+        $notifications = (string)file_get_contents($this->root . '/src/utils/project_invoice_notifications.php');
+
+        self::assertStringContainsString('function project_invoice_create_for_period_result', $billing);
+        self::assertStringContainsString("'status' => 'empty'", $billing);
+        self::assertStringContainsString("'status' => 'existing'", $billing);
+        self::assertStringContainsString("'status' => 'created'", $billing);
+        self::assertStringContainsString('SELECT * FROM projects WHERE id = ? FOR UPDATE', $billing);
+        self::assertStringContainsString('billing_period_end=?', $billing);
+        self::assertStringContainsString('MAX(billing_period_end)', $billing);
+        self::assertStringContainsString('pii.id IS NULL', $billing);
+        self::assertStringContainsString('invoice_date ASC', $billing);
+        self::assertStringNotContainsString('BETWEEN ? AND ?', $billing);
+        self::assertStringContainsString('uq_project_invoice_period', $baseline);
+        self::assertStringContainsString('uq_project_invoice_child_invoice', $baseline);
+        self::assertStringContainsString('project_invoice_create_for_period_result', $generator);
+        self::assertStringContainsString("'existing=1'", $generator);
+        self::assertStringContainsString('no outstanding balance', strtolower($billing));
+        self::assertStringContainsString('no longer eligible for email delivery', strtolower($notifications));
+        self::assertStringContainsString('no longer eligible for reminders', strtolower($notifications));
+    }
 }

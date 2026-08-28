@@ -30,8 +30,13 @@ if ($period === 'previous') {
     $end = date('Y-m-d');
 }
 
-$projectInvoiceId = project_invoice_create_for_period($pdo, $projectId, $start, $end, $appConfig, false, false);
-if ($projectInvoiceId) {
+$generation = project_invoice_create_for_period_result($pdo, $projectId, $start, $end, $appConfig, false, false);
+$projectInvoiceId = (int)($generation['project_invoice_id'] ?? 0);
+if ($projectInvoiceId > 0) {
+    if (($generation['status'] ?? '') === 'existing' && (float)($generation['balance'] ?? 0) <= 0.005) {
+        header('Location: /?page=project/project-invoice-details&id=' . $projectInvoiceId . '&existing=1&email_err=' . urlencode((string)$generation['message']));
+        exit;
+    }
     $emailResult = '';
     if ($sendEmail) {
         if (invoice_should_prompt_for_missing_content_links($pdo, 'project_invoice', $projectInvoiceId, $appConfig)) {
@@ -50,9 +55,10 @@ if ($projectInvoiceId) {
             ? '&emailed=1'
             : '&email_err=' . urlencode((string)$delivery['message']);
     }
-    header('Location: /?page=project/project-invoice-details&id=' . $projectInvoiceId . '&generated=1' . $emailResult);
+    $generationParam = ($generation['status'] ?? '') === 'created' ? 'generated=1' : 'existing=1';
+    header('Location: /?page=project/project-invoice-details&id=' . $projectInvoiceId . '&' . $generationParam . $emailResult);
     exit;
 }
 
-header('Location: /?page=project/projects-details&id=' . $projectId . '&billing_msg=' . urlencode('No unbilled invoices found for that billing period.'));
+header('Location: /?page=project/projects-details&id=' . $projectId . '&billing_msg=' . urlencode((string)$generation['message']));
 exit;

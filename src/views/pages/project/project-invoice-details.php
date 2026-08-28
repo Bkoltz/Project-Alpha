@@ -102,7 +102,7 @@ $documentSender = document_sender_for_creator($pdo, $appConfig, !empty($pi['crea
       <?php endif; ?>
       <button type="button" class="btn btn-sm btn-success" onclick="openEmailPanel()"><?php echo $status === 'draft' ? 'Finalize & Email' : 'Email'; ?></button>
     </div>
-    <?php foreach (['generated' => 'Project invoice generated.', 'emailed' => 'Project invoice emailed.', 'paid' => 'Payment recorded.'] as $key => $msg): ?>
+    <?php foreach (['generated' => 'Project invoice generated.', 'existing' => 'Existing project invoice opened; no duplicate was created.', 'emailed' => 'Project invoice emailed.', 'paid' => 'Payment recorded.'] as $key => $msg): ?>
       <?php if (!empty($_GET[$key])): ?><div class="alert alert-success no-print"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
     <?php endforeach; ?>
     <?php foreach (['email_err', 'payment_err'] as $key): ?>

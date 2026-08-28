@@ -148,7 +148,9 @@ function project_invoice_notification_process(
         $reason = null;
         if (!in_array((string)$row['invoice_status'], ['sent', 'unpaid', 'partial'], true)
             || empty($row['finalized_at']) || (float)$row['balance_due'] <= 0.005) {
-            $reason = 'Project invoice is no longer eligible for reminders.';
+            $reason = in_array((string)$row['notification_type'], ['due_7', 'overdue_weekly'], true)
+                ? 'Project invoice is no longer eligible for reminders.'
+                : 'Project invoice is no longer eligible for email delivery.';
         } elseif (!$currentRecipient) {
             $reason = 'Project invoice recipient is missing, changed, or opted out.';
         } elseif ($row['notification_type'] === 'due_7' && empty($appConfig['invoice_auto_send_due_7days'])) {
