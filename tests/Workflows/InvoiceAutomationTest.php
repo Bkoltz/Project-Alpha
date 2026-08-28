@@ -344,6 +344,144 @@ final class InvoiceAutomationTest extends TestCase
         self::assertSame(1, project_invoice_notification_process($this->pdo, $this->config, $sender)['sent']);
         self::assertSame(['early-project-send@example.invalid'], $sent);
     }
+
+    public function testProjectStatementLifecycleRepairsLegacyEmailStateAndKeepsSnapshotsIdempotent(): void
+    {
+        $recipientId = $this->client('project-lifecycle@example.invalid');
+        $orgId = $this->ids['organizations'][0];
+        $this->pdo->prepare(
+            'INSERT INTO projects (client_id,organization_id,name,status,invoice_billing_period,project_invoice_auto_email)
+             VALUES (?, ?, ?, "active", "monthly", 1)'
+        )->execute([$recipientId, $orgId, 'Lifecycle Project']);
+        $projectId = (int)$this->pdo->lastInsertId();
+        $this->ids['projects'][] = $projectId;
+        $this->pdo->prepare(
+            'INSERT INTO project_clients (project_id,client_id,is_primary_billing,send_project_invoices,sort_order)
+             VALUES (?,?,1,1,0)'
+        )->execute([$projectId, $recipientId]);
+        project_invoice_sync_recipients($this->pdo, $projectId, [$recipientId]);
+
+        $firstChild = $this->invoice($recipientId, 'regular', '2026-08-10', '2026-09-09', 30, 'terms');
+        $this->pdo->prepare('UPDATE invoices SET project_id=?,collection_mode="project_aggregate" WHERE id=?')
+            ->execute([$projectId, $firstChild]);
+
+        $first = project_invoice_create_for_period_result(
+            $this->pdo, $projectId, '2026-08-01', '2026-08-15', $this->config
+        );
+        self::assertSame('created', $first['status']);
+        self::assertSame(1, $first['included_count']);
+        $firstStatementId = (int)$first['project_invoice_id'];
+        $this->ids['project_invoices'][] = $firstStatementId;
+
+        project_invoice_refresh_status($this->pdo, $firstStatementId);
+        $statement = $this->projectInvoiceRow($firstStatementId);
+        self::assertSame('draft', $statement['status']);
+        self::assertNull($statement['finalized_at']);
+
+        // Reproduce the production state created by the old refresh behavior.
+        $this->pdo->prepare('UPDATE project_invoices SET status="unpaid",finalized_at=NULL WHERE id=?')
+            ->execute([$firstStatementId]);
+        $delivered = [];
+        $delivery = project_invoice_send_email_result(
+            $this->pdo,
+            $firstStatementId,
+            $this->config,
+            null,
+            false,
+            null,
+            true,
+            static function (string $to) use (&$delivered): array {
+                $delivered[] = $to;
+                return [true, ''];
+            }
+        );
+        self::assertSame(1, $delivery['sent']);
+        self::assertSame(['project-lifecycle@example.invalid'], $delivered);
+        $statement = $this->projectInvoiceRow($firstStatementId);
+        self::assertNotEmpty($statement['finalized_at']);
+        self::assertSame('unpaid', $statement['status']);
+
+        $repeat = project_invoice_create_for_period_result(
+            $this->pdo, $projectId, '2026-08-01', '2026-08-15', $this->config
+        );
+        self::assertSame('existing', $repeat['status']);
+        self::assertSame($firstStatementId, $repeat['project_invoice_id']);
+
+        $laterChild = $this->invoice($recipientId, 'regular', '2026-08-20', '2026-09-19', 30, 'terms');
+        $backdatedChild = $this->invoice($recipientId, 'regular', '2026-08-05', '2026-09-04', 30, 'terms');
+        $this->pdo->prepare('UPDATE invoices SET project_id=?,collection_mode="project_aggregate" WHERE id IN (?,?)')
+            ->execute([$projectId, $laterChild, $backdatedChild]);
+
+        $second = project_invoice_create_for_period_result(
+            $this->pdo, $projectId, '2026-08-01', '2026-08-31', $this->config
+        );
+        self::assertSame('created', $second['status']);
+        self::assertSame(2, $second['included_count']);
+        $secondStatementId = (int)$second['project_invoice_id'];
+        $this->ids['project_invoices'][] = $secondStatementId;
+        $secondRow = $this->projectInvoiceRow($secondStatementId);
+        self::assertSame('2026-08-16', $secondRow['billing_period_start']);
+        self::assertSame('2026-08-31', $secondRow['billing_period_end']);
+
+        $members = $this->pdo->prepare('SELECT invoice_id FROM project_invoice_items WHERE project_invoice_id=? ORDER BY invoice_id');
+        $members->execute([$secondStatementId]);
+        $expectedMembers = [$laterChild, $backdatedChild];
+        sort($expectedMembers);
+        self::assertSame($expectedMembers, array_map('intval', $members->fetchAll(PDO::FETCH_COLUMN)));
+
+        $secondRepeat = project_invoice_create_for_period_result(
+            $this->pdo, $projectId, '2026-08-01', '2026-08-31', $this->config
+        );
+        self::assertSame('existing', $secondRepeat['status']);
+        self::assertSame($secondStatementId, $secondRepeat['project_invoice_id']);
+
+        $empty = project_invoice_create_for_period_result(
+            $this->pdo, $projectId, '2026-09-01', '2026-09-30', $this->config
+        );
+        self::assertSame('empty', $empty['status']);
+        self::assertNull($empty['project_invoice_id']);
+        $statementCount = $this->pdo->prepare('SELECT COUNT(*) FROM project_invoices WHERE project_id=?');
+        $statementCount->execute([$projectId]);
+        self::assertSame(2, (int)$statementCount->fetchColumn());
+    }
+
+    public function testZeroBalanceProjectStatementNeverQueuesEmail(): void
+    {
+        $recipientId = $this->client('zero-project-statement@example.invalid');
+        $orgId = $this->ids['organizations'][0];
+        $this->pdo->prepare(
+            'INSERT INTO projects (client_id,organization_id,name,status,invoice_billing_period)
+             VALUES (?, ?, ?, "active", "monthly")'
+        )->execute([$recipientId, $orgId, 'Zero Balance Project']);
+        $projectId = (int)$this->pdo->lastInsertId();
+        $this->ids['projects'][] = $projectId;
+        project_invoice_sync_recipients($this->pdo, $projectId, [$recipientId]);
+        $this->pdo->prepare(
+            'INSERT INTO project_invoices
+             (project_id,organization_id,primary_client_id,doc_number,status,billing_period_start,billing_period_end,
+              due_date,subtotal,total,amount_paid,balance_due)
+             VALUES (?,?,?,? ,"draft","2026-08-01","2026-08-31","2026-09-30",0,0,0,0)'
+        )->execute([$projectId, $orgId, $recipientId, random_int(100000, 999999)]);
+        $statementId = (int)$this->pdo->lastInsertId();
+        $this->ids['project_invoices'][] = $statementId;
+
+        $delivery = project_invoice_send_email_result(
+            $this->pdo,
+            $statementId,
+            $this->config,
+            null,
+            false,
+            null,
+            true,
+            static fn(): array => [true, '']
+        );
+        self::assertSame(0, $delivery['sent']);
+        self::assertStringContainsString('no outstanding balance', strtolower($delivery['message']));
+        $queued = $this->pdo->prepare('SELECT COUNT(*) FROM project_invoice_notifications WHERE project_invoice_id=?');
+        $queued->execute([$statementId]);
+        self::assertSame(0, (int)$queued->fetchColumn());
+    }
+
     public function testCanonicalTenantUrlAndDocumentPdfFailureBoundaries(): void
     {
         self::assertSame('https://billing.example.invalid', invoice_notification_public_base([
@@ -446,6 +584,13 @@ final class InvoiceAutomationTest extends TestCase
     {
         self::assertContains($table, ['contracts', 'invoices']);
         $stmt = $this->pdo->prepare("SELECT * FROM {$table} WHERE id=?");
+        $stmt->execute([$id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    private function projectInvoiceRow(int $id): array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM project_invoices WHERE id=?');
         $stmt->execute([$id]);
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     }

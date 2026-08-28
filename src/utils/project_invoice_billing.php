@@ -324,7 +324,7 @@ function project_invoice_base_url(array $appConfig): string
 function project_invoice_refresh_status(PDO $pdo, int $projectInvoiceId): void
 {
     $stmt = $pdo->prepare('
-        SELECT pi.total,
+        SELECT pi.total, pi.status, pi.finalized_at,
                COALESCE(SUM(
                    GREATEST(
                        0,
@@ -344,7 +344,7 @@ function project_invoice_refresh_status(PDO $pdo, int $projectInvoiceId): void
             GROUP BY invoice_id
         ) p ON p.invoice_id = pii.invoice_id
         WHERE pi.id = ?
-        GROUP BY pi.id, pi.total
+        GROUP BY pi.id, pi.total, pi.status, pi.finalized_at
     ');
     $stmt->execute([$projectInvoiceId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -355,11 +355,11 @@ function project_invoice_refresh_status(PDO $pdo, int $projectInvoiceId): void
     $total = (float)$row['total'];
     $paid = min($total, (float)$row['paid']);
     $balance = max(0.0, $total - $paid);
-    $status = 'unpaid';
+    $status = empty($row['finalized_at']) ? 'draft' : 'unpaid';
     $paidAtSql = 'paid_at = NULL';
-    if ($paid > 0 && $balance > 0) {
+    if (!empty($row['finalized_at']) && $paid > 0 && $balance > 0) {
         $status = 'partial';
-    } elseif ($total > 0 && $balance <= 0.005) {
+    } elseif (!empty($row['finalized_at']) && $balance <= 0.005) {
         $status = 'paid';
         $paidAtSql = 'paid_at = COALESCE(paid_at, NOW())';
     }
@@ -368,8 +368,18 @@ function project_invoice_refresh_status(PDO $pdo, int $projectInvoiceId): void
         ->execute([$status, $paid, $balance, $projectInvoiceId]);
 }
 
-function project_invoice_create_for_period(PDO $pdo, int $projectId, string $periodStart, string $periodEnd, array $appConfig, bool $sendEmail = false, bool $finalize = false): ?int
+/**
+ * @return array{status:string,project_invoice_id:?int,included_count:int,balance:float,message:string}
+ */
+function project_invoice_create_for_period_result(PDO $pdo, int $projectId, string $periodStart, string $periodEnd, array $appConfig, bool $sendEmail = false, bool $finalize = false): array
 {
+    $emptyResult = [
+        'status' => 'empty',
+        'project_invoice_id' => null,
+        'included_count' => 0,
+        'balance' => 0.0,
+        'message' => 'No outstanding project charges are ready for this statement.',
+    ];
     $createdBy = (int)($_SESSION['user']['id'] ?? 0) ?: null;
     // Email delivery finalizes only after a usable recipient is confirmed by
     // project_invoice_send_email(). This prevents an undeliverable monthly
@@ -384,22 +394,64 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
         $project = $projectStmt->fetch(PDO::FETCH_ASSOC);
         if (!$project || ($project['invoice_billing_period'] ?? 'per_invoice') !== 'monthly') {
             $pdo->rollBack();
-            return null;
+            return $emptyResult;
         }
 
-        $existing = $pdo->prepare('SELECT id FROM project_invoices WHERE project_id=? AND billing_period_start=? AND billing_period_end=? AND status <> "void" LIMIT 1');
-        $existing->execute([$projectId, $periodStart, $periodEnd]);
-        $existingId = (int)($existing->fetchColumn() ?: 0);
+        // The cutoff identifies an immutable generation attempt. Checking it
+        // before deriving the next start makes repeat clicks and cron retries
+        // idempotent even when earlier statements closed part of the month.
+        $existing = $pdo->prepare(
+            'SELECT id,status,balance_due FROM project_invoices
+             WHERE project_id=? AND billing_period_end=?
+             ORDER BY (status<>"void") DESC,id DESC LIMIT 1'
+        );
+        $existing->execute([$projectId, $periodEnd]);
+        $existingRow = $existing->fetch(PDO::FETCH_ASSOC) ?: [];
+        $existingId = (int)($existingRow['id'] ?? 0);
         if ($existingId > 0) {
-            if ($shouldFinalize) {
+            // Recalculate before making any delivery decision. Payments may
+            // have changed the balance since this immutable snapshot was
+            // created, and a zero-balance statement must never be emailed.
+            project_invoice_refresh_status($pdo, $existingId);
+            $existing->execute([$projectId, $periodEnd]);
+            $existingRow = $existing->fetch(PDO::FETCH_ASSOC) ?: $existingRow;
+            $countStmt = $pdo->prepare('SELECT COUNT(*) FROM project_invoice_items WHERE project_invoice_id=?');
+            $countStmt->execute([$existingId]);
+            $includedCount = (int)$countStmt->fetchColumn();
+            $existingBalance = max(0.0, (float)($existingRow['balance_due'] ?? 0));
+            if ($shouldFinalize && ($existingRow['status'] ?? '') !== 'void' && $existingBalance > 0.005) {
                 $pdo->prepare('UPDATE project_invoices SET status=IF(status="draft","unpaid",status), finalized_at=COALESCE(finalized_at,NOW()), finalization_source=COALESCE(finalization_source,"project_billing") WHERE id=? AND status<>"void"')
                     ->execute([$existingId]);
             }
             $pdo->commit();
-            if ($sendEmail) {
+            if ($sendEmail && ($existingRow['status'] ?? '') !== 'void' && $existingBalance > 0.005) {
                 project_invoice_send_email($pdo, $existingId, $appConfig);
             }
-            return $existingId;
+            return [
+                'status' => 'existing',
+                'project_invoice_id' => $existingId,
+                'included_count' => $includedCount,
+                'balance' => $existingBalance,
+                'message' => ($existingRow['status'] ?? '') === 'void'
+                    ? 'A void project statement already uses this billing cutoff.'
+                    : ($existingBalance > 0.005
+                        ? 'The existing project statement for this cutoff was reused.'
+                        : 'The existing project statement has no outstanding balance.'),
+            ];
+        }
+
+        $previous = $pdo->prepare(
+            'SELECT MAX(billing_period_end) FROM project_invoices
+             WHERE project_id=? AND status<>"void" AND billing_period_end<?'
+        );
+        $previous->execute([$projectId, $periodEnd]);
+        $previousEnd = trim((string)($previous->fetchColumn() ?: ''));
+        $effectiveStart = $periodStart;
+        if ($previousEnd !== '') {
+            $nextDay = date('Y-m-d', strtotime($previousEnd . ' +1 day'));
+            if ($nextDay > $effectiveStart) {
+                $effectiveStart = $nextDay;
+            }
         }
 
         $invoiceStmt = $pdo->prepare('
@@ -417,23 +469,25 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
             WHERE i.project_id = ?
               AND i.status IN ("unpaid", "partial")
               AND COALESCE(i.collection_mode, "direct") = "project_aggregate"
-              AND DATE(COALESCE(i.fulfillment_date, i.document_date, i.created_at)) BETWEEN ? AND ?
+              AND DATE(COALESCE(i.fulfillment_date, i.document_date, i.created_at)) <= ?
               AND pii.id IS NULL
             ORDER BY invoice_date ASC, i.doc_number ASC, i.id ASC
         ');
-        $invoiceStmt->execute([$projectId, $periodStart, $periodEnd]);
+        $invoiceStmt->execute([$projectId, $periodEnd]);
         $children = $invoiceStmt->fetchAll(PDO::FETCH_ASSOC);
 
         $total = 0.0;
+        $includedCount = 0;
         foreach ($children as $child) {
             $due = max(0.0, (float)$child['total'] - (float)$child['paid']);
-            if ($due > 0) {
+            if ($due > 0.005) {
                 $total += $due;
+                $includedCount++;
             }
         }
-        if ($total <= 0 || empty($children)) {
+        if ($total <= 0.005 || $includedCount === 0) {
             $pdo->rollBack();
-            return null;
+            return $emptyResult;
         }
 
         $primaryClientId = null;
@@ -454,7 +508,7 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
             $primaryClientId,
             $docNumber,
             $shouldFinalize ? 'unpaid' : 'draft',
-            $periodStart,
+            $effectiveStart,
             $periodEnd,
             $dueDate,
             $total,
@@ -476,7 +530,7 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
         ');
         foreach ($children as $child) {
             $due = max(0.0, (float)$child['total'] - (float)$child['paid']);
-            if ($due <= 0) {
+            if ($due <= 0.005) {
                 continue;
             }
             $item->execute([
@@ -502,51 +556,105 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
             project_invoice_send_email($pdo, $projectInvoiceId, $appConfig);
         }
 
-        return $projectInvoiceId;
+        return [
+            'status' => 'created',
+            'project_invoice_id' => $projectInvoiceId,
+            'included_count' => $includedCount,
+            'balance' => $total,
+            'message' => 'Project statement created.',
+        ];
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
         @error_log('[project_invoice_billing] create failed: ' . $e->getMessage());
-        return null;
+        $emptyResult['status'] = 'error';
+        $emptyResult['message'] = 'Project statement generation failed.';
+        return $emptyResult;
     }
+}
+
+function project_invoice_create_for_period(PDO $pdo, int $projectId, string $periodStart, string $periodEnd, array $appConfig, bool $sendEmail = false, bool $finalize = false): ?int
+{
+    $result = project_invoice_create_for_period_result(
+        $pdo, $projectId, $periodStart, $periodEnd, $appConfig, $sendEmail, $finalize
+    );
+    return $result['project_invoice_id'];
 }
 
 /**
  * @return array{sent:int,already_sent:int,retry:int,suppressed:int,message:string}
  */
-function project_invoice_send_email_result(PDO $pdo, int $projectInvoiceId, array $appConfig, ?array $clientIds = null, bool $allowResend = false, ?array $recipientKeys = null, bool $manualIntent = false): array
+function project_invoice_send_email_result(PDO $pdo, int $projectInvoiceId, array $appConfig, ?array $clientIds = null, bool $allowResend = false, ?array $recipientKeys = null, bool $manualIntent = false, ?callable $sender = null): array
 {
     $result = ['sent' => 0, 'already_sent' => 0, 'retry' => 0, 'suppressed' => 0, 'message' => ''];
-    $stmt = $pdo->prepare('SELECT status,finalized_at FROM project_invoices WHERE id=?');
-    $stmt->execute([$projectInvoiceId]);
-    $projectInvoice = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$projectInvoice || ($projectInvoice['status'] ?? '') === 'void') {
-        $result['message'] = 'This project invoice is not available for email delivery.';
-        return $result;
-    }
-    $recipients = project_invoice_client_recipients($pdo, $projectInvoiceId, $clientIds);
-    if ($recipientKeys !== null) {
-        $selectedKeys = array_fill_keys(array_map('strval', $recipientKeys), true);
-        $recipients = array_values(array_filter($recipients, static function (array $recipient) use ($selectedKeys): bool {
-            return isset($selectedKeys[(string)($recipient['recipient_key'] ?? '')]);
-        }));
-    }
-    $validRecipientCount = count(array_filter($recipients, static function (array $recipient): bool {
-        return filter_var(trim((string)($recipient['email'] ?? '')), FILTER_VALIDATE_EMAIL) !== false;
-    }));
-    if ($validRecipientCount === 0) {
-        $result['message'] = 'Select at least one saved recipient with a valid email address.';
-        return $result;
-    }
+    $recipients = [];
+    $ownsTransaction = !$pdo->inTransaction();
+    try {
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+        $lockSuffix = (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? '' : ' FOR UPDATE';
+        $stmt = $pdo->prepare('SELECT status,finalized_at,balance_due FROM project_invoices WHERE id=?' . $lockSuffix);
+        $stmt->execute([$projectInvoiceId]);
+        $projectInvoice = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$projectInvoice || ($projectInvoice['status'] ?? '') === 'void') {
+            if ($ownsTransaction) {
+                $pdo->rollBack();
+            }
+            $result['message'] = 'This project invoice is not available for email delivery.';
+            return $result;
+        }
 
-    if (($projectInvoice['status'] ?? '') === 'draft' || empty($projectInvoice['finalized_at'])) {
-        $pdo->prepare(
-            'UPDATE project_invoices
-             SET status="unpaid",finalized_at=COALESCE(finalized_at,NOW()),
-                 finalization_source=COALESCE(finalization_source,"manual_email")
-             WHERE id=? AND status="draft"'
-        )->execute([$projectInvoiceId]);
+        $recipients = project_invoice_client_recipients($pdo, $projectInvoiceId, $clientIds);
+        if ($recipientKeys !== null) {
+            $selectedKeys = array_fill_keys(array_map('strval', $recipientKeys), true);
+            $recipients = array_values(array_filter($recipients, static function (array $recipient) use ($selectedKeys): bool {
+                return isset($selectedKeys[(string)($recipient['recipient_key'] ?? '')]);
+            }));
+        }
+        $validRecipientCount = count(array_filter($recipients, static function (array $recipient): bool {
+            return filter_var(trim((string)($recipient['email'] ?? '')), FILTER_VALIDATE_EMAIL) !== false;
+        }));
+        if ($validRecipientCount === 0) {
+            if ($ownsTransaction) {
+                $pdo->rollBack();
+            }
+            $result['message'] = 'Select at least one saved recipient with a valid email address.';
+            return $result;
+        }
+
+        // Recalculate under the statement lock. This both preserves a normal
+        // draft and repairs production rows that an older balance refresh left
+        // as unpaid without a finalized timestamp.
+        project_invoice_refresh_status($pdo, $projectInvoiceId);
+        $stmt->execute([$projectInvoiceId]);
+        $projectInvoice = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        if ((float)($projectInvoice['balance_due'] ?? 0) <= 0.005) {
+            if ($ownsTransaction) {
+                $pdo->rollBack();
+            }
+            $result['message'] = 'This project invoice has no outstanding balance, so no email was sent.';
+            return $result;
+        }
+        if (empty($projectInvoice['finalized_at'])) {
+            $pdo->prepare(
+                'UPDATE project_invoices
+                 SET status="unpaid",finalized_at=NOW(),
+                     finalization_source=COALESCE(finalization_source,"manual_email")
+                 WHERE id=? AND status<>"void" AND finalized_at IS NULL AND balance_due>0.005'
+            )->execute([$projectInvoiceId]);
+        }
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+    } catch (Throwable $error) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        @error_log('[project_invoice_billing] Email preparation failed: ' . $error->getMessage());
+        $result['message'] = 'The project invoice could not be prepared for email delivery.';
+        return $result;
     }
 
     $notificationType = ($allowResend || $manualIntent) ? 'manual' : 'on_generate';
@@ -561,7 +669,7 @@ function project_invoice_send_email_result(PDO $pdo, int $projectInvoiceId, arra
             $pdo, $projectInvoiceId, $notificationType, $deliveryKey, $email, $status, $error
         );
     }
-    $stats = project_invoice_notification_process($pdo, $appConfig, null, null, 100, $projectInvoiceId);
+    $stats = project_invoice_notification_process($pdo, $appConfig, $sender, null, 100, $projectInvoiceId);
     $result['sent'] = (int)$stats['sent'];
     $result['retry'] = (int)$stats['retry'];
     $result['suppressed'] = (int)$stats['suppressed'];
@@ -888,7 +996,7 @@ function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): b
     return $ok;
 }
 
-/** @return array{processed:int,generated:int,existing:int,drafted:int,delivered:int,already_delivered:int,delivery_pending:int,delivery_failed:int} */
+/** @return array{processed:int,generated:int,existing:int,empty:int,drafted:int,delivered:int,already_delivered:int,delivery_pending:int,delivery_failed:int} */
 function project_invoice_generate_due_monthly_result(PDO $pdo, array $appConfig): array
 {
     [$start, $end] = project_invoice_period_for_date(date('Y-m-d'), true);
@@ -899,17 +1007,14 @@ function project_invoice_generate_due_monthly_result(PDO $pdo, array $appConfig)
         'processed' => 0,
         'generated' => 0,
         'existing' => 0,
+        'empty' => 0,
         'drafted' => 0,
         'delivered' => 0,
         'already_delivered' => 0,
         'delivery_pending' => 0,
         'delivery_failed' => 0,
     ];
-    $existingStmt = $pdo->prepare(
-        'SELECT id FROM project_invoices
-         WHERE project_id=? AND billing_period_start=? AND billing_period_end=? AND status<>"void" LIMIT 1'
-    );
-    $stateStmt = $pdo->prepare('SELECT status,sent_at FROM project_invoices WHERE id=?');
+    $stateStmt = $pdo->prepare('SELECT status,sent_at,balance_due FROM project_invoices WHERE id=?');
     $deliveryStmt = $pdo->prepare(
         'SELECT delivery_status,COUNT(*) AS status_count FROM project_invoice_notifications
          WHERE project_invoice_id=? AND notification_type="on_generate" AND delivery_key="generated"
@@ -918,22 +1023,35 @@ function project_invoice_generate_due_monthly_result(PDO $pdo, array $appConfig)
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $project) {
         $projectId = (int)$project['id'];
         $sendEmail = $hasAutoEmail ? !empty($project['project_invoice_auto_email']) : true;
-        $existingStmt->execute([$projectId, $start, $end]);
-        $wasExisting = (int)($existingStmt->fetchColumn() ?: 0) > 0;
-        $id = project_invoice_create_for_period($pdo, $projectId, $start, $end, $appConfig, false, false);
-        if (!$id) {
+        $generation = project_invoice_create_for_period_result($pdo, $projectId, $start, $end, $appConfig, false, false);
+        if (($generation['status'] ?? '') === 'error') {
+            $stats['delivery_failed']++;
+            @error_log('[project_invoice_billing] Monthly project statement generation failed for project ' . $projectId . '.');
+            continue;
+        }
+        if (($generation['status'] ?? '') === 'empty') {
+            $stats['empty']++;
+            continue;
+        }
+        $id = (int)($generation['project_invoice_id'] ?? 0);
+        if ($id <= 0) {
+            $stats['empty']++;
             continue;
         }
 
         $stats['processed']++;
-        $stats[$wasExisting ? 'existing' : 'generated']++;
+        $stats[($generation['status'] ?? '') === 'created' ? 'generated' : 'existing']++;
+        $stateStmt->execute([$id]);
+        $state = $stateStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        if (($state['status'] ?? '') === 'void' || (float)($state['balance_due'] ?? 0) <= 0.005) {
+            $stats['empty']++;
+            continue;
+        }
         if (!$sendEmail) {
             $stats['drafted']++;
             continue;
         }
 
-        $stateStmt->execute([$id]);
-        $state = $stateStmt->fetch(PDO::FETCH_ASSOC) ?: [];
         if (!empty($state['sent_at'])) {
             $stats['already_delivered']++;
             continue;
