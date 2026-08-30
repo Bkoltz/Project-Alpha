@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../../utils/invoice_notifications.php';
 require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
+require_once __DIR__ . '/../../utils/document_organization.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
@@ -85,7 +86,7 @@ try {
     // Resolve creator + organization for derived invoice (no session in on-demand generator)
     $fallbackUserId = 1;
     $contractCreator = (int)($contract['created_by'] ?? 0) ?: $fallbackUserId;
-    $contractOrgId   = !empty($contract['organization_id']) ? (int)$contract['organization_id'] : null;
+    $contractOrgId = pa_document_effective_organization_id($pdo, 'contract', $contract_id);
     
     // Calculate invoice amount. Older on-demand contracts may have a zero
     // price_per_invoice even though subtotal/contract_items were saved.
