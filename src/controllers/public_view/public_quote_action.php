@@ -21,6 +21,7 @@ require_once __DIR__ . '/../../utils/public_links.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/job_work_materialization.php';
 require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
+require_once __DIR__ . '/../../utils/document_organization.php';
 require_once __DIR__ . '/../../services/ProjectContractEligibilityGuardService.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('public_quote_action', $submitted)) {
@@ -94,7 +95,7 @@ try {
         // Resolve creator + organization for derived records (no session user for public link)
         $fallbackUserId = 1;
         $quoteCreator = (int)($quote['created_by'] ?? 0) ?: $fallbackUserId;
-        $quoteOrgId   = !empty($quote['organization_id']) ? (int)$quote['organization_id'] : null;
+        $quoteOrgId = pa_document_effective_organization_id($pdo, 'quote', $qid);
         $billingMode = (($quote['billing_mode'] ?? 'fixed') === 'hourly') ? 'hourly' : 'fixed';
         $depositType = $quote['deposit_type'] ?? 'none';
         $depositValue = (float)($quote['deposit_amount'] ?? 0);

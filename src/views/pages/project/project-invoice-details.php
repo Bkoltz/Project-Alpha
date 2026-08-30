@@ -40,7 +40,7 @@ $stmt = $pdo->prepare('
            c.country AS client_country
     FROM project_invoices pi
     JOIN projects p ON p.id = pi.project_id
-    LEFT JOIN organizations o ON o.id = COALESCE(pi.organization_id, p.organization_id)
+    LEFT JOIN organizations o ON o.id = COALESCE(p.organization_id, pi.organization_id)
     LEFT JOIN clients c ON c.id = pi.primary_client_id
     WHERE pi.id = ?
 ');

@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../utils/recurring_services.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/job_work_materialization.php';
 require_once __DIR__ . '/../../utils/document_pricing_adjustments.php';
+require_once __DIR__ . '/../../utils/document_organization.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 require_once __DIR__ . '/../../services/ProjectContractEligibilityGuardService.php';
@@ -36,9 +37,8 @@ try {
   // Resolve creator + organization for derived records
   if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
   $fallbackUserId = (int)($_SESSION['user']['id'] ?? 0) ?: 1;
-  $fallbackOrgId  = request_client_org_id() ?: null;
   $quoteCreator = (int)($quote['created_by'] ?? 0) ?: $fallbackUserId;
-  $quoteOrgId   = !empty($quote['organization_id']) ? (int)$quote['organization_id'] : $fallbackOrgId;
+  $quoteOrgId = pa_document_effective_organization_id($pdo, 'quote', $id);
 
   if ($quote['status'] !== 'pending') throw new Exception('Quote not pending');
   $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=?');

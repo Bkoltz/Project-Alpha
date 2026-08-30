@@ -7,6 +7,7 @@ require_once __DIR__ . '/invoice_lifecycle.php';
 require_once __DIR__ . '/project_billing.php';
 require_once __DIR__ . '/invoice_notifications.php';
 require_once __DIR__ . '/document_pricing_adjustments.php';
+require_once __DIR__ . '/document_organization.php';
 require_once __DIR__ . '/../services/DocumentRevisionService.php';
 
 function pa_recurring_money_to_minor(string $amount): int
@@ -77,7 +78,7 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
         $clientId = $contract['client_id'];
         $projectCode = $contract['project_code'];
         $projectId = !empty($contract['project_id']) ? (int)$contract['project_id'] : null;
-        $organizationId = !empty($contract['organization_id']) ? (int)$contract['organization_id'] : null;
+        $organizationId = pa_document_effective_organization_id($pdo, 'contract', (int)$contractId);
         $createdBy = !empty($contract['created_by']) ? (int)$contract['created_by'] : null;
 
         // Calculate invoice amount
@@ -353,6 +354,7 @@ function generate_recurring_proration_invoice(
         if (!$contract) {
             throw new RuntimeException('Recurring service not found for proration.');
         }
+        $organizationId = pa_document_effective_organization_id($pdo, 'contract', $contractId);
         if($generationKey!==null){$existing=$pdo->prepare('SELECT id FROM invoices WHERE contract_id=? AND generation_key=? LIMIT 1');$existing->execute([$contractId,$generationKey]);$existingId=(int)$existing->fetchColumn();if($existingId>0){if($ownsTransaction)$pdo->commit();return$existingId;}}
 
         $discount = 0.0;
@@ -381,7 +383,7 @@ function generate_recurring_proration_invoice(
             !empty($contract['job_id']) ? (int)$contract['job_id'] : null,
             !empty($contract['service_location_id']) ? (int)$contract['service_location_id'] : null,
             $contract['project_code'] ?? null,
-            !empty($contract['organization_id']) ? (int)$contract['organization_id'] : null,
+            $organizationId,
             (int)($contract['show_contact_on_document'] ?? 0),
             !empty($contract['created_by']) ? (int)$contract['created_by'] : null,
             'long_term',
@@ -411,7 +413,7 @@ function generate_recurring_proration_invoice(
         }
 
         pricing_finalize_derived_document_revision(
-            $pdo,!empty($contract['organization_id'])?(int)$contract['organization_id']:null,'invoice',$invoiceId,
+            $pdo,$organizationId,'invoice',$invoiceId,
             !empty($contract['created_by'])?(int)$contract['created_by']:null,(string)($appConfig['workforce_currency']??'USD'),
             'contract',$contractId,pricing_contract_source_revision($contract)
         );
