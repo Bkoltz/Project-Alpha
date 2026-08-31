@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../../utils/project_billing_transition.php';
 require_once __DIR__ . '/../../utils/public_project_links.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../config/app.php';
@@ -37,6 +38,14 @@ $managerUserId = (int)($_POST['manager_user_id'] ?? 0);
 $estimated_start = trim($_POST['estimated_start'] ?? '');
 $estimated_end = trim($_POST['estimated_end'] ?? '');
 $invoiceBillingPeriod = ($_POST['invoice_billing_period'] ?? 'per_invoice') === 'monthly' ? 'monthly' : 'per_invoice';
+$postedOriginalBillingPeriod = in_array((string)($_POST['invoice_billing_period_original'] ?? ''), ['monthly', 'per_invoice'], true)
+	? (string)$_POST['invoice_billing_period_original']
+	: null;
+$billingTransitionStrategy = in_array((string)($_POST['billing_transition_strategy'] ?? ''), ['convert_to_direct', 'final_project_statement'], true)
+	? (string)$_POST['billing_transition_strategy']
+	: null;
+$billingTransitionDeliveryAction = (string)($_POST['delivery_action'] ?? 'review') === 'send_all' ? 'send_all' : 'review';
+$monthlyAutoEmailConfirmed = (string)($_POST['monthly_auto_email_confirmed'] ?? '') === '1';
 $invoiceNetTermsDays = trim((string)($_POST['invoice_net_terms_days'] ?? ''));
 $invoiceNetTermsDays = $invoiceNetTermsDays === '' ? null : max(0, (int)$invoiceNetTermsDays);
 $projectInvoiceAutoEmail = !empty($_POST['project_invoice_auto_email']) ? 1 : 0;
@@ -50,8 +59,14 @@ $publicProjectCanRequestChanges = !empty($_POST['public_project_can_request_chan
 
 require_record_ownership($pdo, 'projects', $id);
 pa_project_public_link_ensure_schema($pdo);
+$actorId = (int)($_SESSION['user']['id'] ?? 0);
+if ($billingTransitionDeliveryAction === 'send_all'
+	&& ($actorId <= 0 || !user_can($pdo, $actorId, 'invoices.send', 0))) {
+	http_response_code(403);
+	exit('Forbidden');
+}
 
-$projectStmt = $pdo->prepare('SELECT organization_id,business_unit_id,manager_user_id,public_project_token,public_project_password_hash FROM projects WHERE id = ? LIMIT 1');
+$projectStmt = $pdo->prepare('SELECT organization_id,business_unit_id,manager_user_id,invoice_billing_period,public_project_token,public_project_password_hash FROM projects WHERE id = ? LIMIT 1');
 $projectStmt->execute([$id]);
 $storedProject = $projectStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 $storedOrganizationId = (int)($storedProject['organization_id'] ?? 0);
@@ -174,6 +189,7 @@ if ($publicProjectRequirePassword && $publicProjectPassword === '' && trim((stri
 $hasAutoEmailColumn = project_invoice_table_has_column($pdo, 'projects', 'project_invoice_auto_email');
 $hasDepartmentColumn = project_invoice_table_has_column($pdo, 'projects', 'department_id');
 $portalProjection = new \App\Services\PortalProjectionMutationService();
+$billingTransitionResult = null;
 $pdo->beginTransaction();
 try {
 $portalBeforeScopes = $portalProjection->lockedProjectScopes(
@@ -183,6 +199,21 @@ $portalBeforeScopes = $portalProjection->lockedProjectScopes(
 	$organization_id > 0 ? $organization_id : null,
 	$department_id > 0 ? $department_id : null
 );
+$lockedModeStmt = $pdo->prepare('SELECT invoice_billing_period FROM projects WHERE id=?');
+$lockedModeStmt->execute([$id]);
+$lockedInvoiceBillingPeriod = (string)($lockedModeStmt->fetchColumn() ?: 'per_invoice');
+$lockedInvoiceBillingPeriod = $lockedInvoiceBillingPeriod === 'monthly' ? 'monthly' : 'per_invoice';
+if ($postedOriginalBillingPeriod === null && $invoiceBillingPeriod !== $lockedInvoiceBillingPeriod) {
+	throw new DomainException('Reload Project billing settings before changing the billing period.');
+}
+if ($postedOriginalBillingPeriod !== null && $postedOriginalBillingPeriod !== $lockedInvoiceBillingPeriod) {
+	throw new DomainException('Project billing settings changed in another session. Reload before saving.');
+}
+if ($lockedInvoiceBillingPeriod === 'per_invoice'
+	&& $invoiceBillingPeriod === 'monthly'
+	&& !$monthlyAutoEmailConfirmed) {
+	throw new DomainException('Confirm the monthly automatic-email preference before enabling monthly billing.');
+}
 if ($hasAutoEmailColumn) {
 	$departmentSet = $hasDepartmentColumn ? 'department_id=?,' : '';
 	$stmt = $pdo->prepare("UPDATE projects SET name=?, client_id=?, organization_id=?, {$departmentSet} business_unit_id=?, manager_user_id=?, invoice_billing_period=?, invoice_net_terms_days=?, project_invoice_auto_email=?, estimated_start=?, estimated_end=?, notes=?, source_version=?, updated_at=NOW() WHERE id=?");
@@ -255,6 +286,23 @@ if (!empty($_POST['project_invoice_recipients_present'])) {
 		$useOrganizationInvoiceEmail ? [$organization_id] : []
 	);
 }
+$shouldRunBillingTransition = $lockedInvoiceBillingPeriod !== $invoiceBillingPeriod
+	|| ($lockedInvoiceBillingPeriod === 'per_invoice'
+		&& $invoiceBillingPeriod === 'per_invoice'
+		&& $billingTransitionStrategy !== null);
+if ($shouldRunBillingTransition) {
+	$billingTransitionResult = project_billing_mode_transition(
+		$pdo,
+		$id,
+		$lockedInvoiceBillingPeriod,
+		$invoiceBillingPeriod,
+		$billingTransitionStrategy,
+		$billingTransitionDeliveryAction,
+		$appConfig,
+		$actorId ?: null,
+		date('Y-m-d')
+	);
+}
 $serviceLocationIds = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['service_location_ids'] ?? [])))));
 $defaultServiceLocationId = (int)($_POST['default_service_location_id'] ?? 0);
 if ($defaultServiceLocationId > 0 && !in_array($defaultServiceLocationId, $serviceLocationIds, true)) $serviceLocationIds[] = $defaultServiceLocationId;
@@ -312,11 +360,31 @@ if($storedBusinessUnitId!==$businessUnitId)audit_log($pdo,'project.business_unit
 if($storedManagerUserId!==$managerUserId)audit_log($pdo,'project.manager.changed','project',$id,['from'=>$storedManagerUserId?:null,'to'=>$managerUserId?:null]);
 $portalProjection->afterMutation($pdo, array_merge($portalBeforeScopes, $portalProjection->projectScopes($pdo, $id)));
 $pdo->commit();
+} catch (DomainException $error) {
+	if ($pdo->inTransaction()) {
+		$pdo->rollBack();
+	}
+	header('Location: '.$editRedirect.'&error=' . urlencode($error->getMessage()) . '#project-billing');
+	exit;
 } catch (Throwable $error) {
 	if ($pdo->inTransaction()) {
 		$pdo->rollBack();
 	}
 	throw $error;
 }
-header('Location: '.$detailsRedirect.'&updated=1');
+$redirect = $detailsRedirect . '&updated=1';
+if (is_array($billingTransitionResult)
+	&& (!empty($billingTransitionResult['changed']) || (int)($billingTransitionResult['candidate_count'] ?? 0) > 0)) {
+	$deliveryResult = project_billing_transition_deliver($pdo, $billingTransitionResult, $appConfig);
+	$billingTransitionResult['delivery_results'] = $deliveryResult;
+	$message = (string)($billingTransitionResult['message'] ?? 'Project billing was updated.');
+	if ((int)($deliveryResult['sent'] ?? 0) > 0) {
+		$message .= ' ' . (int)$deliveryResult['sent'] . ' email(s) were sent.';
+	}
+	if ((int)($deliveryResult['failed'] ?? 0) > 0) {
+		$message .= ' ' . (string)($deliveryResult['message'] ?? 'Some email delivery attempts need attention.');
+	}
+	$redirect .= '&billing_transition=success&transition_message=' . urlencode($message);
+}
+header('Location: '.$redirect);
 exit;

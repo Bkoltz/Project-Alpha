@@ -264,6 +264,33 @@ final class InvoiceAutomationTest extends TestCase
         self::assertStringStartsWith('%PDF-', $attachment['content']);
     }
 
+    public function testInvoiceReminderReusesExistingActivePublicLink(): void
+    {
+        $clientId = $this->client('stable-link@example.invalid');
+        $invoiceId = $this->invoice($clientId, 'regular', '2026-07-01', '2026-08-06', 30, 'terms');
+        $token = 'stable-invoice-' . bin2hex(random_bytes(12));
+        $this->pdo->prepare(
+            'INSERT INTO public_links (document_type,document_id,token,expires_at,expire_when_paid,revoked)
+             VALUES ("invoice",?,?,NULL,1,0)'
+        )->execute([$invoiceId, $token]);
+        $today = new DateTimeImmutable('2026-07-30 08:00:00');
+        invoice_notification_schedule_reminders($this->pdo, $this->config, $today->setTime(0, 0));
+        $body = '';
+        $sender = static function (string $to, string $subject, string $html) use (&$body): array {
+            $body = $html;
+            return [true, ''];
+        };
+
+        self::assertSame(1, invoice_notification_process($this->pdo, $this->config, $sender, $today)['sent']);
+        self::assertStringContainsString(rawurlencode($token), $body);
+        $links = $this->pdo->prepare('SELECT token,revoked FROM public_links WHERE document_type="invoice" AND document_id=? ORDER BY id');
+        $links->execute([$invoiceId]);
+        self::assertSame([['token' => $token, 'revoked' => 0]], array_map(
+            static fn(array $row): array => ['token' => (string)$row['token'], 'revoked' => (int)$row['revoked']],
+            $links->fetchAll(PDO::FETCH_ASSOC)
+        ));
+    }
+
     public function testProjectInvoiceRemindersRespectRecipientSuppressionAndAttachPdf(): void
     {
         $recipientId = $this->client('project-billing@example.invalid');
@@ -287,6 +314,11 @@ final class InvoiceAutomationTest extends TestCase
         )->execute([$projectId, $orgId, $recipientId, random_int(100000, 999999)]);
         $projectInvoiceId = (int)$this->pdo->lastInsertId();
         $this->ids['project_invoices'][] = $projectInvoiceId;
+        $stableProjectToken = 'stable-project-' . bin2hex(random_bytes(12));
+        $this->pdo->prepare(
+            'INSERT INTO public_links (document_type,document_id,token,expires_at,expire_when_paid,revoked)
+             VALUES ("project_invoice",?,?,NULL,1,0)'
+        )->execute([$projectInvoiceId, $stableProjectToken]);
 
         $today = new DateTimeImmutable('2026-07-30 08:00:00');
         self::assertSame(1, project_invoice_notification_schedule_reminders($this->pdo, $this->config, $today->setTime(0, 0))['queued']);
@@ -299,6 +331,10 @@ final class InvoiceAutomationTest extends TestCase
         self::assertSame(1, project_invoice_notification_process($this->pdo, $this->config, $sender, $today)['sent']);
         self::assertCount(1, $delivered);
         self::assertSame('project-billing@example.invalid', $delivered[0]['to']);
+        self::assertStringContainsString(rawurlencode($stableProjectToken), $delivered[0]['body']);
+        $projectLinks = $this->pdo->prepare('SELECT token FROM public_links WHERE document_type="project_invoice" AND document_id=?');
+        $projectLinks->execute([$projectInvoiceId]);
+        self::assertSame([$stableProjectToken], $projectLinks->fetchAll(PDO::FETCH_COLUMN));
         self::assertStringContainsString('$250.00', $delivered[0]['body']);
         self::assertStringContainsString('Net 15 (due August 6, 2026)', $delivered[0]['body']);
         self::assertStringContainsString('https://tenant-a.example.invalid/', $delivered[0]['body']);

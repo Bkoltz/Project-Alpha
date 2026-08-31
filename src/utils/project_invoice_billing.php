@@ -186,6 +186,56 @@ function project_invoice_recipient_client_ids_in_scope(PDO $pdo, array $clientId
     return (int)$stmt->fetchColumn() === count($clientIds);
 }
 
+function project_invoice_period_label(array $projectInvoice): string
+{
+    $end = date('M j, Y', strtotime((string)($projectInvoice['billing_period_end'] ?? 'now')));
+    if (($projectInvoice['finalization_source'] ?? '') === 'billing_mode_transition') {
+        return 'Closing statement through ' . $end;
+    }
+    $start = date('M j, Y', strtotime((string)($projectInvoice['billing_period_start'] ?? 'now')));
+    return $start . ' - ' . $end;
+}
+
+/**
+ * Allocate a globally unique visible Project Invoice number under the caller's
+ * transaction. The sequence row serializes allocations across projects.
+ */
+function project_invoice_next_doc_number(PDO $pdo): int
+{
+    if (!$pdo->inTransaction()) {
+        throw new LogicException('Project Invoice numbers must be allocated inside a transaction.');
+    }
+    $driver = (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    $maxNext = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0)+1 FROM project_invoices')->fetchColumn();
+    $maxNext = max(1, $maxNext);
+    if ($driver === 'sqlite') {
+        $seed = $pdo->prepare(
+            "INSERT INTO document_number_sequences (document_type,document_subtype,next_number)
+             VALUES ('project_invoice','standard',?)
+             ON CONFLICT(document_type,document_subtype) DO UPDATE SET next_number=MAX(next_number,excluded.next_number)"
+        );
+    } else {
+        $seed = $pdo->prepare(
+            "INSERT INTO document_number_sequences (document_type,document_subtype,next_number)
+             VALUES ('project_invoice','standard',?)
+             ON DUPLICATE KEY UPDATE next_number=GREATEST(next_number,VALUES(next_number))"
+        );
+    }
+    $seed->execute([$maxNext]);
+    $lockSuffix = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+    $row = $pdo->query(
+        "SELECT next_number FROM document_number_sequences
+         WHERE document_type='project_invoice' AND document_subtype='standard'" . $lockSuffix
+    );
+    $number = max($maxNext, (int)$row->fetchColumn());
+    $update = $pdo->prepare(
+        "UPDATE document_number_sequences SET next_number=?
+         WHERE document_type='project_invoice' AND document_subtype='standard'"
+    );
+    $update->execute([$number + 1]);
+    return $number;
+}
+
 function project_invoice_has_saved_deliverable_recipient(PDO $pdo, int $projectId): bool
 {
     foreach (project_invoice_saved_recipients($pdo, $projectId) as $recipient) {
@@ -311,10 +361,13 @@ function project_invoice_client_recipients(PDO $pdo, int $projectInvoiceId, ?arr
 
 function project_invoice_create_public_link(PDO $pdo, int $projectInvoiceId, array $appConfig): string
 {
-    $token = bin2hex(random_bytes(16));
-    $stmt = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, expire_when_paid, revoked) VALUES ("project_invoice", ?, ?, NULL, 1, 0)');
-    $stmt->execute([$projectInvoiceId, $token]);
-    return $token;
+    return (string)project_invoice_ensure_public_link($pdo, $projectInvoiceId, $appConfig)['token'];
+}
+
+/** @return array{id:int,token:string,created:bool} */
+function project_invoice_ensure_public_link(PDO $pdo, int $projectInvoiceId, array $appConfig): array
+{
+    return pa_public_link_reuse_or_create($pdo, 'project_invoice', $projectInvoiceId, null, true);
 }
 
 function project_invoice_base_url(array $appConfig): string
@@ -495,7 +548,7 @@ function project_invoice_create_for_period_result(PDO $pdo, int $projectId, stri
         $primaryStmt->execute([$projectId]);
         $primaryClientId = (int)($primaryStmt->fetchColumn() ?: ($project['client_id'] ?? 0)) ?: null;
 
-        $docNumber = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) + 1 FROM project_invoices')->fetchColumn();
+        $docNumber = project_invoice_next_doc_number($pdo);
         $dueDate = project_invoice_due_date_for_period($project, $appConfig, $periodEnd);
         $insert = $pdo->prepare('
             INSERT INTO project_invoices
@@ -545,8 +598,6 @@ function project_invoice_create_for_period_result(PDO $pdo, int $projectId, stri
                 $due,
             ]);
             $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')
-                ->execute([(int)$child['id']]);
-            $pdo->prepare('UPDATE public_links SET revoked=1 WHERE document_type="invoice" AND document_id=? AND revoked=0')
                 ->execute([(int)$child['id']]);
         }
 
