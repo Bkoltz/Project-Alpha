@@ -145,16 +145,14 @@ try {
     }
 
     if ($autoCreateInvoice) {
+      $projectBillingContext = project_invoice_billing_context($pdo, $projectId, $appConfig, null, true);
       $invoiceSubtotal=0.0;foreach($qitems as $it){if(($it['pricing_status']??'standard')!=='standard')continue;$invoiceSubtotal+=(float)$it['line_total'];}
       $invoiceDiscount=($quote['discount_type']??'none')==='percent'?max(0,min(100,(float)$quote['discount_value']))*$invoiceSubtotal/100:(($quote['discount_type']??'none')==='fixed'?min($invoiceSubtotal,max(0,(float)$quote['discount_value'])):0);
       $invoiceTotal=max(0,$invoiceSubtotal-$invoiceDiscount+max(0,(float)$quote['tax_percent'])*max(0,$invoiceSubtotal-$invoiceDiscount)/100);
-      $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, show_contact_on_document, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $invoiceSubtotal, $invoiceTotal, 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, (int)($quote['show_contact_on_document'] ?? 0), $quoteCreator]);
+      $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, payment_terms_days, due_date_source, project_code, fulfillment_date, organization_id, show_contact_on_document, created_by, collection_mode) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $invoiceSubtotal, $invoiceTotal, 'draft', $projectBillingContext['due_date'], $projectBillingContext['net_terms_days'], 'terms', $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, (int)($quote['show_contact_on_document'] ?? 0), $quoteCreator, $projectBillingContext['collection_mode']]);
       $invoice_id = (int)$pdo->lastInsertId();
       $pdo->prepare('UPDATE invoices SET job_id=?,service_location_id=? WHERE id=?')->execute([$jobId, $serviceLocationId, $invoice_id]);
-      if ($projectId && project_uses_monthly_invoice_billing($pdo, $projectId)) {
-        $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
-      }
 
       $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
       foreach ($qitems as $it) {

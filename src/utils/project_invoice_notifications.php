@@ -191,10 +191,9 @@ function project_invoice_notification_process(
         try {
             $url = '';
             if (!empty($appConfig['public_links_in_email'])) {
-                $token = project_invoice_create_public_link($pdo, (int)$row['project_invoice_id'], $appConfig);
-                $linkStmt = $pdo->prepare('SELECT id FROM public_links WHERE token=? LIMIT 1');
-                $linkStmt->execute([$token]);
-                $linkId = (int)$linkStmt->fetchColumn();
+                $publicLink = project_invoice_ensure_public_link($pdo, (int)$row['project_invoice_id'], $appConfig);
+                $token = (string)$publicLink['token'];
+                $linkId = !empty($publicLink['created']) ? (int)$publicLink['id'] : 0;
                 $url = project_invoice_base_url($appConfig) . '/?page=public-doc&token=' . rawurlencode($token);
             }
             $doc = (string)($row['doc_number'] ?: $row['project_invoice_id']);
@@ -242,9 +241,6 @@ function project_invoice_notification_process(
             )->execute([$now->format('Y-m-d H:i:s'), (int)$row['project_invoice_id']]);
             $stats['sent']++;
         } catch (Throwable $error) {
-            if ($linkId > 0) {
-                try { $pdo->prepare('UPDATE public_links SET revoked=1 WHERE id=?')->execute([$linkId]); } catch (Throwable $ignored) {}
-            }
             $attempt = max(1, (int)$row['attempt_count']);
             $delay = min(1440, 5 * (2 ** min(8, $attempt - 1)));
             $pdo->prepare(

@@ -38,17 +38,21 @@ try {
     if (!$contract) {
         throw new Exception('Contract not found');
     }
-    $existingGeneration=$pdo->prepare('SELECT id FROM invoices WHERE contract_id=? AND generation_key=? LIMIT 1');
-    $existingGeneration->execute([$contract_id,$generationKey]);$existingInvoiceId=(int)$existingGeneration->fetchColumn();
+    $existingGeneration=$pdo->prepare('SELECT id,collection_mode FROM invoices WHERE contract_id=? AND generation_key=? LIMIT 1 FOR UPDATE');
+    $existingGeneration->execute([$contract_id,$generationKey]);
+    $existingInvoice=$existingGeneration->fetch(PDO::FETCH_ASSOC)?:[];
+    $existingInvoiceId=(int)($existingInvoice['id']??0);
     if($existingInvoiceId>0){
+        $existingCollectionMode=trim((string)($existingInvoice['collection_mode']??''))?:'direct';
         $pdo->commit();
         // A prior request may have committed the invoice and then crashed before
         // finalization/delivery. Replays must finish those idempotent side effects.
         if ($sendEmail) {
             $contractCreator = (int)($contract['created_by'] ?? 0) ?: 1;
             invoice_finalize($pdo, $existingInvoiceId, $appConfig, 'on_demand_send', $contractCreator);
-            $projectId = !empty($contract['project_id']) ? (int)$contract['project_id'] : null;
-            if (!project_uses_monthly_invoice_billing($pdo, $projectId)) {
+            // Replay the collection policy stored on the committed invoice.
+            // The Project default may have changed since the first request.
+            if ($existingCollectionMode === 'direct') {
                 $clientStmt = $pdo->prepare('SELECT email FROM clients WHERE id = ?');
                 $clientStmt->execute([(int)$contract['client_id']]);
                 $to = trim((string)$clientStmt->fetchColumn());
@@ -111,16 +115,17 @@ try {
     $total = max(0, $taxable + $tax);
     
     // Create invoice
-    $projectMonthlyBilling = project_uses_monthly_invoice_billing($pdo, $projectId);
-    $dueDate = project_invoice_due_date($pdo, $projectId, $appConfig);
-    $paymentTermsDays = project_invoice_terms_days($pdo, $projectId, $appConfig);
+    $projectBillingContext = project_invoice_billing_context($pdo, $projectId, $appConfig, date('Y-m-d'), true);
+    $projectMonthlyBilling = $projectBillingContext['collection_mode'] === 'project_aggregate';
+    $dueDate = (string)$projectBillingContext['due_date'];
+    $paymentTermsDays = (int)$projectBillingContext['net_terms_days'];
     
     $insertInvoice = $pdo->prepare('
         INSERT INTO invoices (
             contract_id, client_id, project_id, project_code, invoice_type, billing_mode,
             discount_type, discount_value, tax_percent, 
-            subtotal, total, balance_due, status, due_date, payment_terms_days, due_date_source, created_at, organization_id, show_contact_on_document, created_by, generation_key
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "terms", ?, ?, ?, ?, ?)
+            subtotal, total, balance_due, status, due_date, payment_terms_days, due_date_source, created_at, organization_id, show_contact_on_document, created_by, generation_key, collection_mode
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "terms", ?, ?, ?, ?, ?, ?)
     ');
     
     $insertInvoice->execute([
@@ -143,16 +148,13 @@ try {
         $contractOrgId,
         (int)($contract['show_contact_on_document'] ?? 0),
         $contractCreator,
-        $generationKey
+        $generationKey,
+        $projectBillingContext['collection_mode']
     ]);
     
     $invoiceId = (int)$pdo->lastInsertId();
     $pdo->prepare('UPDATE invoices SET job_id=?,service_location_id=? WHERE id=?')
         ->execute([!empty($contract['job_id']) ? (int)$contract['job_id'] : null,!empty($contract['service_location_id']) ? (int)$contract['service_location_id'] : null,$invoiceId]);
-    if ($projectMonthlyBilling) {
-        $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoiceId]);
-    }
-    
     // Assign doc number
     $docNumber = pa_next_invoice_doc_number($pdo, 'on_demand');
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$docNumber, $invoiceId]);
