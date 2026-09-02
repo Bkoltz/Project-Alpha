@@ -101,6 +101,7 @@ if (!empty($config['enabled'])) {
     <div class="settings-alert settings-alert-info">Client portal delivery is not paired for this connection. The receiver is derived from the signed event URL and uses the same service authentication, while its separate signing capability stays in deployment-managed secrets. No additional integration profile is managed from this page.</div>
   <?php else:?>
     <?php $portalCounts=(array)$portalStatus['counts'];?>
+    <?php if(!empty($portalStatus['transition_message'])):?><div class="settings-alert settings-alert-warning" role="status"><?=$h($portalStatus['transition_message'])?></div><?php endif;?>
     <div class="settings-form-grid">
       <div><span class="label">Producer</span><strong><?=!empty($portalStatus['ready'])?'Ready':'Paused'?></strong></div>
       <div><span class="label">Active workspaces</span><strong><?=(int)($portalCounts['active_workspaces']??0)?></strong></div>

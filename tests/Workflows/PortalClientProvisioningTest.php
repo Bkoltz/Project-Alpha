@@ -34,9 +34,11 @@ CREATE TABLE portal_v2_entitlements(id INTEGER PRIMARY KEY AUTOINCREMENT,public_
 CREATE TABLE portal_client_access_roots(root_type TEXT,root_public_id TEXT,access_state TEXT,state_reason TEXT,last_reconciled_at TEXT,created_by INTEGER,updated_by INTEGER,PRIMARY KEY(root_type,root_public_id));
 CREATE TABLE portal_client_login_eligibility(client_id INTEGER PRIMARY KEY,portal_principal_id INTEGER,manual_state TEXT,eligibility_status TEXT,review_reason TEXT,canonical_email TEXT,source_version TEXT,last_reconciled_at TEXT,created_by INTEGER,updated_by INTEGER);
 CREATE TABLE app_config(organization_id INTEGER,config_key TEXT,config_value TEXT,PRIMARY KEY(organization_id,config_key));
-CREATE TABLE portal_projection_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,delivered_at TEXT,dead_lettered_at TEXT);
+CREATE TABLE portal_projection_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,delivery_id TEXT,workspace_public_id TEXT,schema_version INTEGER,source_sequence INTEGER,delivery_kind TEXT,route_type TEXT,is_revocation INTEGER DEFAULT 0,destination_url TEXT,signing_key_id TEXT,payload_json TEXT,attempts INTEGER DEFAULT 0,next_attempt_at TEXT,claim_token TEXT,claimed_at TEXT,delivered_at TEXT,dead_lettered_at TEXT,last_http_status INTEGER,last_error_code TEXT);
+CREATE TABLE portal_projection_state(integration_profile_id INTEGER,workspace_public_id TEXT,source_generation TEXT,source_sequence INTEGER,last_snapshot_hash TEXT,PRIMARY KEY(integration_profile_id,workspace_public_id));
+CREATE TABLE portal_projection_resource_state(integration_profile_id INTEGER,workspace_public_id TEXT,route_type TEXT,resource_type TEXT,resource_public_id TEXT,source_version TEXT,payload_hash TEXT,record_json TEXT,PRIMARY KEY(integration_profile_id,workspace_public_id,route_type,resource_type,resource_public_id));
 CREATE TABLE portal_integration_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,api_key_id INTEGER,action TEXT,target_type TEXT,target_public_id TEXT,metadata_json TEXT);
-INSERT INTO portal_integration_profiles(id,application_key,display_label,enabled,portal_projection_enabled) VALUES(1,'generic_operations','Generic operations',1,1);
+INSERT INTO portal_integration_profiles(id,application_key,display_label,enabled,portal_projection_enabled) VALUES(1,'generic_operations','Generic operations',0,0);
 SQL);
         $this->service = new PortalClientProvisioningService();
     }
@@ -117,6 +119,7 @@ SQL);
         ],JSON_THROW_ON_ERROR));
         try{
             $profileId=$this->service->configureConnection($this->pdo,[
+                'enabled'=>1,
                 'application_key'=>'new_operations',
                 'label'=>'Operations',
                 'webhook_url'=>'https://operations.example.test/api/integration/events?source=ignored',
@@ -140,4 +143,66 @@ SQL);
             $previousCapabilities===false?putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON'):putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.$previousCapabilities);
         }
     }
+
+    public function testDisableQueuesOldRouteTombstoneAndKeepsDeliveryAlive():void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $config=$this->connection('generic_operations','https://old.example.test/events',true);
+            $profileId=(int)$this->service->configureConnection($this->pdo,$config,7);
+            $this->activateWorkspace($profileId);
+
+            $config['enabled']=0;$config['configured_enabled']=false;
+            $this->service->configureConnection($this->pdo,$config,7);
+
+            $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
+            self::assertSame(0,(int)$profile['enabled']);self::assertSame(0,(int)$profile['portal_projection_enabled']);self::assertSame(1,(int)$profile['delivery_enabled']);
+            self::assertSame('https://old.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT destination_url FROM portal_projection_outbox WHERE integration_profile_id={$profileId} AND is_revocation=1")->fetchColumn());
+            self::assertSame('1',$this->pdo->query("SELECT config_value FROM app_config WHERE config_key='portal_outbound_delivery_enabled'")->fetchColumn());
+        });
+    }
+
+    public function testOriginRotationWaitsForDrainThenReusesOnlyBoundProfile():void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $profileId=(int)$this->service->configureConnection($this->pdo,$this->connection('generic_operations','https://old.example.test/events'),7);$this->activateWorkspace($profileId);
+            $this->pdo->prepare("INSERT INTO portal_projection_outbox(integration_profile_id,delivery_id,workspace_public_id,schema_version,source_sequence,delivery_kind,route_type,is_revocation,destination_url,signing_key_id,payload_json)VALUES(?,'normal-before-rotation','workspace-legacy',3,1,'event','portal',0,'https://old.example.test/api/internal/project-alpha/portal-v2','portal-v1','{}')")->execute([$profileId]);
+            $new=$this->connection('generic_operations','https://new.example.test/events');
+            self::assertSame($profileId,$this->service->configureConnection($this->pdo,$new,7));
+            self::assertSame(0,(int)$this->pdo->query("SELECT enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame('https://old.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT destination_url FROM portal_projection_outbox WHERE is_revocation=1")->fetchColumn());
+            $this->service->configureConnection($this->pdo,$new,7);
+            self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
+            self::assertSame(0,(int)$this->pdo->query("SELECT enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn(),'Replacement must remain inactive before drain.');
+            $this->pdo->exec("UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP WHERE is_revocation=1");
+            self::assertSame($profileId,$this->service->configureConnection($this->pdo,$new,7));
+            $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
+            self::assertSame(1,(int)$profile['enabled']);self::assertSame('https://new.example.test/api/internal/project-alpha/portal-v2',$profile['portal_route']);
+            self::assertSame('profile_disabled_superseded',$this->pdo->query("SELECT last_error_code FROM portal_projection_outbox WHERE delivery_id='normal-before-rotation'")->fetchColumn());
+            self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1')->fetchColumn());
+        });
+    }
+
+    public function testApplicationRekeyRetiresDrainsAndRotatesSameProfile():void
+    {
+        $this->withPortalCapabilities([
+            'generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]],
+            'replacement_operations'=>['portal'=>['keyId'=>'portal-v2','current'=>str_repeat('b',32)]],
+        ],function():void{
+            $profileId=(int)$this->service->configureConnection($this->pdo,$this->connection('generic_operations','https://old.example.test/events'),7);$this->activateWorkspace($profileId);
+            $new=$this->connection('replacement_operations','https://new.example.test/events');
+            $this->service->configureConnection($this->pdo,$new,7);
+            self::assertSame('generic_operations',$this->pdo->query("SELECT application_key FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            $this->pdo->exec('UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP WHERE is_revocation=1');
+            $this->service->configureConnection($this->pdo,$new,7);
+            $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
+            self::assertSame('replacement_operations',$profile['application_key']);self::assertSame('portal-v2',$profile['delivery_key_id']);
+            self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
+        });
+    }
+
+    /** @return array<string,mixed> */
+    private function connection(string$key,string$url,bool$enabled=true):array{return['enabled'=>$enabled?1:0,'configured_enabled'=>$enabled,'application_key'=>$key,'label'=>'Operations','webhook_url'=>$url,'access_client_id'=>'access-id','access_client_secret'=>'access-secret','timeout_seconds'=>15,'max_attempts'=>12];}
+    private function activateWorkspace(int$profileId):void{$this->pdo->exec("INSERT INTO organizations VALUES(90,'org-rotation','Rotation Org');INSERT INTO clients VALUES(91,'client-rotation','Rotation Person','rotation@example.test',90,'consumer',0,NULL,'v1')");$this->pdo->beginTransaction();$this->service->ensureScopes($this->pdo,[['root_type'=>'organization','root_public_id'=>'org-rotation']],7,$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC));$this->pdo->commit();$workspace=(string)$this->pdo->query("SELECT public_id FROM portal_v2_workspaces WHERE root_public_id='org-rotation'")->fetchColumn();$this->pdo->prepare('INSERT INTO portal_projection_state VALUES(?,?,?,?,?)')->execute([$profileId,$workspace,'generation-1',1,str_repeat('f',64)]);}
+    /** @param array<string,mixed> $capabilities */
+    private function withPortalCapabilities(array$capabilities,callable$test):void{$previousEncryption=getenv('APP_ENCRYPTION_KEY');$previousCapabilities=getenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON');putenv('APP_ENCRYPTION_KEY=portal-provisioning-lifecycle-test-key');putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.json_encode($capabilities,JSON_THROW_ON_ERROR));try{$test();}finally{$previousEncryption===false?putenv('APP_ENCRYPTION_KEY'):putenv('APP_ENCRYPTION_KEY='.$previousEncryption);$previousCapabilities===false?putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON'):putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.$previousCapabilities);}}
 }

@@ -35,7 +35,10 @@ try {
         $pdo->beginTransaction();
         try {
             $config = (new ExternalOpsConfigService())->save($pdo, $_POST);
-            $profileId = (new PortalClientProvisioningService())->configureConnection($pdo, $config, $actorUserId);
+            $portalProvisioning = new PortalClientProvisioningService();
+            $profileId = $portalProvisioning->configureConnection($pdo, $config, $actorUserId);
+            $portalConnectionStatus = $portalProvisioning->status($pdo, (string)$config['application_key']);
+            if (!empty($portalConnectionStatus['transition_message'])) $message = (string)$portalConnectionStatus['transition_message'];
             audit_log($pdo, 'external_ops.configured', 'settings', null, [
                 'enabled' => !empty($config['enabled']),
                 'application_key' => (string)$config['application_key'],

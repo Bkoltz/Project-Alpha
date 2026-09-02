@@ -136,6 +136,15 @@ The legacy server-only `EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_KEY_ID` and
 deployment compatibility. These values are intentionally not copied from the
 business-event HMAC secret and are never exposed as form fields.
 
+Disabling the visible connection, changing its application key, or changing
+the signed-event origin first retires the bound portal profile and queues its
+workspace tombstones against the old immutable route. Portal delivery and the
+global outbound worker stay enabled until every revocation is acknowledged.
+Project Alpha will not activate a replacement producer or send client data to
+the new origin during that drain. After the queue reaches zero, save the visible
+connection again to reuse the same bound profile with the new contract. This
+staged rotation guarantees that only one portal producer can be active.
+
 The daily snapshot is reconciliation and recovery, not a replacement for the
 event path. Account email, display name, PA role, active state, and explicit-access
 changes refresh or revoke the entitlement projection through the same outbox.

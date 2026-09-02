@@ -19,6 +19,7 @@ use Throwable;
 final class PortalClientProvisioningService
 {
     public const DEFAULT_CAPABILITIES = ['workspace.view', 'directory.read', 'delivery.view'];
+    private const BOUND_PROFILE_KEY = 'external_ops_client_portal_profile_id';
 
     /**
      * Keep the portal producer behind the same administrator-facing connection
@@ -29,24 +30,48 @@ final class PortalClientProvisioningService
     public function configureConnection(PDO $pdo, array $externalConfig, int $actorId): ?int
     {
         $applicationKey = trim((string)($externalConfig['application_key'] ?? ''));
-        if ($applicationKey === '') return null;
-
-        $existing = $this->profile($pdo, $applicationKey);
-        $receiver = $existing ? trim((string)($existing['portal_route'] ?? '')) : '';
-        if ($receiver === '') {
-            $receiver = $this->portalReceiver((string)($externalConfig['webhook_url'] ?? ''));
+        $requestedEnabled = !empty($externalConfig['configured_enabled']) || !empty($externalConfig['enabled']);
+        $receiver = $this->portalReceiver((string)($externalConfig['webhook_url'] ?? ''));
+        $existing = $this->boundProfile($pdo);
+        if (!$existing && $applicationKey !== '') $existing = $this->profile($pdo, $applicationKey);
+        if (!$existing) {
+            $active = $pdo->query('SELECT * FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1 ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
+            if (count($active) > 1) throw new DomainException('More than one client portal producer is active. Retire the legacy profiles before saving this connection.');
+            if (count($active) === 1) $existing = $active[0];
         }
-        if ($receiver === '') return $existing ? (int)$existing['id'] : null;
+        if ($existing) $this->bindProfile($pdo, (int)$existing['id']);
+
+        $contractChanged = $existing && (
+            !hash_equals((string)$existing['application_key'], $applicationKey)
+            || !hash_equals(trim((string)($existing['portal_route'] ?? '')), $receiver)
+        );
+        if ($existing && (!$requestedEnabled || $contractChanged)) {
+            $this->retireProfile($pdo, $existing, $actorId, $requestedEnabled ? 'connection_contract_changed' : 'connection_disabled');
+            $existing = $this->profileById($pdo, (int)$existing['id']);
+            if (!$requestedEnabled) return (int)$existing['id'];
+            if ($this->undeliveredCount($pdo, (int)$existing['id']) > 0) return (int)$existing['id'];
+        }
+        if (!$requestedEnabled || $applicationKey === '' || $receiver === '') return $existing ? (int)$existing['id'] : null;
+        $this->assertOnlyProducer($pdo, $existing ? (int)$existing['id'] : null);
 
         $keyId = $existing ? trim((string)($existing['delivery_key_id'] ?? '')) : '';
         $capability = $this->portalCapability($applicationKey);
-        if ($keyId === '') $keyId = $capability['keyId'];
+        $rekeying = $existing && !hash_equals((string)$existing['application_key'], $applicationKey);
+        if ($keyId === '' || $rekeying) $keyId = $capability['keyId'];
         $secret = $capability['secret'];
         $storedSecret = $existing ? (new PortalProjectionDeliveryConfigService())->credentials($existing, false)['currentSecret'] : '';
-        if ($storedSecret !== '') $secret = '';
+        if ($storedSecret !== '' && !$rekeying) $secret = '';
         // A connection can continue serving business synchronization while its
         // independently signed portal producer remains visibly paused.
         if ($keyId === '' || ($secret === '' && $storedSecret === '')) return $existing ? (int)$existing['id'] : null;
+
+        // PortalAuthorityService deliberately refuses to mutate a delivery
+        // contract while any unresolved outbox row remains. Rows superseded by
+        // the retirement itself are an administrative resolution, not work to
+        // send, so close only those rows after every live row and revocation
+        // has drained. This preserves the immutable old-host delivery contract
+        // without allowing a dead-lettered normal event to block replacement.
+        if ($existing) $this->resolveRetirementSupersededRows($pdo, (int)$existing['id']);
 
         $authority = new PortalAuthorityService();
         $profileId = $authority->saveProfile($pdo, [
@@ -87,15 +112,17 @@ final class PortalClientProvisioningService
             'actor_id' => $actorId,
             'receiver_host' => (string)(parse_url($receiver, PHP_URL_HOST) ?: ''),
         ]);
+        $this->bindProfile($pdo, $profileId);
         return $profileId;
     }
 
     /** @return array<string,mixed> */
     public function status(PDO $pdo, string $applicationKey): array
     {
-        $profile = $applicationKey !== '' ? $this->profile($pdo, $applicationKey) : false;
+        $profile = $this->boundProfile($pdo);
+        if (!$profile && $applicationKey !== '') $profile = $this->profile($pdo, $applicationKey);
         $counts = ['active_roots'=>0,'revoked_roots'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0,'active_workspaces'=>0,'pending'=>0,'failed'=>0];
-        if (!$profile) return ['configured'=>false,'ready'=>false,'profile'=>null,'counts'=>$counts];
+        if (!$profile) return ['configured'=>false,'ready'=>false,'profile'=>null,'counts'=>$counts,'transition_state'=>'unpaired','transition_message'=>null];
         foreach ([
             'active_roots' => "SELECT COUNT(*) FROM portal_client_access_roots WHERE access_state='active'",
             'revoked_roots' => "SELECT COUNT(*) FROM portal_client_access_roots WHERE access_state='revoked'",
@@ -113,7 +140,12 @@ final class PortalClientProvisioningService
             && !empty($profile['delivery_enabled']) && trim((string)($profile['portal_route'] ?? '')) !== ''
             && trim((string)($profile['delivery_key_id'] ?? '')) !== '' && $credentials['currentSecret'] !== ''
             && $runtime['outbound_enabled'] && $runtime['hooks_enabled'];
-        return ['configured'=>true,'ready'=>$ready,'profile'=>$profile,'counts'=>$counts];
+        $config=(new ExternalOpsConfigService())->load($pdo);$desiredReceiver=$this->portalReceiver((string)($config['webhook_url']??''));
+        $changed=!hash_equals((string)$profile['application_key'],(string)($config['application_key']??$applicationKey))||!hash_equals(trim((string)($profile['portal_route']??'')),$desiredReceiver);
+        $undelivered=$this->undeliveredCount($pdo,(int)$profile['id']);$transition='stable';$transitionMessage=null;
+        if(empty($config['configured_enabled'])){$transition=$undelivered>0?'retiring':'disabled';$transitionMessage=$undelivered>0?'Portal revocations are draining before this connection is fully retired.':'Client portal provisioning is disabled with the external connection.';}
+        elseif($changed||!$ready){$transition=$undelivered>0?'retiring':'replacement_required';$transitionMessage=$undelivered>0?'The previous portal contract is retired. Drain its queued revocations, then save the connection again to activate the replacement.':'The previous portal contract is retired. Save the connection again to activate its replacement.';}
+        return ['configured'=>true,'ready'=>$ready,'profile'=>$profile,'counts'=>$counts,'transition_state'=>$transition,'transition_message'=>$transitionMessage];
     }
 
     /**
@@ -153,8 +185,7 @@ final class PortalClientProvisioningService
     {
         if (!$pdo->inTransaction()) throw new DomainException('Client portal reconciliation requires a transaction.');
         if ($profile === null) {
-            $config = (new ExternalOpsConfigService())->load($pdo);
-            $profile = $this->profile($pdo, (string)$config['application_key']);
+            $profile = $this->boundProfile($pdo);
         }
         if (!$profile || empty($profile['enabled']) || empty($profile['portal_projection_enabled'])) {
             return ['roots'=>0,'workspaces'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0];
@@ -245,7 +276,8 @@ final class PortalClientProvisioningService
     /** @return array<string,mixed>|false */
     private function requireReadyProfile(PDO $pdo, string $applicationKey): array
     {
-        $profile = $this->profile($pdo, $applicationKey);
+        $profile = $this->boundProfile($pdo);
+        if (!$profile) $profile = $this->profile($pdo, $applicationKey);
         if (!$profile || empty($profile['enabled']) || empty($profile['portal_projection_enabled'])) throw new DomainException('Configure the client portal receiver on the external application connection first.');
         return $profile;
     }
@@ -257,6 +289,26 @@ final class PortalClientProvisioningService
         $statement = $pdo->prepare('SELECT * FROM portal_integration_profiles WHERE application_key=?');
         $statement->execute([$applicationKey]);
         return $statement->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /** @return array<string,mixed>|false */
+    private function profileById(PDO $pdo,int $profileId):array|false{$s=$pdo->prepare('SELECT * FROM portal_integration_profiles WHERE id=?');$s->execute([$profileId]);return$s->fetch(PDO::FETCH_ASSOC);}
+    /** @return array<string,mixed>|false */
+    private function boundProfile(PDO $pdo):array|false{$s=$pdo->prepare('SELECT config_value FROM app_config WHERE organization_id=0 AND config_key=?');$s->execute([self::BOUND_PROFILE_KEY]);$id=(int)($s->fetchColumn()?:0);return$id>0?$this->profileById($pdo,$id):false;}
+    private function bindProfile(PDO $pdo,int $profileId):void{$sql=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='sqlite'?'INSERT INTO app_config(organization_id,config_key,config_value)VALUES(0,?,?) ON CONFLICT(organization_id,config_key)DO UPDATE SET config_value=excluded.config_value':'INSERT INTO app_config(organization_id,config_key,config_value)VALUES(0,?,?) ON DUPLICATE KEY UPDATE config_value=VALUES(config_value)';$pdo->prepare($sql)->execute([self::BOUND_PROFILE_KEY,(string)$profileId]);}
+    private function undeliveredCount(PDO $pdo,int $profileId):int{$s=$pdo->prepare('SELECT COUNT(*) FROM portal_projection_outbox WHERE integration_profile_id=? AND delivered_at IS NULL AND (is_revocation=1 OR dead_lettered_at IS NULL)');$s->execute([$profileId]);return(int)$s->fetchColumn();}
+    private function resolveRetirementSupersededRows(PDO $pdo,int $profileId):void{$s=$pdo->prepare("UPDATE portal_projection_outbox SET delivered_at=COALESCE(delivered_at,CURRENT_TIMESTAMP) WHERE integration_profile_id=? AND delivered_at IS NULL AND is_revocation=0 AND dead_lettered_at IS NOT NULL AND last_error_code='profile_disabled_superseded'");$s->execute([$profileId]);}
+    private function assertOnlyProducer(PDO $pdo,?int $profileId):void{$sql='SELECT COUNT(*) FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1'.($profileId!==null?' AND id<>?':'');$s=$pdo->prepare($sql);$s->execute($profileId!==null?[$profileId]:[]);if((int)$s->fetchColumn()>0)throw new DomainException('Another client portal producer is active. Retire and drain it before activating this connection.');}
+    /** @param array<string,mixed> $profile */
+    private function retireProfile(PDO $pdo,array $profile,int $actorId,string $reason):void
+    {
+        if(!empty($profile['enabled'])||!empty($profile['portal_projection_enabled']))(new PortalAuthorityService())->saveProfile($pdo,[
+            'profile_id'=>(int)$profile['id'],'application_key'=>(string)$profile['application_key'],'display_label'=>(string)$profile['display_label'],
+            'enabled'=>0,'portal_projection_enabled'=>0,'relation_projection_enabled'=>0,'catalog_projection_enabled'=>0,'pricing_preview_enabled'=>0,'draft_quote_enabled'=>0,
+            'portal_route'=>$profile['portal_route']??null,'catalog_route'=>$profile['catalog_route']??null,
+        ],$actorId);
+        (new PortalProjectionDeliveryConfigService())->saveRuntime($pdo,['outbound_enabled'=>1,'hooks_enabled'=>1]);
+        $this->audit($pdo,(int)$profile['id'],'portal.client_provisioning.connection_retired','profile',(string)$profile['id'],['actor_id'=>$actorId,'reason'=>$reason,'undelivered'=>$this->undeliveredCount($pdo,(int)$profile['id'])]);
     }
 
     /** @return list<array{root_type:string,root_public_id:string}> */
