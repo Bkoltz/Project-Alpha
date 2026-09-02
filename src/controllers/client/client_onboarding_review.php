@@ -109,8 +109,8 @@ try {
         if ($data['name'] === '') {
             throw new RuntimeException('Contact name is required.');
         }
-        if ($data['email'] !== '' && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
-            throw new RuntimeException('Enter a valid contact email address.');
+        if ($data['email'] === '' || !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+            throw new RuntimeException('A valid contact email address is required.');
         }
         if ($data['organization_email'] !== '' && !filter_var($data['organization_email'], FILTER_VALIDATE_EMAIL)) {
             throw new RuntimeException('Enter a valid general company email address.');
@@ -118,10 +118,7 @@ try {
         if ($reviewClientType === 'business' && $data['organization_name'] === '') {
             throw new RuntimeException('Organization name is required for an organization submission.');
         }
-        $emailValue = client_onboarding_submitted_email($data, $submission);
-        if ($emailValue !== '' && !filter_var($emailValue, FILTER_VALIDATE_EMAIL)) {
-            $emailValue = '';
-        }
+        $emailValue = $data['email'];
         $targetOrganizationId = $reviewClientType === 'business' && !empty($submission['target_organization_id'])
             ? (int)$submission['target_organization_id']
             : null;
