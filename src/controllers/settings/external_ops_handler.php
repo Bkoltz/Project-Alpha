@@ -10,6 +10,7 @@ use App\Services\PortalProjectionService;
 use App\Services\PortalProjectionMutationService;
 use App\Services\PortalProjectionDeliveryConfigService;
 use App\Services\PortalProjectionOutboxSender;
+use App\Services\PortalClientProvisioningService;
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
@@ -31,12 +32,34 @@ try {
     $action = (string)($_POST['action'] ?? '');
     $config = pa_external_ops_delivery_config($pdo);
     if ($action === 'save-config') {
-        $config = (new ExternalOpsConfigService())->save($pdo, $_POST);
-        audit_log($pdo, 'external_ops.configured', 'settings', null, [
-            'enabled' => !empty($config['enabled']),
-            'application_key' => (string)$config['application_key'],
-            'webhook_host' => (string)(parse_url((string)$config['webhook_url'], PHP_URL_HOST) ?: ''),
-        ]);
+        $pdo->beginTransaction();
+        try {
+            $config = (new ExternalOpsConfigService())->save($pdo, $_POST);
+            $profileId = (new PortalClientProvisioningService())->configureConnection($pdo, $config, $actorUserId);
+            audit_log($pdo, 'external_ops.configured', 'settings', null, [
+                'enabled' => !empty($config['enabled']),
+                'application_key' => (string)$config['application_key'],
+                'webhook_host' => (string)(parse_url((string)$config['webhook_url'], PHP_URL_HOST) ?: ''),
+                'client_portal_profile_id' => $profileId,
+            ]);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $error;
+        }
+    } elseif ($action === 'reconcile-client-portal') {
+        $summary=(new PortalClientProvisioningService())->reconcileAll($pdo,(string)$config['application_key'],$actorUserId);
+        $message=sprintf('Client portal reconciled: %d roots, %d eligible contacts, %d requiring review, %d revoked.',$summary['roots'],$summary['eligible'],$summary['review_required'],$summary['revoked']);
+    } elseif ($action === 'set-client-portal-root') {
+        if (!user_can($pdo,$actorUserId,'users.manage',0)) throw new DomainException('User-management permission is required to change client portal login access.');
+        $active=(string)($_POST['access_state']??'')==='active';
+        (new PortalClientProvisioningService())->setRootAccess($pdo,(string)$config['application_key'],(string)($_POST['root_type']??''),(string)($_POST['root_public_id']??''),$active,$actorUserId);
+        $message=$active?'Client portal workspace restored.':'Client portal workspace revoked; existing content grants remain recorded but are no longer reachable.';
+    } elseif ($action === 'set-client-portal-client') {
+        if (!user_can($pdo,$actorUserId,'users.manage',0)) throw new DomainException('User-management permission is required to change client portal login access.');
+        $active=(string)($_POST['access_state']??'')==='active';
+        (new PortalClientProvisioningService())->setClientAccess($pdo,(string)$config['application_key'],(int)($_POST['client_id']??0),$active,$actorUserId);
+        $message=$active?'Client portal login eligibility restored for reconciliation.':'Client portal login eligibility revoked.';
     } elseif ($action === 'save-portal-profile') {
         $profileId=(new PortalAuthorityService())->saveProfile($pdo,$_POST,$actorUserId);
         audit_log($pdo,'portal.integration_profile.saved','portal_integration_profile',$profileId,['application_key'=>(string)($_POST['application_key']??''),'enabled'=>!empty($_POST['enabled'])]);
@@ -121,7 +144,9 @@ try {
     $clientActions = ['save-portal-workspace','set-portal-workspace-link','save-portal-principal','revoke-portal-principal','save-portal-entitlement','appoint-portal-manager','offboard-portal-manager','save-viewer-share-entitlement'];
     $advancedActions = ['save-portal-profile','save-portal-runtime','save-portal-delivery','send-portal-now','queue-portal-snapshot','queue-catalog-snapshot'];
     $returnTab = in_array($action, $clientActions, true) ? 'client-portal-access' : (in_array($action, $advancedActions, true) ? 'integration-advanced' : 'external-ops');
-    $location = $returnTo === 'account-edit' && !empty($_POST['user_id'])
+    if($returnTo==='client-details'&&!empty($_POST['client_id']))$location='/?page=client/client-details&id='.(int)$_POST['client_id'].'&updated=1';
+    elseif($returnTo==='organization-view'&&!empty($_POST['organization_id']))$location='/?page=organization/organization-view&id='.(int)$_POST['organization_id'].'&updated=1';
+    else $location = $returnTo === 'account-edit' && !empty($_POST['user_id'])
         ? '/?page=account-edit&id=' . (int)$_POST['user_id'] . '&success=' . rawurlencode($message ?? 'Saved')
         : '/?page=settings&tab=' . $returnTab . '&saved=1' . (isset($message) ? '&message=' . rawurlencode($message) : '');
     header('Location: ' . $location);
@@ -132,7 +157,9 @@ try {
     $clientActions = ['save-portal-workspace','set-portal-workspace-link','save-portal-principal','revoke-portal-principal','save-portal-entitlement','appoint-portal-manager','offboard-portal-manager','save-viewer-share-entitlement'];
     $advancedActions = ['save-portal-profile','save-portal-runtime','save-portal-delivery','send-portal-now','queue-portal-snapshot','queue-catalog-snapshot'];
     $returnTab = in_array($failedAction, $clientActions, true) ? 'client-portal-access' : (in_array($failedAction, $advancedActions, true) ? 'integration-advanced' : 'external-ops');
-    $location = $returnTo === 'account-edit' && !empty($_POST['user_id'])
+    if($returnTo==='client-details'&&!empty($_POST['client_id']))$location='/?page=client/client-details&id='.(int)$_POST['client_id'].'&error='.rawurlencode($error->getMessage());
+    elseif($returnTo==='organization-view'&&!empty($_POST['organization_id']))$location='/?page=organization/organization-view&id='.(int)$_POST['organization_id'].'&error='.rawurlencode($error->getMessage());
+    else $location = $returnTo === 'account-edit' && !empty($_POST['user_id'])
         ? '/?page=account-edit&id=' . (int)$_POST['user_id'] . '&error=' . rawurlencode($error->getMessage())
         : '/?page=settings&tab=' . $returnTab . '&saved=0&error=' . rawurlencode($error instanceof DomainException?$error->getMessage():'The integration action failed. Diagnostic code '.$diagnostic);
     header('Location: ' . $location);

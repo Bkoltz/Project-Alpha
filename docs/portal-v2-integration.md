@@ -8,10 +8,18 @@ Project Alpha remains the authoritative source for organizations, departments, c
 
 1. Apply migrations `0066_generic_portal_v2_integration.sql`, `0067_portal_projection_delivery.sql`, and `0068_portal_contract_completeness.sql`, then pass schema health checks.
 2. Provision distinct producer/command capabilities: `portal.catalog.publish`, `portal.pricing.preview`, and `portal.quote-draft.create`. Pricing and draft keys must each contain exactly one command scope; a `full` or multi-scope key is rejected. Catalog delivery uses only the selected profile's dedicated signed producer contract.
-3. Create a generic profile in Settings → Custom integrations. Leave every capability disabled.
-4. Configure distinct pricing/draft source identifiers and HTTPS receiver routes. Outbound HMAC and optional receiver-authorization values are encrypted with `APP_ENCRYPTION_KEY`; they are never displayed again or written to logs.
+3. Save the single generic External Operations connection. Normal administration
+   does not expose profiles, routes, workspaces, principals, or signing fields.
+4. Pair the deployment-managed `portal` signing capability once, then use the
+   compact connection health card and its reconcile action. Pricing/draft
+   command capabilities remain separate internal contracts. Outbound HMAC and
+   optional receiver-authorization values are encrypted with
+   `APP_ENCRYPTION_KEY`; they are never displayed again or written to logs.
 5. Verify the five payload fixtures plus the byte-pinned `portal-integration-wire-v1.json` transport fixture in `tests/fixtures` and the compatibility test.
-6. Create a workspace (which links only the selected profile), verify the profile/workspace allowlist, then create a portal principal and explicit manager entitlement. Contacts and public links do not create authority.
+6. Reconcile active organization roots and standalone consumer clients. Project
+   Alpha creates the exact profile/workspace link and login-eligibility intent;
+   ambiguous records remain review-required. Contacts and public links do not
+   bind an external identity or grant content.
 7. Preflight receiver authentication and the exact application key while its inbox remains disabled. After a separately approved receiver window is open, enable only the required profile capabilities, the profile delivery switch, scoped authoritative hooks, and finally outbound delivery. Queue the portal and Service Library snapshots from Projection recovery, run delivery, and verify every page and activation before enabling consumer reads.
 
 Feature gates are exact-string opt-ins: `APP_PORTAL_PRICING_PREVIEW_ENABLED=true` and `APP_PORTAL_DRAFT_QUOTES_ENABLED=true`. Migration-created application flags also default to `0` for portal v2, relations v3, catalog v2, pricing preview, and draft quotes.

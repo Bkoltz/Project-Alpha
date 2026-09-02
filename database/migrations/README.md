@@ -42,3 +42,8 @@ portal capability disabled. It adds durable command correlation/outcomes,
 incremental projection checkpoints, per-scope manager recovery state, and
 optional private pricing-range policy fields. It also permits the distinct
 `viewer.share.create` entitlement value without creating or enabling any grant.
+
+Migration `0079_client_portal_provisioning.sql` adds durable organization-root
+and standalone-client portal access controls plus fail-closed per-client login
+eligibility. It does not create identity-provider bindings or delivery grants;
+the post-migration reconciliation publishes only explicit invitation intent.

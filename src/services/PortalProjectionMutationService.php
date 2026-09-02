@@ -156,11 +156,15 @@ final class PortalProjectionMutationService
      *
      * @param list<array{root_type:string,root_public_id:string}> $scopes
      */
-    public function afterMutation(PDO$pdo,array$scopes):bool
+    public function afterMutation(PDO$pdo,array$scopes,bool$force=false):bool
     {
         if(!$pdo->inTransaction()||$scopes===[])return true;
-        if(!$this->hooksEnabled($pdo))return true;
+        if(!$force&&!$this->hooksEnabled($pdo))return true;
         $scopes=$this->uniqueScopes($scopes);
+        // Provisioning is an invitation/eligibility projection only.  It must
+        // run before the relationship graph and the resulting outbox changes,
+        // but it never binds an identity or grants a delivery folder.
+        (new PortalClientProvisioningService())->ensureScopes($pdo,$scopes);
         $this->reconcileRelations($pdo,$scopes);
 
         // Reparenting can affect more than one workspace. Publish every removal
@@ -196,10 +200,14 @@ final class PortalProjectionMutationService
     /** @param array{root_type:string,root_public_id:string} $scope */
     private function reconcileWorkspace(PDO$pdo,array$scope,?string$onlyAction=null):void
     {
-        $workspace=$pdo->prepare('SELECT * FROM portal_v2_workspaces WHERE root_type=? AND root_public_id=?');$workspace->execute([$scope['root_type'],$scope['root_public_id']]);$row=$workspace->fetch(PDO::FETCH_ASSOC);if(!$row)return;$rootTable=$scope['root_type']==='organization'?'organizations':'clients';$root=$pdo->prepare("SELECT name FROM {$rootTable} WHERE public_id=?");$root->execute([$scope['root_public_id']]);$name=$root->fetchColumn();
+        $workspace=$pdo->prepare('SELECT * FROM portal_v2_workspaces WHERE root_type=? AND root_public_id=?');$workspace->execute([$scope['root_type'],$scope['root_public_id']]);$row=$workspace->fetch(PDO::FETCH_ASSOC);if(!$row)return;
+        if($scope['root_type']==='organization')$root=$pdo->prepare('SELECT o.name FROM organizations o WHERE o.public_id=? AND EXISTS(SELECT 1 FROM clients c WHERE c.organization_id=o.id AND c.archived=0 AND c.deleted_at IS NULL)');
+        else$root=$pdo->prepare('SELECT name FROM clients WHERE public_id=? AND organization_id IS NULL AND archived=0 AND deleted_at IS NULL');
+        $root->execute([$scope['root_public_id']]);$name=$root->fetchColumn();
+        $control=$pdo->prepare('SELECT access_state FROM portal_client_access_roots WHERE root_type=? AND root_public_id=?');$control->execute([$scope['root_type'],$scope['root_public_id']]);$accessState=$control->fetchColumn();if($accessState==='revoked')$name=false;
         if($name===false){
             if($onlyAction==='upsert')return;
-            $profiles=$pdo->prepare('SELECT p.* FROM portal_integration_profiles p JOIN portal_integration_profile_workspaces pw ON pw.profile_id=p.id AND pw.active=1 WHERE pw.workspace_id=? AND p.enabled=1 AND p.portal_projection_enabled=1 ORDER BY p.id');$profiles->execute([(int)$row['id']]);$projection=new PortalProjectionService();foreach($profiles->fetchAll(PDO::FETCH_ASSOC)as$profile)$projection->queueWorkspaceRevocation($pdo,$profile,(string)$row['public_id']);$pdo->prepare('UPDATE portal_v2_workspaces SET active=0,source_version=? WHERE id=?')->execute([PortalSourceVersion::from(['publicId'=>(string)$row['public_id'],'active'=>false]),(int)$row['id']]);$pdo->prepare('UPDATE portal_integration_profile_workspaces SET active=0 WHERE workspace_id=?')->execute([(int)$row['id']]);return;
+            $profiles=$pdo->prepare('SELECT p.* FROM portal_integration_profiles p JOIN portal_integration_profile_workspaces pw ON pw.profile_id=p.id AND pw.active=1 WHERE pw.workspace_id=? AND p.enabled=1 AND p.portal_projection_enabled=1 ORDER BY p.id');$profiles->execute([(int)$row['id']]);$projection=new PortalProjectionService();if(!empty($row['active']))foreach($profiles->fetchAll(PDO::FETCH_ASSOC)as$profile)$projection->queueWorkspaceRevocation($pdo,$profile,(string)$row['public_id']);$pdo->prepare('UPDATE portal_v2_workspaces SET active=0,source_version=? WHERE id=?')->execute([PortalSourceVersion::from(['publicId'=>(string)$row['public_id'],'active'=>false]),(int)$row['id']]);$pdo->prepare('UPDATE portal_integration_profile_workspaces SET active=0 WHERE workspace_id=?')->execute([(int)$row['id']]);return;
         }
         $pdo->prepare('UPDATE portal_v2_workspaces SET display_name=?,source_version=?,active=1 WHERE id=?')->execute([(string)$name,PortalSourceVersion::from(['publicId'=>(string)$row['public_id'],'rootType'=>$scope['root_type'],'rootPublicId'=>$scope['root_public_id'],'displayName'=>(string)$name,'active'=>true]),(int)$row['id']]);$this->queueWorkspaces($pdo,[(string)$row['public_id']],$onlyAction);
     }

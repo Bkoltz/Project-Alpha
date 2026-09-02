@@ -5,6 +5,8 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
 require_once __DIR__ . '/../../../utils/format.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/external_ops.php';
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) {
@@ -25,6 +27,21 @@ $client = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$client) {
     echo '<p>Client not found.</p>';
     return;
+}
+
+$portalLogin = null;
+$portalLoginConfigured = false;
+$canManagePortalLogin = user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), 'users.manage', 0)
+    && user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), 'settings.manage', 0);
+try {
+    $portalConfig = pa_external_ops_delivery_config($pdo);
+    $portalState = (new \App\Services\PortalClientProvisioningService())->status($pdo, (string)$portalConfig['application_key']);
+    $portalLoginConfigured = !empty($portalState['configured']);
+    $portalStmt = $pdo->prepare('SELECT * FROM portal_client_login_eligibility WHERE client_id=?');
+    $portalStmt->execute([$id]);
+    $portalLogin = $portalStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (Throwable $error) {
+    error_log('[client_details] Client portal status unavailable: ' . $error->getMessage());
 }
 
 $projectStmt = $pdo->prepare('
@@ -124,6 +141,25 @@ $addressLines = array_values(array_filter([
           <?php endforeach; ?>
         </div>
       </div>
+
+      <?php if($portalLoginConfigured):?>
+        <div class="client-card">
+          <h3>Client portal login</h3>
+          <?php
+            $portalLoginStatus=(string)($portalLogin['eligibility_status']??'review_required');
+            $portalLoginReason=(string)($portalLogin['review_reason']??'not_reconciled');
+            $portalLoginActive=$portalLoginStatus==='eligible'&&(string)($portalLogin['manual_state']??'automatic')!=='revoked';
+          ?>
+          <p><strong><?=e(ucwords(str_replace('_',' ',$portalLoginStatus)))?></strong></p>
+          <p style="color:var(--muted);font-size:13px"><?=e($portalLoginReason==='none'?'Eligible email is projected; the first verified sign-in still binds the external identity.':ucwords(str_replace('_',' ',$portalLoginReason)))?></p>
+          <?php if($canManagePortalLogin):?>
+            <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('<?=$portalLoginActive?'Revoke this person’s client portal login eligibility? Existing Project Alpha records are preserved.':'Restore automatic client portal eligibility? The contact must still pass email and identity verification.'?>')">
+              <input type="hidden" name="csrf" value="<?=e(csrf_token())?>"><input type="hidden" name="action" value="set-client-portal-client"><input type="hidden" name="return_to" value="client-details"><input type="hidden" name="client_id" value="<?=$id?>"><input type="hidden" name="access_state" value="<?=$portalLoginActive?'revoked':'active'?>">
+              <button class="client-view__button"><?=$portalLoginActive?'Revoke portal login':'Restore portal login'?></button>
+            </form>
+          <?php endif;?>
+        </div>
+      <?php endif;?>
     </aside>
 
     <main class="client-view__main">

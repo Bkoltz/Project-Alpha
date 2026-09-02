@@ -54,15 +54,29 @@ application key requirements are met.
 
 Open **Settings > System & Integrations > Custom integrations**. This single surface contains the deployment-specific display label, signed-event URL, service authentication credentials, HMAC secret, explicit Project Alpha account access, and synchronization health. Set a stable application key such as `external_application`; use the same key in the provisioning receiver and snapshot importer. No application key or display label is fixed by Project Alpha. The open-source display-name fallback is **External operations**; a deployment may replace it with its own product name.
 
-Portal projection profiles, workspace/principal records, scoped allowlists, runtime gates, recovery, and viewer-sharing authority remain backend compatibility contracts and are not presented in normal Settings navigation. Do not infer those authorities from the visible account directory: it controls only the configured application's Project Alpha account entitlement. Connected deployments must keep using their approved automation and receiver contract for the hidden portal-specific state.
+Portal projection profiles, workspace/principal records, scoped allowlists,
+runtime gates, recovery, and signing remain backend compatibility contracts and
+are not editable in normal Settings navigation. The External Operations card
+shows only client-portal health and one idempotent reconcile/repair action. The
+ordinary organization and client pages contain the relevant portal-login
+revoke/restore action.
 
-Client portal administration is explicit and default-off. A principal has a
-stable Project Alpha public ID, display name, email notification hint, and
-optional relationships to existing client records. Those relationships publish
-eligibility/invitation intent through the same signed, versioned projection but
-never grant access. Add exact scoped entitlements separately; an applicable deny
-takes precedence over an allow. Revoking a principal disables its authority and
-queues projection tombstones in the same transaction as the audit record.
+Project Alpha automatically publishes login eligibility for an active human
+contact only when it has one valid canonical email that is unique among active
+client records. Missing, invalid, or duplicate email, an unclassified standalone
+record, and a conflict with a principal outside this managed workflow all fail
+closed as **review required**. Organization client rows are contact records;
+standalone records must explicitly be consumer records. An administrator revoke
+is durable and is not undone by reconciliation. Archiving or deleting a client,
+or revoking its organization root, publishes the corresponding disabled state
+and tombstones.
+
+Eligibility is not identity proof and is not content access. Project Alpha never
+writes an identity-provider issuer/subject binding. The consuming portal must
+bind the principal only after an exact verified sign-in assertion, and Operations
+must still grant a folder or delivery explicitly. The automatic capabilities are
+limited to opening the workspace, reading its directory, and viewing deliveries;
+they cannot create shares or infer access to any stored file.
 
 Project Alpha does not accept or infer an identity-provider subject from email.
 The consuming portal verifies a live assertion and owns the issuer/subject
@@ -104,7 +118,23 @@ GET /api/v1/ops/snapshot?page=1&limit=500
 
 Follow `next_page` while `has_more` is true. The snapshot includes Project Managers, Business Unit-aware Projects, and the multi-worker `task_assignments` collection. It is the recovery authority if an incremental event is delayed or missed.
 
-The integration status card reports queued deliveries, retry errors, and the last successful delivery. After deployment or a configuration change, run a full snapshot reconciliation and reconcile the Cloudflare Access group.
+The integration status card reports queued deliveries, retry errors, client
+roots, eligible contacts, and records requiring review. After deployment or a
+configuration change, use **Reconcile client portal**. It is bounded to 1,000
+roots per run and is safe to repeat.
+
+The portal receiver origin is derived from the saved signed-event URL (or the
+server-only `EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL` override) and always uses
+`/api/internal/project-alpha/portal-v2`. It reuses the connection's Access
+service token. Projection signing remains a separate capability credential: an
+existing encrypted profile credential is retained. A first deployment must
+provide a `portal` entry for the application key in
+`PORTAL_INTEGRATION_HMAC_SECRETS_JSON`, with `current` and `keyId` (or
+`currentKeyId`), and configure the receiver with that same key ID and secret.
+The legacy server-only `EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_KEY_ID` and
+`EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_SECRET` variables remain accepted for
+deployment compatibility. These values are intentionally not copied from the
+business-event HMAC secret and are never exposed as form fields.
 
 The daily snapshot is reconciliation and recovery, not a replacement for the
 event path. Account email, display name, PA role, active state, and explicit-access
