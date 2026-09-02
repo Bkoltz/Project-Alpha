@@ -141,31 +141,65 @@ final class PortalClientProvisioningService
         $profile = $this->boundProfile($pdo);
         if (!$profile && $applicationKey !== '') $profile = $this->profile($pdo, $applicationKey);
         $counts = ['active_roots'=>0,'revoked_roots'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0,'active_workspaces'=>0,'pending'=>0,'failed'=>0,'failed_revocations'=>0];
-        if (!$profile) return ['configured'=>false,'ready'=>false,'profile'=>null,'counts'=>$counts,'transition_state'=>'unpaired','transition_message'=>null];
-        foreach ([
-            'active_roots' => "SELECT COUNT(*) FROM portal_client_access_roots WHERE access_state='active'",
-            'revoked_roots' => "SELECT COUNT(*) FROM portal_client_access_roots WHERE access_state='revoked'",
-            'eligible' => "SELECT COUNT(*) FROM portal_client_login_eligibility WHERE eligibility_status='eligible'",
-            'review_required' => "SELECT COUNT(*) FROM portal_client_login_eligibility WHERE eligibility_status='review_required'",
-            'revoked' => "SELECT COUNT(*) FROM portal_client_login_eligibility WHERE eligibility_status='revoked'",
-            'active_workspaces' => 'SELECT COUNT(*) FROM portal_integration_profile_workspaces pw JOIN portal_v2_workspaces w ON w.id=pw.workspace_id WHERE pw.profile_id='.(int)$profile['id'].' AND pw.active=1 AND w.active=1',
-            'pending' => 'SELECT COUNT(*) FROM portal_projection_outbox WHERE integration_profile_id='.(int)$profile['id'].' AND delivered_at IS NULL AND dead_lettered_at IS NULL',
-            'failed' => 'SELECT COUNT(*) FROM portal_projection_outbox WHERE integration_profile_id='.(int)$profile['id'].' AND delivered_at IS NULL AND dead_lettered_at IS NOT NULL',
-            'failed_revocations' => 'SELECT COUNT(*) FROM portal_projection_outbox WHERE integration_profile_id='.(int)$profile['id'].' AND delivered_at IS NULL AND dead_lettered_at IS NOT NULL AND is_revocation=1',
-        ] as $key => $sql) $counts[$key] = (int)$pdo->query($sql)->fetchColumn();
+        if ($profile) {
+            foreach ([
+                'active_roots' => "SELECT COUNT(*) FROM portal_client_access_roots WHERE access_state='active'",
+                'revoked_roots' => "SELECT COUNT(*) FROM portal_client_access_roots WHERE access_state='revoked'",
+                'eligible' => "SELECT COUNT(*) FROM portal_client_login_eligibility WHERE eligibility_status='eligible'",
+                'review_required' => "SELECT COUNT(*) FROM portal_client_login_eligibility WHERE eligibility_status='review_required'",
+                'revoked' => "SELECT COUNT(*) FROM portal_client_login_eligibility WHERE eligibility_status='revoked'",
+                'active_workspaces' => 'SELECT COUNT(*) FROM portal_integration_profile_workspaces pw JOIN portal_v2_workspaces w ON w.id=pw.workspace_id WHERE pw.profile_id='.(int)$profile['id'].' AND pw.active=1 AND w.active=1',
+                'pending' => 'SELECT COUNT(*) FROM portal_projection_outbox WHERE integration_profile_id='.(int)$profile['id'].' AND delivered_at IS NULL AND dead_lettered_at IS NULL',
+                'failed' => 'SELECT COUNT(*) FROM portal_projection_outbox WHERE integration_profile_id='.(int)$profile['id'].' AND delivered_at IS NULL AND dead_lettered_at IS NOT NULL',
+                'failed_revocations' => 'SELECT COUNT(*) FROM portal_projection_outbox WHERE integration_profile_id='.(int)$profile['id'].' AND delivered_at IS NULL AND dead_lettered_at IS NOT NULL AND is_revocation=1',
+            ] as $key => $sql) $counts[$key] = (int)$pdo->query($sql)->fetchColumn();
+        }
         $delivery = new PortalProjectionDeliveryConfigService();
         $runtime = $delivery->runtime($pdo);
-        $credentials = $delivery->credentials($profile, false);
-        $ready = !empty($profile['enabled']) && !empty($profile['portal_projection_enabled'])
-            && !empty($profile['delivery_enabled']) && trim((string)($profile['portal_route'] ?? '')) !== ''
-            && trim((string)($profile['delivery_key_id'] ?? '')) !== '' && $credentials['currentSecret'] !== ''
-            && $runtime['outbound_enabled'] && $runtime['hooks_enabled'];
-        $config=(new ExternalOpsConfigService())->load($pdo);$desiredReceiver=$this->portalReceiver((string)($config['webhook_url']??''));
-        $changed=!hash_equals((string)$profile['application_key'],(string)($config['application_key']??$applicationKey))||!hash_equals(trim((string)($profile['portal_route']??'')),$desiredReceiver);
-        $undelivered=$this->undeliveredCount($pdo,(int)$profile['id']);$transition='stable';$transitionMessage=null;
-        if(empty($config['configured_enabled'])){$transition=$undelivered>0?'retiring':'disabled';$transitionMessage=$undelivered>0?'Portal revocations are draining before this connection is fully retired.':'Client portal provisioning is disabled with the external connection.';}
-        elseif($changed||!$ready){$transition=$undelivered>0?'retiring':'replacement_required';$transitionMessage=$undelivered>0?((int)$counts['failed_revocations']>0?'The previous portal contract is retired, but one or more revocations need an audited retry before replacement can activate.':'The previous portal contract is retired. Drain its queued revocations, then save the connection again to activate the replacement.'):'The previous portal contract is retired. Save the connection again to activate its replacement.';}
-        return ['configured'=>true,'ready'=>$ready,'profile'=>$profile,'counts'=>$counts,'transition_state'=>$transition,'transition_message'=>$transitionMessage];
+        $credentials = $profile ? $delivery->credentials($profile, false) : ['currentSecret'=>'','previousSecret'=>'','authHeaders'=>[]];
+        $config = (new ExternalOpsConfigService())->load($pdo);
+        $preflight = $this->activationPreflight($config, $profile, $runtime, $credentials);
+        $ready = $preflight['ready'];
+        $transition = $profile ? 'stable' : 'unpaired';
+        $transitionMessage = null;
+        if ($profile) {
+            $desiredReceiver = $this->portalReceiver((string)($config['webhook_url'] ?? ''));
+            $changed = !hash_equals((string)$profile['application_key'], (string)($config['application_key'] ?? $applicationKey))
+                || !hash_equals(trim((string)($profile['portal_route'] ?? '')), $desiredReceiver);
+            $undelivered = $this->undeliveredCount($pdo, (int)$profile['id']);
+            if (empty($config['configured_enabled'])) {
+                $transition = $undelivered > 0 ? 'retiring' : 'disabled';
+                $transitionMessage = $undelivered > 0
+                    ? 'Portal revocations are draining before this connection is fully retired.'
+                    : 'Client portal provisioning is disabled with the external connection.';
+            } elseif ($changed) {
+                $transition = $undelivered > 0 ? 'retiring' : 'replacement_required';
+                $transitionMessage = $undelivered > 0
+                    ? ((int)$counts['failed_revocations'] > 0
+                        ? 'The previous portal contract is retired, but one or more revocations need an audited retry before replacement can activate.'
+                        : 'The previous portal contract is retired. Drain its queued revocations, then save the connection again to activate the replacement.')
+                    : 'The previous portal contract is retired. Save the connection again to activate its replacement.';
+            } elseif (!$ready) {
+                $transition = 'prerequisites_missing';
+                $transitionMessage = 'Client portal projection is paused until every producer prerequisite below is complete.';
+            }
+        } elseif (!empty($config['configured_enabled'])) {
+            $transitionMessage = 'Operations synchronization can continue, but the separately signed client portal projection has not been activated.';
+        }
+        return [
+            'configured' => (bool)$profile,
+            'ready' => $ready,
+            // The settings page needs only this non-secret option. Never return
+            // receiver routes, signing key IDs, or encrypted credentials as
+            // part of administrator-facing status.
+            'profile' => $profile ? [
+                'service_assignment_projection_enabled' => !empty($profile['service_assignment_projection_enabled']),
+            ] : null,
+            'counts' => $counts,
+            'preflight' => $preflight,
+            'transition_state' => $transition,
+            'transition_message' => $transitionMessage,
+        ];
     }
 
     public function retryFailedRevocations(PDO $pdo,string $applicationKey,int $actorId):int
@@ -468,6 +502,62 @@ final class PortalClientProvisioningService
         $pdo->prepare('INSERT INTO portal_principals(email_hint,display_name,source_version,enabled,activated_at,created_by,updated_by)VALUES(?,?,?,1,CURRENT_TIMESTAMP,?,?)')
             ->execute([$email,$name,$version,$actorId?:null,$actorId?:null]);
         return (int)$pdo->lastInsertId();
+    }
+
+    /**
+     * Build a non-secret activation checklist for the administrator surface.
+     *
+     * The ordinary Operations event connection and the client-portal producer
+     * intentionally share an origin and service authentication, but they do
+     * not share signing keys. Returning fixed labels and booleans keeps that
+     * distinction observable without exposing routes, key IDs, or credentials.
+     *
+     * @param array<string,mixed> $config
+     * @param array<string,mixed>|false|null $profile
+     * @param array{outbound_enabled:bool,hooks_enabled:bool} $runtime
+     * @param array{currentSecret:string,previousSecret:string,authHeaders:array<string,string>} $credentials
+     * @return array{ready:bool,operations_delivery_ready:bool,checks:list<array{key:string,label:string,ready:bool}>,issues:list<string>,receiver_verification:string}
+     */
+    private function activationPreflight(array $config, array|false|null $profile, array $runtime, array $credentials): array
+    {
+        $applicationKey = (string)($config['application_key'] ?? '');
+        $receiver = $this->portalReceiver((string)($config['webhook_url'] ?? ''));
+        $capability = $this->portalCapability($applicationKey);
+        $storedKey = $profile ? trim((string)($profile['delivery_key_id'] ?? '')) : '';
+        $storedSecret = trim((string)($credentials['currentSecret'] ?? ''));
+        $contractMatches = (bool)$profile
+            && $applicationKey !== ''
+            && hash_equals((string)$profile['application_key'], $applicationKey)
+            && $receiver !== ''
+            && hash_equals(trim((string)($profile['portal_route'] ?? '')), $receiver);
+        $checks = [
+            ['key'=>'external_connection','label'=>'enabled external application connection','ready'=>!empty($config['configured_enabled'])],
+            ['key'=>'portal_receiver','label'=>'valid portal receiver origin','ready'=>$receiver !== ''],
+            ['key'=>'service_authentication','label'=>'service authentication ID and secret','ready'=>trim((string)($config['access_client_id'] ?? '')) !== '' && trim((string)($config['access_client_secret'] ?? '')) !== ''],
+            ['key'=>'portal_signing_key','label'=>'deployment-managed portal signing key ID','ready'=>$storedKey !== '' || $capability['keyId'] !== ''],
+            ['key'=>'portal_signing_secret','label'=>'deployment-managed portal signing secret','ready'=>$storedSecret !== '' || $capability['secret'] !== ''],
+            ['key'=>'producer_contract','label'=>'portal producer saved for this connection','ready'=>$contractMatches],
+            ['key'=>'producer_enabled','label'=>'portal projection producer enabled','ready'=>(bool)$profile && !empty($profile['enabled']) && !empty($profile['portal_projection_enabled'])],
+            ['key'=>'producer_delivery','label'=>'portal projection delivery enabled','ready'=>(bool)$profile && !empty($profile['delivery_enabled'])],
+            ['key'=>'outbound_runtime','label'=>'portal outbound delivery runtime enabled','ready'=>!empty($runtime['outbound_enabled'])],
+            ['key'=>'authoritative_hooks','label'=>'portal authoritative hooks enabled','ready'=>!empty($runtime['hooks_enabled'])],
+        ];
+        $issues = [];
+        foreach (array_slice($checks, 0, 5) as $check) if (!$check['ready']) $issues[] = $check['label'];
+        if ($issues === []) {
+            if (!$contractMatches) {
+                $issues[] = 'portal producer saved for this connection';
+            } else {
+                foreach (array_slice($checks, 6) as $check) if (!$check['ready']) $issues[] = $check['label'];
+            }
+        }
+        return [
+            'ready' => !in_array(false, array_column($checks, 'ready'), true),
+            'operations_delivery_ready' => !empty($config['delivery_ready']),
+            'checks' => $checks,
+            'issues' => $issues,
+            'receiver_verification' => 'Verify the matching portal key ID and secret in the connected application before reconciliation.',
+        ];
     }
 
     private function portalReceiver(string $signedEventUrl):string

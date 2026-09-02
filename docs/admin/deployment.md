@@ -100,7 +100,11 @@ Compose loads this override automatically. Confirm the merged service has both
 keys without printing their values, then start the web service. Give both local
 files the narrowest host permissions supported by the deployment and never
 paste their contents into tracked Compose YAML, logs, support messages, or the
-repository. The legacy
+repository. Configure the connected application's portal receiver with the
+same key ID and secret; ordinary Operations sync credentials do not satisfy
+this separate verification contract. The Project Alpha preflight confirms only
+that the producer prerequisites exist and intentionally cannot read back the
+receiver's secret. The legacy
 `EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_KEY_ID` and
 `EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_SECRET` variables remain compatible, but
 do not configure both representations. When using the legacy pair, add both

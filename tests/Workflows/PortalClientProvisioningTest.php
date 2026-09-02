@@ -115,6 +115,75 @@ SQL);
         self::assertLessThan(strpos($source,'$this->reconcileRelations($pdo,$scopes);'),strpos($source,'PortalClientProvisioningService())->ensureScopes'));
     }
 
+    public function testStatusSeparatesHealthyOperationsDeliveryFromMissingPortalSigningCapability(): void
+    {
+        $this->withPortalCapabilities([], function (): void {
+            $this->pdo->exec('DELETE FROM portal_integration_profiles');
+            $config=(new \App\Services\ExternalOpsConfigService())->save($this->pdo,[
+                'enabled'=>1,
+                'label'=>'Generic operations',
+                'application_key'=>'generic_operations',
+                'webhook_url'=>'https://operations.example.test/api/integration/events',
+                'access_client_id'=>'service-id-do-not-return',
+                'access_client_secret'=>'service-secret-do-not-return',
+                'hmac_secret'=>str_repeat('o',32),
+                'timeout_seconds'=>15,
+                'max_attempts'=>12,
+            ]);
+
+            $status=$this->service->status($this->pdo,(string)$config['application_key']);
+
+            self::assertFalse($status['configured']);
+            self::assertFalse($status['ready']);
+            self::assertTrue($status['preflight']['operations_delivery_ready']);
+            self::assertSame([
+                'deployment-managed portal signing key ID',
+                'deployment-managed portal signing secret',
+            ],$status['preflight']['issues']);
+            self::assertSame('unpaired',$status['transition_state']);
+            self::assertStringContainsString('Operations synchronization can continue',(string)$status['transition_message']);
+            $serialized=json_encode($status,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+            self::assertStringNotContainsString('service-id-do-not-return',$serialized);
+            self::assertStringNotContainsString('service-secret-do-not-return',$serialized);
+            self::assertStringNotContainsString(str_repeat('o',32),$serialized);
+        });
+    }
+
+    public function testStatusPreflightBecomesReadyAfterDedicatedPortalProducerActivation(): void
+    {
+        $this->withPortalCapabilities([
+            'generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('p',32)]],
+        ], function (): void {
+            $this->pdo->exec('DELETE FROM portal_integration_profiles');
+            $config=(new \App\Services\ExternalOpsConfigService())->save($this->pdo,[
+                'enabled'=>1,
+                'label'=>'Generic operations',
+                'application_key'=>'generic_operations',
+                'webhook_url'=>'https://operations.example.test/api/integration/events',
+                'access_client_id'=>'service-id',
+                'access_client_secret'=>'service-secret',
+                'hmac_secret'=>str_repeat('o',32),
+                'timeout_seconds'=>15,
+                'max_attempts'=>12,
+            ]);
+            $this->service->configureConnection($this->pdo,$config,7);
+
+            $status=$this->service->status($this->pdo,'generic_operations');
+
+            self::assertTrue($status['configured']);
+            self::assertTrue($status['ready']);
+            self::assertTrue($status['preflight']['operations_delivery_ready']);
+            self::assertSame([],$status['preflight']['issues']);
+            self::assertNotContains(false,array_column($status['preflight']['checks'],'ready'));
+            self::assertSame('stable',$status['transition_state']);
+            self::assertNull($status['transition_message']);
+            $serialized=json_encode($status,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+            self::assertStringNotContainsString('portal-v1',$serialized);
+            self::assertStringNotContainsString(str_repeat('p',32),$serialized);
+            self::assertStringNotContainsString('operations.example.test',$serialized);
+        });
+    }
+
     public function testSingleConnectionDerivesPortalReceiverAndUsesDeploymentCapability(): void
     {
         $previousEncryption=getenv('APP_ENCRYPTION_KEY');

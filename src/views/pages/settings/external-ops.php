@@ -22,7 +22,7 @@ $accessDetail = null;
 $projectSources = [];
 $status = [];
 $directoryError = false;
-$portalStatus = ['configured'=>false,'ready'=>false,'profile'=>null,'counts'=>['active_roots'=>0,'revoked_roots'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0,'active_workspaces'=>0,'pending'=>0,'failed'=>0,'failed_revocations'=>0]];
+$portalStatus = ['configured'=>false,'ready'=>false,'profile'=>null,'counts'=>['active_roots'=>0,'revoked_roots'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0,'active_workspaces'=>0,'pending'=>0,'failed'=>0,'failed_revocations'=>0],'preflight'=>['ready'=>false,'operations_delivery_ready'=>false,'checks'=>[],'issues'=>[],'receiver_verification'=>'']];
 $portalStatusError = false;
 
 try {
@@ -96,31 +96,37 @@ if (!empty($config['enabled'])) {
 </div>
 
 <div class="settings-card" id="client-portal-provisioning">
-  <div class="settings-section-heading"><h3>Client portal provisioning</h3><p>Project Alpha publishes eligible client identities and organization structure. A verified sign-in and an explicit delivery grant are still required before a person can see files.</p></div>
+  <div class="settings-section-heading"><h3>Client portal provisioning</h3><p>Project Alpha publishes eligible client identities and organization structure through a separately signed projection. A healthy Operations sync does not by itself activate this producer. A verified sign-in and an explicit delivery grant are still required before a person can see files.</p></div>
   <?php if($portalStatusError):?>
     <div class="settings-alert settings-alert-danger" role="alert">Client portal provisioning status could not be loaded. Apply the current database migrations, then reload this page.</div>
-  <?php elseif(empty($portalStatus['configured'])):?>
-    <div class="settings-alert settings-alert-info">Client portal delivery is not paired for this connection. The receiver is derived from the signed event URL and uses the same service authentication, while its separate signing capability stays in deployment-managed secrets. No additional integration profile is managed from this page.</div>
   <?php else:?>
-    <?php $portalCounts=(array)$portalStatus['counts'];?>
+    <?php $portalCounts=(array)$portalStatus['counts'];$portalPreflight=(array)($portalStatus['preflight']??[]);$portalIssues=(array)($portalPreflight['issues']??[]);?>
     <?php if(!empty($portalStatus['transition_message'])):?><div class="settings-alert settings-alert-warning" role="status"><?=$h($portalStatus['transition_message'])?></div><?php endif;?>
     <div class="settings-form-grid">
-      <div><span class="label">Producer</span><strong><?=!empty($portalStatus['ready'])?'Ready':'Paused'?></strong></div>
+      <div><span class="label">Operations signed events</span><strong><?=!empty($portalPreflight['operations_delivery_ready'])?'Ready':'Paused'?></strong></div>
+      <div><span class="label">Client portal signed projection</span><strong><?=!empty($portalStatus['ready'])?'Ready':'Paused'?></strong></div>
       <div><span class="label">Active workspaces</span><strong><?=(int)($portalCounts['active_workspaces']??0)?></strong></div>
       <div><span class="label">Eligible contacts</span><strong><?=(int)($portalCounts['eligible']??0)?></strong></div>
       <div><span class="label">Needs review</span><strong><?=(int)($portalCounts['review_required']??0)?></strong></div>
       <div><span class="label">Revoked</span><strong><?=(int)($portalCounts['revoked']??0)?></strong></div>
       <div><span class="label">Queued / failed</span><strong><?=(int)($portalCounts['pending']??0)?> / <?=(int)($portalCounts['failed']??0)?></strong></div>
     </div>
-    <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Reconcile active organizations and standalone clients now? Invalid, missing, or duplicate emails will require review and no files will be granted.')">
-      <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="reconcile-client-portal">
-      <button class="btn btn-primary" <?=empty($portalStatus['ready'])?'disabled aria-disabled="true"':''?>>Reconcile client portal</button>
-    </form>
-    <?php if((int)($portalCounts['failed_revocations']??0)>0):?>
-      <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Retry failed client portal revocations against the unchanged retired receiver? The replacement connection will remain blocked until every revocation is acknowledged.')">
-        <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="retry-client-portal-revocations">
-        <button class="btn">Retry failed revocations (<?=(int)$portalCounts['failed_revocations']?>)</button>
+    <p><strong>API-key pull synchronization is separate.</strong> It can remain healthy while either signed-event path is paused.</p>
+    <?php if($portalIssues):?>
+      <div class="settings-alert settings-alert-warning" role="status"><strong>Portal producer still needs:</strong> <?=$h(implode(', ',$portalIssues))?>.</div>
+    <?php endif;?>
+    <p style="color:var(--muted);font-size:13px"><?=$h((string)($portalPreflight['receiver_verification']??''))?> Project Alpha reports only its own producer prerequisites and never displays credential values.</p>
+    <?php if(!empty($portalStatus['configured'])):?>
+      <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Reconcile active organizations and standalone clients now? Invalid, missing, or duplicate emails will require review and no files will be granted.')">
+        <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="reconcile-client-portal">
+        <button class="btn btn-primary" <?=empty($portalStatus['ready'])?'disabled aria-disabled="true" title="Complete the portal producer preflight first"':''?>>Reconcile client portal</button>
       </form>
+      <?php if((int)($portalCounts['failed_revocations']??0)>0):?>
+        <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Retry failed client portal revocations against the unchanged retired receiver? The replacement connection will remain blocked until every revocation is acknowledged.')">
+          <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="retry-client-portal-revocations">
+          <button class="btn">Retry failed revocations (<?=(int)$portalCounts['failed_revocations']?>)</button>
+        </form>
+      <?php endif;?>
     <?php endif;?>
   <?php endif;?>
 </div>

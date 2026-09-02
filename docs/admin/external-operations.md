@@ -123,6 +123,22 @@ roots, eligible contacts, and records requiring review. After deployment or a
 configuration change, use **Reconcile client portal**. It is bounded to 1,000
 roots per run and is safe to repeat.
 
+The status card deliberately reports **Operations signed events** and the
+**Client portal signed projection** separately. API-key pull reconciliation is
+a third, receiver-driven path and can remain healthy while either signed path
+is paused. A healthy Operations sync therefore does not prove that portal
+workspaces or login eligibility are being projected.
+
+Before enabling reconciliation, the portal preflight checks the enabled
+external connection, derived receiver origin, service authentication,
+deployment-managed portal signing key ID and secret, saved producer contract,
+delivery switch, outbound runtime, and authoritative hooks. The page reports
+only fixed prerequisite names and boolean state; it never displays a route,
+key ID, token, or secret value. Project Alpha cannot inspect the connected
+application's verification secret, so the administrator must separately verify
+that the receiver has the matching portal key ID and secret. Do not treat the
+producer's **Ready** state as receiver-side verification.
+
 The portal receiver origin is derived from the saved signed-event URL (or the
 server-only `EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL` override) and always uses
 `/api/internal/project-alpha/portal-v2`. It reuses the connection's Access
