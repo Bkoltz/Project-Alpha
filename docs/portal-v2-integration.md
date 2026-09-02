@@ -78,7 +78,10 @@ Ordinary organization, department, client/contact, project create/update/reparen
 Schema v4 publishes scoped contact roles only from explicit department-contact
 and project-client associations. It never infers a role from project ownership,
 email, eligibility, identities, entitlements, public links, or invoice recipient
-rows. See [Portal contact-assignment projection v4](architecture/portal-contact-assignment-projection-v4.md).
+rows. Assignment topology additions/removals use replacement generations; role
+or billing-flag updates on an existing assignment may use events. Primary
+billing ownership does not imply invoice-email delivery. See
+[Portal contact-assignment projection v4](architecture/portal-contact-assignment-projection-v4.md).
 
 Manager appointment/offboarding, its audit record, recovery state, and projection events share one transaction. Removing the final `member.manage` authority for an exact profile/workspace/scope persists `recovery_required`; the staff UI lists that scope until a replacement manager is appointed. A primary contact or display link never clears this state.
 

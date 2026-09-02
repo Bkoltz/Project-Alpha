@@ -67,7 +67,7 @@ final class PortalContactAssignmentProjectionTest extends TestCase
         self::assertSame([3,3], array_map('intval', $pdo->query('SELECT schema_version FROM portal_projection_outbox ORDER BY id')->fetchAll(PDO::FETCH_COLUMN)));
     }
 
-    public function testRemovalOrdersAssignmentAndRelationTombstonesBeforeContact(): void
+    public function testLastRemovalUsesACompleteReplacementGeneration(): void
     {
         $pdo = $this->database();
         $pdo->exec('UPDATE portal_integration_profiles SET contact_assignment_projection_enabled=1');
@@ -75,10 +75,28 @@ final class PortalContactAssignmentProjectionTest extends TestCase
         $pdo->exec('DELETE FROM portal_projection_outbox; DELETE FROM organization_department_contacts; DELETE FROM project_clients');
 
         $pdo->beginTransaction();
-        $result = (new PortalProjectionService())->queueWorkspaceChanges($pdo, ['id'=>1], 'workspace-org');
+        $result = (new PortalProjectionService())->queueWorkspaceChanges($pdo, ['id'=>1], 'workspace-org','tombstone');
         $pdo->commit();
-        $resources = array_map(static fn(array $delivery): string => (string)$delivery['event']['resource'], $result['events']);
-        self::assertSame(['contact_assignment','contact_assignment','contact_assignment','relation','relation','relation','entity','entity'], $resources);
+        self::assertSame([], $result['events']);
+        self::assertNotNull($result['snapshot']);
+        self::assertSame(['snapshot.page','snapshot.activate'],$pdo->query('SELECT delivery_kind FROM portal_projection_outbox ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
+        $page=json_decode((string)$pdo->query("SELECT payload_json FROM portal_projection_outbox WHERE delivery_kind='snapshot.page'")->fetchColumn(),true,64,JSON_THROW_ON_ERROR);
+        self::assertSame([], $page['contactAssignments']);
+    }
+
+    public function testFirstAssignmentUsesACompleteReplacementGeneration(): void
+    {
+        $pdo=$this->database(false);$pdo->exec('UPDATE portal_integration_profiles SET contact_assignment_projection_enabled=1');
+        $this->snapshot($pdo);$pdo->exec("DELETE FROM portal_projection_outbox; INSERT INTO project_clients VALUES(20,20,10,10,'billing contact',1,0,1,0)");
+        $pdo->beginTransaction();$removalPass=(new PortalProjectionService())->queueWorkspaceChanges($pdo,['id'=>1],'workspace-org','tombstone');$pdo->commit();
+        self::assertNull($removalPass['snapshot']);self::assertSame([],$removalPass['events']);
+        $pdo->beginTransaction();$result=(new PortalProjectionService())->queueWorkspaceChanges($pdo,['id'=>1],'workspace-org','upsert');$pdo->commit();
+        self::assertSame([], $result['events']);self::assertNotNull($result['snapshot']);
+        self::assertSame(['snapshot.page','snapshot.activate'],$pdo->query('SELECT delivery_kind FROM portal_projection_outbox ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
+        $page=json_decode((string)$pdo->query("SELECT payload_json FROM portal_projection_outbox WHERE delivery_kind='snapshot.page'")->fetchColumn(),true,64,JSON_THROW_ON_ERROR);
+        self::assertCount(1,$page['contactAssignments']);
+        self::assertTrue($page['contactAssignments'][0]['primaryBilling']);
+        self::assertFalse($page['contactAssignments'][0]['sendProjectInvoices']);
     }
 
     public function testVisibleRoleChangeKeepsStableIdAndAdvancesSourceVersion(): void
@@ -92,6 +110,57 @@ final class PortalContactAssignmentProjectionTest extends TestCase
         self::assertSame($before['publicId'],$after['publicId']);
         self::assertNotSame($before['sourceVersion'],$after['sourceVersion']);
         self::assertSame('site_liaison',$after['role']);
+    }
+
+    public function testPrimaryBillingDoesNotImplyInvoiceEmailDelivery(): void
+    {
+        $pdo=$this->database();$pdo->exec('UPDATE portal_integration_profiles SET contact_assignment_projection_enabled=1, relation_projection_enabled=1; UPDATE project_clients SET send_project_invoices=0 WHERE id=20');
+        $pages=$this->snapshot($pdo);$assignment=array_values(array_filter($pages[0]['contactAssignments'],static fn(array$row):bool=>$row['clientPublicId']==='client-manager'&&$row['scopeType']==='project'))[0];
+        self::assertTrue($assignment['primaryBilling']);
+        self::assertFalse($assignment['sendProjectInvoices']);
+        self::assertTrue($assignment['canViewInvoiceLinks']);
+    }
+
+    public function testRapidEnableDisableSupersedesOnlyUnclaimedNormalV4RowsAndQueuesV3Recovery(): void
+    {
+        $pdo=$this->database();$this->snapshot($pdo);$pdo->exec('DELETE FROM portal_projection_outbox');
+        $this->saveProfile($pdo,true);
+        $rows=$pdo->query('SELECT id,delivery_kind FROM portal_projection_outbox ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
+        $claimedId=(int)$rows[0]['id'];$rejectedId=(int)$rows[1]['id'];
+        $pdo->prepare("UPDATE portal_projection_outbox SET claimed_at='2026-09-02 20:00:00' WHERE id=?")->execute([$claimedId]);
+        $pdo->prepare("UPDATE portal_projection_outbox SET dead_lettered_at='2026-09-02 20:01:00',last_error_code='receiver_schema_rejected' WHERE id=?")->execute([$rejectedId]);
+        $pdo->exec("INSERT INTO portal_projection_outbox(integration_profile_id,delivery_id,workspace_public_id,schema_version,source_sequence,delivery_kind,route_type,is_revocation,destination_url,signing_key_id,payload_json,claimed_at,delivered_at,dead_lettered_at,last_error_code) VALUES(1,'v4-pending','workspace-org',4,98,'event','portal',0,NULL,NULL,'{}',NULL,NULL,NULL,NULL)");
+        $pdo->exec("INSERT INTO portal_projection_outbox(integration_profile_id,delivery_id,workspace_public_id,schema_version,source_sequence,delivery_kind,route_type,is_revocation,destination_url,signing_key_id,payload_json,claimed_at,delivered_at,dead_lettered_at,last_error_code) VALUES(1,'v4-revocation','workspace-org',4,99,'event','portal',1,NULL,NULL,'{}',NULL,NULL,NULL,NULL)");
+
+        $this->saveProfile($pdo,false);
+        $claimed=$pdo->query('SELECT dead_lettered_at,last_error_code FROM portal_projection_outbox WHERE id='.$claimedId)->fetch(PDO::FETCH_ASSOC);
+        self::assertNull($claimed['dead_lettered_at']);self::assertNull($claimed['last_error_code']);
+        $rejected=$pdo->query('SELECT dead_lettered_at,last_error_code FROM portal_projection_outbox WHERE id='.$rejectedId)->fetch(PDO::FETCH_ASSOC);
+        self::assertNotNull($rejected['dead_lettered_at']);self::assertSame('schema_transition_superseded',$rejected['last_error_code']);
+        $pending=$pdo->query("SELECT dead_lettered_at,last_error_code FROM portal_projection_outbox WHERE delivery_id='v4-pending'")->fetch(PDO::FETCH_ASSOC);
+        self::assertNotNull($pending['dead_lettered_at']);self::assertSame('schema_transition_superseded',$pending['last_error_code']);
+        $revocation=$pdo->query("SELECT dead_lettered_at,last_error_code FROM portal_projection_outbox WHERE delivery_id='v4-revocation'")->fetch(PDO::FETCH_ASSOC);
+        self::assertNull($revocation['dead_lettered_at']);self::assertNull($revocation['last_error_code']);
+        self::assertSame([3,3],array_map('intval',$pdo->query("SELECT schema_version FROM portal_projection_outbox WHERE schema_version=3 AND is_revocation=0 ORDER BY id")->fetchAll(PDO::FETCH_COLUMN)));
+        self::assertSame(['snapshot.page','snapshot.activate'],$pdo->query("SELECT delivery_kind FROM portal_projection_outbox WHERE schema_version=3 ORDER BY id")->fetchAll(PDO::FETCH_COLUMN));
+        self::assertLessThan((int)$pdo->query('SELECT MIN(id) FROM portal_projection_outbox WHERE schema_version=3')->fetchColumn(),(int)$pdo->query('SELECT MAX(id) FROM portal_projection_outbox WHERE schema_version=4')->fetchColumn());
+    }
+
+    public function testGoldenFixturePinsCompleteActivatableGenerationHash(): void
+    {
+        $fixture=json_decode((string)file_get_contents(dirname(__DIR__).'/fixtures/project-alpha-portal-contact-assignments-v4.json'),true,64,JSON_THROW_ON_ERROR);
+        $page=$fixture['valid']['snapshotPage'];$activation=$fixture['valid']['snapshotActivate'];
+        $projection=[];foreach(['entities','principals','entitlements','relations','projectLifecycles','contactAssignments']as$family)$projection[$family]=$page[$family];
+        $canonical=function(array$value):string{$sort=function(&$item)use(&$sort):void{if(!is_array($item))return;if(array_is_list($item)){foreach($item as&$child)$sort($child);unset($child);return;}ksort($item);foreach($item as&$child)$sort($child);unset($child);};$sort($value);return json_encode($value,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);};
+        $hash=hash('sha256',$canonical($projection));
+        self::assertSame($fixture['expectedSnapshotHash'],$hash);
+        self::assertSame($hash,$page['snapshotHash']);self::assertSame($hash,$activation['snapshotHash']);
+        self::assertSame($page['recordCount'],array_sum(array_map('count',$projection)));
+        self::assertSame($page['recordCount'],$activation['recordCount']);
+        $entityIds=array_fill_keys(array_column($page['entities'],'publicId'),true);
+        $receiverNegative=array_values(array_filter($fixture['invalid'],static fn(array$case):bool=>($case['validationLayer']??null)==='receiver-generation'))[0]['delivery'];
+        self::assertArrayNotHasKey($receiverNegative['contactAssignments'][0]['contactPublicId'],array_fill_keys(array_column($receiverNegative['entities'],'publicId'),true));
+        self::assertArrayHasKey($page['contactAssignments'][0]['contactPublicId'],$entityIds);
     }
 
     public function testCrossRootAssignmentFailsClosed(): void

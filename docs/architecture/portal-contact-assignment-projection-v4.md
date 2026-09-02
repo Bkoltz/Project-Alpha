@@ -28,7 +28,9 @@ Only two explicit Project Alpha associations are projected:
 - `project_clients` becomes a project-scoped assignment. `role`,
   `is_primary_billing`, `send_project_invoices`, and
   `can_view_invoice_links` are preserved. It is not inferred from the project's
-  primary client field.
+  primary client field. Primary billing ownership and invoice-email delivery
+  are independent: `primaryBilling: true` with `sendProjectInvoices: false` is
+  valid and must be preserved exactly.
 
 Organization ownership, a matching name/email, portal eligibility, public
 links, identities, entitlements, manual invoice recipients, and general billing
@@ -53,10 +55,20 @@ generation bounds include every family. The canonical snapshot hash and
 `recordCount` also include contact assignments. The activation record repeats
 the same hash, page count, and record count.
 
-Incremental assignment removals are ordered before their companion relation and
-contact-entity tombstones. That lets the receiver close dependent display state
-before removing endpoints. A complete snapshot is the recovery authority after
-any gap, rejected generation, capability transition, or receiver rebuild.
+The first assignment for a contact/scope and every assignment removal changes
+receiver topology. Those mutations publish a complete replacement generation,
+never a partial sequence of endpoint, relation, and assignment events. Updates
+to an already-established assignment (for example its role or billing flags)
+remain incremental events because all referenced endpoints already belong to
+the active generation. A complete snapshot is the recovery authority after any
+gap, rejected generation, topology mutation, capability transition, or receiver
+rebuild.
+
+When schema v4 is disabled, Project Alpha first supersedes every unclaimed,
+normal v4 portal delivery—including a receiver-rejected row—then queues the v3
+replacement generation. A currently claimed row and every revocation remain
+untouched; their existing ordering barrier completes before the replacement is
+eligible for delivery.
 
 The golden wire examples are in
 `tests/fixtures/project-alpha-portal-contact-assignments-v4.json`.

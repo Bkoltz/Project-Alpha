@@ -102,7 +102,13 @@ final class PortalProjectionService
         $workspace=(new PortalWorkspaceAuthorizationService())->requireWorkspace($pdo,$profileId,$workspacePublicId);$state=$this->stateForUpdate($pdo,$profileId,$workspacePublicId);
         if(!$state||empty($state['last_snapshot_hash']))return$onlyAction==='tombstone'?['snapshot'=>null,'events'=>[]]:['snapshot'=>$this->queueWorkspaceSnapshot($pdo,$profile,$workspacePublicId),'events'=>[]];
         $schemaVersion=$this->portalSchemaVersion($profile);$projection=$this->workspaceProjection($pdo,$workspace,$schemaVersion);$current=$this->portalResourceRecords($workspace,$projection,$schemaVersion);$events=[];
-        foreach($this->resourceChanges($pdo,$profileId,$workspacePublicId,'portal',$current)as$change){
+        $changes=$this->resourceChanges($pdo,$profileId,$workspacePublicId,'portal',$current);
+        // Adding or removing an assignment changes receiver topology (contact
+        // endpoint plus its relation). Publish that topology atomically as a
+        // replacement generation. A visible update to an already-established
+        // assignment, such as a role or billing flag, remains a strict event.
+        if($schemaVersion===4&&$this->contactTopologyChanged($changes,$onlyAction))return['snapshot'=>$this->queueWorkspaceSnapshot($pdo,$profile,$workspacePublicId),'events'=>[]];
+        foreach($changes as$change){
             if($onlyAction!==null&&$change['action']!==$onlyAction)continue;
             if($change['action']==='upsert')$event=$this->portalUpsertEvent($change['resource'],$change['record']);
             elseif($change['resource']==='project_lifecycle'){ $this->deleteResourceState($pdo,$profileId,$workspacePublicId,'portal',$change['resource'],$change['publicId']);continue; }
@@ -289,7 +295,6 @@ final class PortalProjectionService
             $contactPublicId=$this->ensurePortalContact($pdo,(int)$row['client_id'],(string)$row['client_public_id'],(string)$row['display_name']);
             $scopeType=(string)$row['scope_type'];$scopePublicId=(string)$row['scope_public_id'];$clientPublicId=(string)$row['client_public_id'];
             $primary=(bool)$row['primary_contact'];$primaryBilling=(bool)$row['primary_billing'];$sendInvoices=(bool)$row['send_project_invoices'];$viewInvoices=(bool)$row['can_view_invoice_links'];
-            if($primaryBilling&&!$sendInvoices)throw new DomainException('portal-contact-assignment-billing-invalid');
             $assignment=[
                 'publicId'=>$this->stablePublicId('caa',$scopeType,$scopePublicId,$contactPublicId),
                 'contactPublicId'=>$contactPublicId,'clientPublicId'=>$clientPublicId,
@@ -352,16 +357,27 @@ final class PortalProjectionService
 
     /**
      * @param array<string,array{resource:string,publicId:string,sourceVersion:string,record:array<string,mixed>}> $current
-     * @return list<array{action:string,resource:string,publicId:string,sourceVersion:string,record:array<string,mixed>}>
+     * @return list<array{action:string,resource:string,publicId:string,sourceVersion:string,record:array<string,mixed>,existed:bool}>
      */
     private function resourceChanges(PDO$pdo,int$profileId,string$workspaceId,string$route,array$current):array
     {
         $statement=$pdo->prepare('SELECT resource_type,resource_public_id,source_version,payload_hash,record_json FROM portal_projection_resource_state WHERE integration_profile_id=? AND workspace_public_id=? AND route_type=?');$statement->execute([$profileId,$workspaceId,$route]);$existing=[];
         foreach($statement->fetchAll(PDO::FETCH_ASSOC)as$row)$existing[(string)$row['resource_type'].'|'.(string)$row['resource_public_id']]=$row;
-        $changes=[];foreach($current as$key=>$entry){$hash=hash('sha256',self::canonicalJson($entry['record']));$prior=$existing[$key]??null;if($prior&&hash_equals((string)$prior['payload_hash'],$hash)){unset($existing[$key]);continue;}if($prior&&hash_equals((string)$prior['source_version'],$entry['sourceVersion']))throw new DomainException('portal-source-version-reuse');$changes[]=['action'=>'upsert']+$entry;unset($existing[$key]);}
-        foreach($existing as$row){$resource=(string)$row['resource_type'];$publicId=(string)$row['resource_public_id'];$version=PortalSourceVersion::from(['resource'=>$resource,'publicId'=>$publicId,'active'=>false,'previousSourceVersion'=>(string)$row['source_version']]);$changes[]=['action'=>'tombstone','resource'=>$resource,'publicId'=>$publicId,'sourceVersion'=>$version,'record'=>[]];}
+        $changes=[];foreach($current as$key=>$entry){$hash=hash('sha256',self::canonicalJson($entry['record']));$prior=$existing[$key]??null;if($prior&&hash_equals((string)$prior['payload_hash'],$hash)){unset($existing[$key]);continue;}if($prior&&hash_equals((string)$prior['source_version'],$entry['sourceVersion']))throw new DomainException('portal-source-version-reuse');$changes[]=['action'=>'upsert','existed'=>$prior!==null]+$entry;unset($existing[$key]);}
+        foreach($existing as$row){$resource=(string)$row['resource_type'];$publicId=(string)$row['resource_public_id'];$version=PortalSourceVersion::from(['resource'=>$resource,'publicId'=>$publicId,'active'=>false,'previousSourceVersion'=>(string)$row['source_version']]);$changes[]=['action'=>'tombstone','resource'=>$resource,'publicId'=>$publicId,'sourceVersion'=>$version,'record'=>[],'existed'=>true];}
         $upsertOrder=['workspace'=>0,'entity'=>1,'principal'=>2,'entitlement'=>3,'relation'=>4,'project_lifecycle'=>5,'contact_assignment'=>6,'catalog_item'=>0];$tombstoneOrder=['contact_assignment'=>0,'relation'=>1,'entitlement'=>2,'project_lifecycle'=>3,'principal'=>4,'entity'=>5,'workspace'=>6,'catalog_item'=>0];
         usort($changes,static function(array$a,array$b)use($upsertOrder,$tombstoneOrder):int{$aOrder=($a['action']==='upsert'?$upsertOrder:$tombstoneOrder)[$a['resource']]??99;$bOrder=($b['action']==='upsert'?$upsertOrder:$tombstoneOrder)[$b['resource']]??99;return[$a['action']==='tombstone'?0:1,$aOrder,$a['resource'],$a['publicId']]<=>[$b['action']==='tombstone'?0:1,$bOrder,$b['resource'],$b['publicId']];});return$changes;
+    }
+
+    /** @param list<array<string,mixed>> $changes */
+    private function contactTopologyChanged(array$changes,?string$onlyAction):bool
+    {
+        foreach($changes as$change){
+            if(($change['resource']??null)!=='contact_assignment')continue;
+            if($onlyAction!==null&&($change['action']??null)!==$onlyAction)continue;
+            if(($change['action']??null)==='tombstone'||empty($change['existed']))return true;
+        }
+        return false;
     }
 
     /** @param array<string,mixed> $record @return array<string,mixed> */

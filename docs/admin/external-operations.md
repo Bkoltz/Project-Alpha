@@ -192,8 +192,9 @@ workspace allowlist, credentials, and portal outbox. **Publish scoped contact
 roles to the client portal** is disabled by default and requires portal and
 relation projection. It publishes only explicit department and project contact
 assignments; it never creates login or content access. Enabling or disabling it
-queues a complete replacement portal generation. Leave it clear until migration
-0082 and the receiver's schema-v4 capability are deployed. See
+queues a complete replacement portal generation. Primary billing ownership and
+invoice-email delivery remain independent. Leave it clear until migration 0082
+and the receiver's schema-v4 capability are deployed. See
 [Portal contact-assignment projection v4](../architecture/portal-contact-assignment-projection-v4.md).
 
 If a revocation exhausts its delivery attempts, the simplified synchronization
