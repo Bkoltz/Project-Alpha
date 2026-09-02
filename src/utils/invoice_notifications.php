@@ -77,7 +77,9 @@ function invoice_notification_enqueue_generated(PDO $pdo, int $invoiceId, array 
         return false;
     }
     $invoice = invoice_notification_invoice($pdo, $invoiceId);
-    if (!$invoice || pa_invoice_is_general_recipient($invoice) || ($invoice['invoice_type'] ?? '') !== 'long_term'
+    if (!$invoice || pa_invoice_is_general_recipient($invoice)
+        || ($invoice['collection_mode'] ?? 'direct') !== 'direct'
+        || ($invoice['invoice_type'] ?? '') !== 'long_term'
         || ($invoice['finalization_source'] ?? '') !== 'recurring_schedule') {
         return false;
     }

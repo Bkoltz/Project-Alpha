@@ -113,7 +113,11 @@ try {
         $errors += $deliveryStats['retry'];
 
     }
-    cron_state_mark_success($pdo, $jobName, "Generated {$invoicesGenerated} recurring invoice(s), {$projectInvoicesGenerated} project invoice(s); project delivery {$projectBillingResult['delivered']} sent/{$projectBillingResult['delivery_pending']} pending/{$projectBillingResult['delivery_failed']} failed; delivery {$deliveryStats['sent']} sent/{$deliveryStats['retry']} retry/{$deliveryStats['suppressed']} suppressed; {$errors} error(s); {$catchUpPasses} catch-up pass(es)");
+    $runResult = "Generated {$invoicesGenerated} recurring invoice(s), {$projectInvoicesGenerated} project invoice(s); project delivery {$projectBillingResult['delivered']} sent/{$projectBillingResult['delivery_pending']} pending/{$projectBillingResult['delivery_failed']} failed; delivery {$deliveryStats['sent']} sent/{$deliveryStats['retry']} retry/{$deliveryStats['suppressed']} suppressed; {$errors} error(s); {$catchUpPasses} catch-up pass(es)";
+    if ($errors > 0) {
+        throw new RuntimeException($runResult);
+    }
+    cron_state_mark_success($pdo, $jobName, $runResult);
 
     // Update last run timestamp in settings (legacy support)
     $configMount = '/var/www/config';

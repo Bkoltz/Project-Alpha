@@ -391,7 +391,7 @@ function project_invoice_refresh_status(PDO $pdo, int $projectInvoiceId): void
         LEFT JOIN project_invoice_items pii ON pii.project_invoice_id = pi.id
         LEFT JOIN invoices i ON i.id = pii.invoice_id
         LEFT JOIN (
-            SELECT invoice_id, SUM(GREATEST(amount-refunded_amount,0)) AS paid
+            SELECT invoice_id, SUM(GREATEST(amount-COALESCE(refunded_amount,0)-COALESCE(disputed_amount,0),0)) AS paid
             FROM payments
             WHERE status = "succeeded"
             GROUP BY invoice_id
@@ -513,14 +513,15 @@ function project_invoice_create_for_period_result(PDO $pdo, int $projectId, stri
                    COALESCE(p.paid, 0) AS paid
             FROM invoices i
             LEFT JOIN (
-                SELECT invoice_id, SUM(GREATEST(amount-refunded_amount,0)) AS paid
+                SELECT invoice_id, SUM(GREATEST(amount-COALESCE(refunded_amount,0)-COALESCE(disputed_amount,0),0)) AS paid
                 FROM payments
                 WHERE status = "succeeded"
                 GROUP BY invoice_id
             ) p ON p.invoice_id = i.id
             LEFT JOIN project_invoice_items pii ON pii.invoice_id = i.id
             WHERE i.project_id = ?
-              AND i.status IN ("unpaid", "partial")
+              AND i.status IN ("sent", "unpaid", "partial", "overdue")
+              AND i.finalized_at IS NOT NULL
               AND COALESCE(i.collection_mode, "direct") = "project_aggregate"
               AND DATE(COALESCE(i.fulfillment_date, i.document_date, i.created_at)) <= ?
               AND pii.id IS NULL
@@ -795,7 +796,7 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
             $pdo->beginTransaction();
         }
 
-        $parent = $pdo->prepare('SELECT * FROM project_invoices WHERE id=? AND status IN ("unpaid","partial","sent","paid") FOR UPDATE');
+        $parent = $pdo->prepare('SELECT * FROM project_invoices WHERE id=? AND status IN ("unpaid","partial","sent","overdue","paid") FOR UPDATE');
         $parent->execute([$projectInvoiceId]);
         $pi = $parent->fetch(PDO::FETCH_ASSOC);
         if (!$pi) {
@@ -825,7 +826,7 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
             FROM project_invoice_items pii
             JOIN invoices i ON i.id = pii.invoice_id
             LEFT JOIN (
-                SELECT invoice_id, SUM(GREATEST(amount-refunded_amount,0)) AS paid
+                SELECT invoice_id, SUM(GREATEST(amount-COALESCE(refunded_amount,0)-COALESCE(disputed_amount,0),0)) AS paid
                 FROM payments
                 WHERE status = "succeeded"
                 GROUP BY invoice_id
@@ -1048,12 +1049,21 @@ function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): b
 }
 
 /** @return array{processed:int,generated:int,existing:int,empty:int,drafted:int,delivered:int,already_delivered:int,delivery_pending:int,delivery_failed:int} */
-function project_invoice_generate_due_monthly_result(PDO $pdo, array $appConfig): array
+function project_invoice_generate_due_monthly_result(
+    PDO $pdo,
+    array $appConfig,
+    ?DateTimeInterface $runAt = null,
+    ?callable $sender = null
+): array
 {
-    [$start, $end] = project_invoice_period_for_date(date('Y-m-d'), true);
+    $runDate = $runAt ? $runAt->format('Y-m-d') : date('Y-m-d');
+    [$start, $end] = project_invoice_period_for_date($runDate, true);
     $hasAutoEmail = project_invoice_table_has_column($pdo, 'projects', 'project_invoice_auto_email');
     $selectAuto = $hasAutoEmail ? ', project_invoice_auto_email' : '';
-    $stmt = $pdo->query('SELECT id' . $selectAuto . ' FROM projects WHERE status IN ("active","not_started") AND invoice_billing_period = "monthly"');
+    // Terminal or overdue Projects can still have finalized, unassigned work
+    // from before their status changed. The child-invoice eligibility query is
+    // the authority; status must not strand an otherwise collectible balance.
+    $stmt = $pdo->query('SELECT id' . $selectAuto . ' FROM projects WHERE invoice_billing_period = "monthly"');
     $stats = [
         'processed' => 0,
         'generated' => 0,
@@ -1113,7 +1123,17 @@ function project_invoice_generate_due_monthly_result(PDO $pdo, array $appConfig)
             continue;
         }
 
-        $sent = project_invoice_send_email($pdo, $id, $appConfig);
+        $deliveryResult = project_invoice_send_email_result(
+            $pdo,
+            $id,
+            $appConfig,
+            null,
+            false,
+            null,
+            false,
+            $sender
+        );
+        $sent = (int)$deliveryResult['sent'];
         if ($sent > 0) {
             $stats['delivered'] += $sent;
         }
