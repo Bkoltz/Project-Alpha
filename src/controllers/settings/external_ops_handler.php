@@ -35,6 +35,10 @@ try {
         $pdo->beginTransaction();
         try {
             $config = (new ExternalOpsConfigService())->save($pdo, $_POST);
+            // This capability is intentionally not part of the generic
+            // integration config or deployment secrets. It remains an
+            // explicit, administrator-controlled checkbox on the one connection.
+            $config['service_assignment_projection_enabled'] = !empty($_POST['service_assignment_projection_enabled']);
             $portalProvisioning = new PortalClientProvisioningService();
             $profileId = $portalProvisioning->configureConnection($pdo, $config, $actorUserId);
             $portalConnectionStatus = $portalProvisioning->status($pdo, (string)$config['application_key']);

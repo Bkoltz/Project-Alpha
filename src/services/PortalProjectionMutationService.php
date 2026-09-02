@@ -186,7 +186,45 @@ final class PortalProjectionMutationService
     /** @return list<array<string,mixed>> */
     public function queueCatalogChanges(PDO$pdo,?int$onlyProfileId=null):array
     {
-        if(!$pdo->inTransaction())throw new \DomainException('catalog-transaction-required');$sql='SELECT id FROM portal_integration_profiles WHERE enabled=1 AND catalog_projection_enabled=1 AND catalog_route IS NOT NULL';$params=[];if($onlyProfileId!==null){$sql.=' AND id=?';$params[]=$onlyProfileId;}$sql.=' ORDER BY id';$statement=$pdo->prepare($sql);$statement->execute($params);$summaries=[];$projection=new PortalProjectionService();foreach($statement->fetchAll(PDO::FETCH_COLUMN)as$profileId)$summaries[]=$projection->queueCatalogChanges($pdo,['id'=>(int)$profileId]);return$summaries;
+        if(!$pdo->inTransaction())throw new \DomainException('catalog-transaction-required');$sql='SELECT id FROM portal_integration_profiles WHERE enabled=1 AND catalog_projection_enabled=1 AND catalog_route IS NOT NULL';$params=[];if($onlyProfileId!==null){$sql.=' AND id=?';$params[]=$onlyProfileId;}$sql.=' ORDER BY id';$statement=$pdo->prepare($sql);$statement->execute($params);$summaries=[];$projection=new PortalProjectionService();foreach($statement->fetchAll(PDO::FETCH_COLUMN)as$profileId)$summaries[]=$projection->queueCatalogChanges($pdo,['id'=>(int)$profileId]);
+        // Catalog visibility and assignment visibility are one receiver-facing
+        // contract. Reconcile already-published assignment streams before the
+        // catalog mutation commits, so unpublished services become tombstones.
+        $this->queuePublishedServiceAssignmentChanges($pdo,$onlyProfileId);
+        return$summaries;
+    }
+
+    private function queuePublishedServiceAssignmentChanges(PDO $pdo, ?int $onlyProfileId): void
+    {
+        if (!$this->serviceAssignmentProjectionSchemaAvailable($pdo)) return;
+        $sql = 'SELECT profile.id FROM portal_integration_profiles profile
+                JOIN portal_service_assignment_projection_state state ON state.integration_profile_id=profile.id
+                WHERE profile.enabled=1 AND profile.service_assignment_projection_enabled=1
+                  AND profile.delivery_enabled=1 AND profile.portal_route IS NOT NULL';
+        $parameters = [];
+        if ($onlyProfileId !== null) { $sql .= ' AND profile.id=?'; $parameters[] = $onlyProfileId; }
+        $sql .= ' ORDER BY profile.id';
+        $statement = $pdo->prepare($sql);$statement->execute($parameters);
+        $projection = new PortalServiceAssignmentProjectionService();
+        foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $profileId) {
+            $projection->queueChanges($pdo,['id'=>(int)$profileId]);
+        }
+    }
+
+    /** Rolling migrations may briefly have catalog projection without the
+     * additive assignment stream. Only schema absence is optional; projection
+     * errors after this probe must roll back the caller. */
+    private function serviceAssignmentProjectionSchemaAvailable(PDO $pdo): bool
+    {
+        try {
+            $pdo->query('SELECT service_assignment_projection_enabled,delivery_enabled,portal_route FROM portal_integration_profiles WHERE 1=0');
+            $pdo->query('SELECT public_id,subject_type,subject_public_id,service_public_id FROM portal_service_assignments WHERE 1=0');
+            $pdo->query('SELECT integration_profile_id,source_generation,source_sequence,snapshot_hash FROM portal_service_assignment_projection_state WHERE 1=0');
+            $pdo->query('SELECT integration_profile_id,assignment_public_id,source_version,payload_hash,record_json FROM portal_service_assignment_projection_records WHERE 1=0');
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     private function queueWorkspaces(PDO $pdo,array $workspaceIds,?string$onlyAction=null):void

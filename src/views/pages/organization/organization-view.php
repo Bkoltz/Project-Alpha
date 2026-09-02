@@ -274,6 +274,15 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
         </dl>
       </div>
 
+      <div class="org-card" id="assigned-services">
+        <?php
+        $portalServiceAssignmentSubjectType = 'organization';
+        $portalServiceAssignmentSubjectId = $id;
+        $portalServiceAssignmentEntityPermission = 'organizations.manage';
+        include __DIR__ . '/../../components/portal_service_assignments.php';
+        ?>
+      </div>
+
       <div class="org-card">
         <div class="org-card__head">
           <h3 class="org-card__title">Tax Exempt Form</h3>
@@ -437,7 +446,7 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
                 'excluded' => 'Excluded from resolver',
             ];
           ?>
-          <div class="org-dept-card">
+          <div class="org-dept-card" id="department-<?php echo $deptId; ?>">
             <div class="org-dept-card__header">
               <div>
                 <h4 class="org-dept-card__title"><?php echo e((string)$department['name']); ?></h4>
@@ -538,6 +547,18 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
                 <?php endif; ?>
               </div>
             </div>
+
+            <details style="margin:0 16px 14px;border-top:1px solid #e5e7eb;padding-top:12px">
+              <summary style="cursor:pointer;font-weight:700">Assigned services</summary>
+              <div style="margin-top:12px">
+                <?php
+                $portalServiceAssignmentSubjectType = 'department';
+                $portalServiceAssignmentSubjectId = $deptId;
+                $portalServiceAssignmentEntityPermission = 'organizations.manage';
+                include __DIR__ . '/../../components/portal_service_assignments.php';
+                ?>
+              </div>
+            </details>
 
             <form method="post" action="/?page=organization/organization-departments" onsubmit="return confirm('Delete this department? Contacts and clients will not be deleted.')" style="padding:0 16px 14px">
               <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">

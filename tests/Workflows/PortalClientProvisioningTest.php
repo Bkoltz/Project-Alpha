@@ -25,7 +25,7 @@ final class PortalClientProvisioningTest extends TestCase
         $this->pdo->exec(<<<'SQL'
 CREATE TABLE organizations(id INTEGER PRIMARY KEY,public_id TEXT UNIQUE,name TEXT);
 CREATE TABLE clients(id INTEGER PRIMARY KEY,public_id TEXT UNIQUE,name TEXT,email TEXT,organization_id INTEGER,client_type TEXT,archived INTEGER DEFAULT 0,deleted_at TEXT,source_version TEXT DEFAULT '1');
-CREATE TABLE portal_integration_profiles(id INTEGER PRIMARY KEY AUTOINCREMENT,application_key TEXT UNIQUE,display_label TEXT,enabled INTEGER,portal_projection_enabled INTEGER,relation_projection_enabled INTEGER DEFAULT 0,catalog_projection_enabled INTEGER DEFAULT 0,pricing_preview_enabled INTEGER DEFAULT 0,draft_quote_enabled INTEGER DEFAULT 0,pricing_source TEXT,draft_source TEXT,portal_route TEXT,catalog_route TEXT,delivery_enabled INTEGER DEFAULT 0,delivery_key_id TEXT,delivery_previous_key_id TEXT,delivery_previous_valid_until TEXT,delivery_credentials_enc TEXT,delivery_timeout_seconds INTEGER DEFAULT 15,delivery_max_attempts INTEGER DEFAULT 12,created_by INTEGER,updated_by INTEGER);
+CREATE TABLE portal_integration_profiles(id INTEGER PRIMARY KEY AUTOINCREMENT,application_key TEXT UNIQUE,display_label TEXT,enabled INTEGER,portal_projection_enabled INTEGER,relation_projection_enabled INTEGER DEFAULT 0,catalog_projection_enabled INTEGER DEFAULT 0,service_assignment_projection_enabled INTEGER DEFAULT 0,pricing_preview_enabled INTEGER DEFAULT 0,draft_quote_enabled INTEGER DEFAULT 0,pricing_source TEXT,draft_source TEXT,portal_route TEXT,catalog_route TEXT,delivery_enabled INTEGER DEFAULT 0,delivery_key_id TEXT,delivery_previous_key_id TEXT,delivery_previous_valid_until TEXT,delivery_credentials_enc TEXT,delivery_timeout_seconds INTEGER DEFAULT 15,delivery_max_attempts INTEGER DEFAULT 12,created_by INTEGER,updated_by INTEGER);
 CREATE TABLE portal_v2_workspaces(id INTEGER PRIMARY KEY AUTOINCREMENT,public_id TEXT UNIQUE,root_type TEXT,root_public_id TEXT,display_name TEXT,source_version TEXT,active INTEGER,created_by INTEGER,updated_by INTEGER,UNIQUE(root_type,root_public_id));
 CREATE TABLE portal_integration_profile_workspaces(profile_id INTEGER,workspace_id INTEGER,active INTEGER,created_by INTEGER,updated_by INTEGER,PRIMARY KEY(profile_id,workspace_id));
 CREATE TABLE portal_principals(id INTEGER PRIMARY KEY AUTOINCREMENT,public_id TEXT DEFAULT (lower(hex(randomblob(16)))),email_hint TEXT,display_name TEXT,source_version TEXT,enabled INTEGER,authorization_version INTEGER DEFAULT 1,activated_at TEXT,revoked_at TEXT,created_by INTEGER,updated_by INTEGER);
@@ -39,6 +39,11 @@ CREATE TABLE portal_projection_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT,integ
 CREATE TABLE portal_projection_state(integration_profile_id INTEGER,workspace_public_id TEXT,source_generation TEXT,source_sequence INTEGER,last_snapshot_hash TEXT,PRIMARY KEY(integration_profile_id,workspace_public_id));
 CREATE TABLE portal_projection_resource_state(integration_profile_id INTEGER,workspace_public_id TEXT,route_type TEXT,resource_type TEXT,resource_public_id TEXT,source_version TEXT,payload_hash TEXT,record_json TEXT,PRIMARY KEY(integration_profile_id,workspace_public_id,route_type,resource_type,resource_public_id));
 CREATE TABLE portal_integration_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,api_key_id INTEGER,action TEXT,target_type TEXT,target_public_id TEXT,metadata_json TEXT);
+CREATE TABLE item_library(id INTEGER PRIMARY KEY,portal_public_id TEXT UNIQUE,portal_source_version TEXT,item_name TEXT,portal_summary TEXT,portal_category TEXT,portal_display_order INTEGER,portal_geometry_requirement TEXT,portal_questions_json TEXT,portal_requestable INTEGER,is_active INTEGER,entry_type TEXT);
+CREATE TABLE portal_service_assignments(id INTEGER PRIMARY KEY AUTOINCREMENT,public_id TEXT UNIQUE,subject_type TEXT,subject_public_id TEXT,service_public_id TEXT,active INTEGER,effective_from TEXT,effective_until TEXT,deleted_at TEXT,created_by INTEGER,updated_by INTEGER,created_at TEXT,updated_at TEXT);
+CREATE TABLE portal_service_assignment_projection_state(integration_profile_id INTEGER PRIMARY KEY,source_generation TEXT,source_sequence INTEGER,snapshot_hash TEXT);
+CREATE TABLE portal_service_assignment_projection_records(integration_profile_id INTEGER,assignment_public_id TEXT,source_version TEXT,payload_hash TEXT,record_json TEXT,PRIMARY KEY(integration_profile_id,assignment_public_id));
+CREATE TABLE portal_service_assignment_projection_receipts(integration_profile_id INTEGER,idempotency_hash TEXT,payload_hash TEXT,result_json TEXT,PRIMARY KEY(integration_profile_id,idempotency_hash));
 INSERT INTO portal_integration_profiles(id,application_key,display_label,enabled,portal_projection_enabled) VALUES(1,'generic_operations','Generic operations',0,0);
 SQL);
         $this->service = new PortalClientProvisioningService();
@@ -145,6 +150,43 @@ SQL);
         }
     }
 
+    public function testSingleConnectionKeepsServiceAssignmentsDefaultOffAndExplicitlyEnablesThem(): void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $config=$this->connection('generic_operations','https://operations.example.test/events');
+            $profileId=(int)$this->service->configureConnection($this->pdo,$config,7);
+            self::assertSame(0,(int)$this->pdo->query("SELECT service_assignment_projection_enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame(0,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_projection_outbox WHERE route_type='service_assignments'")->fetchColumn());
+
+            $config['service_assignment_projection_enabled']=1;
+            self::assertSame($profileId,$this->service->configureConnection($this->pdo,$config,7));
+            self::assertSame(1,(int)$this->pdo->query("SELECT service_assignment_projection_enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame(2,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_projection_outbox WHERE route_type='service_assignments'")->fetchColumn(),'An empty initial snapshot still requires a page and activation record.');
+
+            // A caller unaware of the additive option preserves the explicit choice.
+            $this->service->configureConnection($this->pdo,$config,7);
+            unset($config['service_assignment_projection_enabled']);
+            $this->service->configureConnection($this->pdo,$config,7);
+            self::assertSame(1,(int)$this->pdo->query("SELECT service_assignment_projection_enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame(2,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_projection_outbox WHERE route_type='service_assignments'")->fetchColumn(),'Stable saves must not enqueue duplicate snapshots.');
+        });
+    }
+
+    public function testSingleConnectionDisableQueuesAssignmentRevocationSnapshot(): void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $config=$this->connection('generic_operations','https://operations.example.test/events');
+            $config['service_assignment_projection_enabled']=1;
+            $profileId=(int)$this->service->configureConnection($this->pdo,$config,7);
+            $this->pdo->exec("UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP WHERE route_type='service_assignments'");
+
+            $config['service_assignment_projection_enabled']=0;
+            $this->service->configureConnection($this->pdo,$config,7);
+            self::assertSame(0,(int)$this->pdo->query("SELECT service_assignment_projection_enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame(2,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_projection_outbox WHERE route_type='service_assignments' AND is_revocation=1 AND delivered_at IS NULL")->fetchColumn(),'Disable queues an authoritative empty page and activation that remain deliverable after the capability is off.');
+        });
+    }
+
     public function testDisableQueuesOldRouteTombstoneAndKeepsDeliveryAlive():void
     {
         $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
@@ -198,6 +240,48 @@ SQL);
             $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
             self::assertSame('replacement_operations',$profile['application_key']);self::assertSame('portal-v2',$profile['delivery_key_id']);
             self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
+        });
+    }
+
+    public function testStableConnectionCanRotateDeploymentManagedPortalSigningKey():void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $config=$this->connection('generic_operations','https://stable.example.test/events');
+            $profileId=(int)$this->service->configureConnection($this->pdo,$config,7);
+            putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.json_encode([
+                'generic_operations'=>['portal'=>['keyId'=>'portal-v2','current'=>str_repeat('b',32)]],
+            ],JSON_THROW_ON_ERROR));
+
+            self::assertSame($profileId,$this->service->configureConnection($this->pdo,$config,7));
+            $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
+            $credentials=(new \App\Services\PortalProjectionDeliveryConfigService())->credentials($profile);
+            self::assertSame('portal-v2',$profile['delivery_key_id']);
+            self::assertSame('portal-v1',$profile['delivery_previous_key_id']);
+            self::assertSame(str_repeat('b',32),$credentials['currentSecret']);
+            self::assertSame(str_repeat('a',32),$credentials['previousSecret']);
+            self::assertNotEmpty($profile['delivery_previous_valid_until']);
+        });
+    }
+
+    public function testStableConnectionRejectsAReplacementSecretUnderTheSameSigningKeyId():void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $config=$this->connection('generic_operations','https://stable.example.test/events');
+            $profileId=(int)$this->service->configureConnection($this->pdo,$config,7);
+            putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.json_encode([
+                'generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('b',32)]],
+            ],JSON_THROW_ON_ERROR));
+
+            $this->expectException(\DomainException::class);
+            $this->expectExceptionMessage('distinct signing key ID');
+            try {
+                $this->service->configureConnection($this->pdo,$config,7);
+            } finally {
+                $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
+                $credentials=(new \App\Services\PortalProjectionDeliveryConfigService())->credentials($profile);
+                self::assertSame('portal-v1',$profile['delivery_key_id']);
+                self::assertSame(str_repeat('a',32),$credentials['currentSecret']);
+            }
         });
     }
 

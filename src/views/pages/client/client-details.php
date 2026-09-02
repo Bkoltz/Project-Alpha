@@ -166,6 +166,15 @@ $addressLines = array_values(array_filter([
     </aside>
 
     <main class="client-view__main">
+      <div class="client-card" id="assigned-services">
+        <?php
+        $portalServiceAssignmentSubjectType = empty($client['organization_id']) ? 'standalone_client' : 'client';
+        $portalServiceAssignmentSubjectId = $id;
+        $portalServiceAssignmentEntityPermission = 'clients.edit';
+        include __DIR__ . '/../../components/portal_service_assignments.php';
+        ?>
+      </div>
+
       <div class="client-card client-links-card">
         <?php
         $entityType = 'client';

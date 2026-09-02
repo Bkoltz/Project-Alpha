@@ -40,6 +40,12 @@ final class PortalClientProvisioningService
             if (count($active) === 1) $existing = $active[0];
         }
         if ($existing) $this->bindProfile($pdo, (int)$existing['id']);
+        // Service assignments are an explicit, default-off capability on this
+        // same connection. Callers that do not know about the additive field
+        // preserve the stored choice instead of silently enabling or clearing it.
+        $serviceAssignmentsEnabled = array_key_exists('service_assignment_projection_enabled', $externalConfig)
+            ? !empty($externalConfig['service_assignment_projection_enabled'])
+            : !empty($existing['service_assignment_projection_enabled']);
 
         $contractChanged = $existing && (
             !hash_equals((string)$existing['application_key'], $applicationKey)
@@ -61,10 +67,17 @@ final class PortalClientProvisioningService
         $keyId = $existing ? trim((string)($existing['delivery_key_id'] ?? '')) : '';
         $capability = $this->portalCapability($applicationKey);
         $rekeying = $existing && !hash_equals((string)$existing['application_key'], $applicationKey);
-        if ($keyId === '' || $rekeying) $keyId = $capability['keyId'];
+        $rotatingSigningKey = $existing && $capability['keyId'] !== '' && $keyId !== ''
+            && !hash_equals($keyId, $capability['keyId']);
+        if ($keyId === '' || $rekeying || $rotatingSigningKey) $keyId = $capability['keyId'];
         $secret = $capability['secret'];
         $storedSecret = $existing ? (new PortalProjectionDeliveryConfigService())->credentials($existing, false)['currentSecret'] : '';
-        if ($storedSecret !== '' && !$rekeying) $secret = '';
+        if ($storedSecret !== '' && !$rekeying && !$rotatingSigningKey) {
+            if ($secret !== '' && !hash_equals($storedSecret, $secret)) {
+                throw new DomainException('Portal signing-secret rotation requires a distinct signing key ID.');
+            }
+            $secret = '';
+        }
         // A connection can continue serving business synchronization while its
         // independently signed portal producer remains visibly paused.
         if ($keyId === '' || ($secret === '' && $storedSecret === '')) return $existing ? (int)$existing['id'] : null;
@@ -84,6 +97,7 @@ final class PortalClientProvisioningService
             'portal_projection_enabled' => 1,
             'relation_projection_enabled' => 1,
             'catalog_projection_enabled' => !empty($existing['catalog_projection_enabled']),
+            'service_assignment_projection_enabled' => $serviceAssignmentsEnabled,
             'pricing_preview_enabled' => !empty($existing['pricing_preview_enabled']),
             'draft_quote_enabled' => !empty($existing['draft_quote_enabled']),
             'pricing_source' => $existing['pricing_source'] ?? null,
@@ -110,6 +124,9 @@ final class PortalClientProvisioningService
             'outbound_enabled' => 1,
             'hooks_enabled' => 1,
         ]);
+        if ($serviceAssignmentsEnabled && (!$existing || empty($existing['service_assignment_projection_enabled']) || $contractChanged || $retiredState)) {
+            $this->queueServiceAssignmentSnapshot($pdo, $profileId);
+        }
         $this->audit($pdo, $profileId, 'portal.client_provisioning.connection_configured', 'profile', (string)$profileId, [
             'actor_id' => $actorId,
             'receiver_host' => (string)(parse_url($receiver, PHP_URL_HOST) ?: ''),
@@ -338,6 +355,15 @@ final class PortalClientProvisioningService
         ]);
     }
     private function assertOnlyProducer(PDO $pdo,?int $profileId):void{$sql='SELECT COUNT(*) FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1'.($profileId!==null?' AND id<>?':'');$s=$pdo->prepare($sql);$s->execute($profileId!==null?[$profileId]:[]);if((int)$s->fetchColumn()>0)throw new DomainException('Another client portal producer is active. Retire and drain it before activating this connection.');}
+    private function queueServiceAssignmentSnapshot(PDO $pdo,int $profileId):void
+    {
+        $owns=!$pdo->inTransaction();
+        try{
+            if($owns)$pdo->beginTransaction();
+            (new PortalServiceAssignmentProjectionService())->queueSnapshot($pdo,['id'=>$profileId],'connection-'.bin2hex(random_bytes(16)));
+            if($owns)$pdo->commit();
+        }catch(Throwable$error){if($owns&&$pdo->inTransaction())$pdo->rollBack();throw$error;}
+    }
     /** @param array<string,mixed> $profile */
     private function retireProfile(PDO $pdo,array $profile,int $actorId,string $reason):void
     {
@@ -346,6 +372,7 @@ final class PortalClientProvisioningService
             'enabled'=>0,'portal_projection_enabled'=>0,
             'relation_projection_enabled'=>!empty($profile['relation_projection_enabled']),
             'catalog_projection_enabled'=>!empty($profile['catalog_projection_enabled']),
+            'service_assignment_projection_enabled'=>!empty($profile['service_assignment_projection_enabled']),
             'pricing_preview_enabled'=>!empty($profile['pricing_preview_enabled']),
             'draft_quote_enabled'=>!empty($profile['draft_quote_enabled']),
             'pricing_source'=>$profile['pricing_source']??null,'draft_source'=>$profile['draft_source']??null,

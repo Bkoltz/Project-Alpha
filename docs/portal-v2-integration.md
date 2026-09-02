@@ -22,7 +22,19 @@ Project Alpha remains the authoritative source for organizations, departments, c
    bind an external identity or grant content.
 7. Preflight receiver authentication and the exact application key while its inbox remains disabled. After a separately approved receiver window is open, enable only the required profile capabilities, the profile delivery switch, scoped authoritative hooks, and finally outbound delivery. Queue the portal and Service Library snapshots from Projection recovery, run delivery, and verify every page and activation before enabling consumer reads.
 
-Feature gates are exact-string opt-ins: `APP_PORTAL_PRICING_PREVIEW_ENABLED=true` and `APP_PORTAL_DRAFT_QUOTES_ENABLED=true`. Migration-created application flags also default to `0` for portal v2, relations v3, catalog v2, pricing preview, and draft quotes.
+The command endpoints have separate exact-string environment opt-ins:
+`APP_PORTAL_PRICING_PREVIEW_ENABLED=true` and
+`APP_PORTAL_DRAFT_QUOTES_ENABLED=true`. Projection delivery is controlled by
+the selected profile's `enabled`, `portal_projection_enabled`,
+`relation_projection_enabled`, `catalog_projection_enabled`,
+`service_assignment_projection_enabled`, and `delivery_enabled` columns plus
+the runtime `portal_outbound_delivery_enabled` and
+`portal_authoritative_hooks_enabled` application settings. Migration 0066 also
+created the default-zero compatibility settings
+`portal_v2_relations_enabled`, `portal_catalog_v2_enabled`,
+`portal_pricing_preview_enabled`, and `portal_draft_quotes_enabled`; current
+runtime code does not read those four compatibility rows, so changing them does
+not enable a producer, sender, hook, pricing command, or draft command.
 
 ## Server-only command contract
 

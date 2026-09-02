@@ -41,7 +41,7 @@ $st->execute([
   $country,
   portal_projection_source_version(),
   $id
-]);},static fn():array=>$portalProjection->clientScopes($pdo,$id));
+]);},static fn():array=>$portalProjection->clientScopes($pdo,$id),true);
 address_book_save($pdo, [
   'label'=>'Billing address','address_line1'=>$address_line1,'address_line2'=>$address_line2,'city'=>$city,
   'state'=>$state,'postal_code'=>$postal,'country'=>$country,

@@ -113,11 +113,22 @@ final class MigrationLibraryTest extends TestCase
                 'pricing_adjustment_definitions', 'contract_settlement_terms',
             ], 77)
         );
+        $this->assertSame(
+            ['pricing_adjustment_definitions', 'contract_settlement_terms'],
+            migration_required_tables_for_version([
+                'pricing_adjustment_definitions', 'contract_settlement_terms',
+                'portal_service_assignment_projection_receipts',
+            ], 79)
+        );
+        $this->assertContains('portal_service_assignment_projection_receipts', migration_required_tables_for_version([
+            'portal_service_assignment_projection_receipts',
+        ], 80));
 
         $columns = [
             'invoices' => ['organization_id', 'generation_key'],
             'pricing_adjustment_definitions' => ['organization_id', 'scope_type'],
             'contract_settlement_terms' => ['organization_id'],
+            'portal_integration_profiles' => ['service_assignment_projection_enabled'],
         ];
         $this->assertSame(
             ['invoices' => ['organization_id']],
@@ -127,6 +138,9 @@ final class MigrationLibraryTest extends TestCase
             ['invoices' => ['organization_id'], 'pricing_adjustment_definitions' => ['organization_id']],
             migration_required_columns_for_version($columns, 72)
         );
-        $this->assertSame($columns, migration_required_columns_for_version($columns, 77));
+        $through79 = $columns;
+        unset($through79['portal_integration_profiles']);
+        $this->assertSame($through79, migration_required_columns_for_version($columns, 79));
+        $this->assertSame($columns, migration_required_columns_for_version($columns, 80));
     }
 }

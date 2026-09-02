@@ -88,6 +88,8 @@ if (!empty($config['enabled'])) {
       <label class="field" style="grid-column:1/-1"><span class="label">HMAC secret</span><input class="input" type="password" name="hmac_secret" minlength="32" autocomplete="new-password" placeholder="<?=!empty($config['hmac_secret'])?'Configured - leave blank to keep':'Same 32+ character secret as the receiver'?>"></label>
       <label class="field"><span class="label">Timeout seconds</span><input class="input" type="number" name="timeout_seconds" min="2" max="30" value="<?=(int)$config['timeout_seconds']?>"></label>
       <label class="field"><span class="label">Maximum attempts</span><input class="input" type="number" name="max_attempts" min="1" max="100" value="<?=(int)$config['max_attempts']?>"></label>
+      <label class="check-row" style="grid-column:1/-1"><input type="checkbox" name="service_assignment_projection_enabled" value="1" <?=!empty($portalStatus['profile']['service_assignment_projection_enabled'])?'checked':''?>> Publish assigned services to the client portal</label>
+      <small style="grid-column:1/-1">Default off. This publishes explicit service availability through the same signed connection. It never grants portal login, workspace membership, file access, billing access, or notifications.</small>
     </div>
     <button class="btn btn-primary">Save integration</button>
   </form>

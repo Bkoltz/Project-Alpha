@@ -154,6 +154,23 @@ when the replacement portal contract becomes active.
 The authority service also rejects any legacy or direct settings action that
 would activate a second portal producer, so the single-producer rule is not
 limited to the simplified External Operations page.
+
+The optional service-assignment producer uses this same External Operations
+profile, receiver origin, Access headers, HMAC keys, workspace allowlist, and
+durable outbox. It is disabled by default and requires the receiver to grant
+`portal.service-assignments.publish` before activation. Catalog visibility,
+billing records, portal eligibility, workspace membership, and portal
+entitlements never create an assignment. See
+[Service-assignment projection v1](../architecture/service-assignment-projection-v1.md).
+Administrators opt in with **Publish assigned services to the client portal**
+on this connection form; there is no second endpoint or credential form. The
+first enable queues a complete snapshot. Clearing the option queues an
+authoritative empty snapshot as revocation work before the capability is
+disabled, so the receiver cannot retain stale assignments. Re-enabling after a
+connection rotation queues a new complete snapshot against the replacement
+contract. Leave the option clear until migrations 0080 and 0081 are applied and
+the receiver capability is verified.
+
 If a revocation exhausts its delivery attempts, the simplified synchronization
 status exposes an audited retry action. It resets only failed revocations and
 keeps their original receiver/key contract; it never suppresses a tombstone or
