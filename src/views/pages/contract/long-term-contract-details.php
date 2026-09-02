@@ -488,10 +488,14 @@ $isOngoing = empty($contract['end_date']);
     </tr>
   </table>
 
-  <?php if (!empty($contract['scope'])): ?>
+  <?php
+  $scopeText = trim((string)($contract['scope'] ?? ''));
+  $scopeEnabled = !isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled']);
+  if ($scopeEnabled && $scopeText !== ''):
+  ?>
   <div style="margin:16px 0;padding:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px">
     <div style="font-weight:600;margin-bottom:8px">Scope of Work</div>
-    <div style="white-space:pre-wrap;font-size:14px;line-height:1.6;color:#374151"><?php echo nl2br(htmlspecialchars($contract['scope'])); ?></div>
+    <div style="white-space:pre-wrap;font-size:14px;line-height:1.6;color:#374151"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
   </div>
   <?php endif; ?>
 
