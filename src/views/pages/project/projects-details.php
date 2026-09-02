@@ -91,7 +91,7 @@ $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Fetch associated invoices
 $stmt = $pdo->prepare('
     SELECT i.id, i.doc_number, i.invoice_type, i.status, i.collection_mode, i.total,
-           i.amount_paid, i.balance_due, i.created_at,
+           i.amount_paid, i.balance_due, i.finalized_at, i.created_at,
            COALESCE((
                SELECT SUM(
                    CASE
@@ -121,6 +121,8 @@ $invoiceStats = [
     'unpaid_total' => 0.0,
 ];
 $unresolvedMonthlyInvoices = ['count' => 0, 'balance' => 0.0];
+$pendingMonthlyReady = ['count' => 0, 'balance' => 0.0];
+$pendingMonthlyDrafts = ['count' => 0, 'balance' => 0.0];
 foreach ($invoices as $invoice) {
     $total = (float)($invoice['total'] ?? 0);
     $balanceDue = max(0.0, $total - (float)($invoice['effective_amount_paid'] ?? 0));
@@ -137,6 +139,13 @@ foreach ($invoices as $invoice) {
         && $balanceDue > 0.005) {
         $unresolvedMonthlyInvoices['count']++;
         $unresolvedMonthlyInvoices['balance'] += $balanceDue;
+        if (!empty($invoice['finalized_at']) && in_array(strtolower((string)($invoice['status'] ?? '')), ['sent', 'unpaid', 'partial', 'overdue'], true)) {
+            $pendingMonthlyReady['count']++;
+            $pendingMonthlyReady['balance'] += $balanceDue;
+        } elseif (strtolower((string)($invoice['status'] ?? '')) === 'draft') {
+            $pendingMonthlyDrafts['count']++;
+            $pendingMonthlyDrafts['balance'] += $balanceDue;
+        }
     }
 }
 
@@ -594,6 +603,17 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                         <div style="font-weight:700">Previous monthly invoices still need a collection path</div>
                         <div style="font-size:13px;margin-top:3px"><?php echo (int)$unresolvedMonthlyInvoices['count']; ?> unassigned invoice(s) totaling $<?php echo number_format((float)$unresolvedMonthlyInvoices['balance'], 2); ?> are waiting for billing-transition review.</div>
                         <a class="btn btn-sm" href="/?page=project/projects-edit&amp;id=<?php echo $projectId; ?>#project-billing" style="margin-top:8px">Resolve prior monthly invoices</a>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (($project['invoice_billing_period'] ?? 'per_invoice') === 'monthly' && ((int)$pendingMonthlyReady['count'] > 0 || (int)$pendingMonthlyDrafts['count'] > 0)): ?>
+                    <div style="grid-column:1/-1;padding:12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff;color:#1e3a8a">
+                        <?php if ((int)$pendingMonthlyReady['count'] > 0): ?>
+                        <div style="font-weight:700"><?php echo (int)$pendingMonthlyReady['count']; ?> finalized charge(s) totaling $<?php echo number_format((float)$pendingMonthlyReady['balance'], 2); ?> are ready for the next Project Invoice.</div>
+                        <?php endif; ?>
+                        <?php if ((int)$pendingMonthlyDrafts['count'] > 0): ?>
+                        <div style="font-size:13px;margin-top:3px"><?php echo (int)$pendingMonthlyDrafts['count']; ?> draft charge(s) totaling $<?php echo number_format((float)$pendingMonthlyDrafts['balance'], 2); ?> are excluded until you finalize them for project billing.</div>
+                        <?php endif; ?>
                     </div>
                     <?php endif; ?>
 

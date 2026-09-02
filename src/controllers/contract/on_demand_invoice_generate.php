@@ -231,7 +231,7 @@ try {
     }
     $redirect = '/?page=contract/on-demand-invoices-list&contract_id=' . $contract_id . '&invoice_generated=1';
     if ($sendEmail) {
-        $redirect .= '&email_requested=1';
+        $redirect .= $projectMonthlyBilling ? '&project_billing=1' : '&email_requested=1';
     }
     header('Location: ' . $redirect);
     exit;

@@ -69,6 +69,7 @@ final class PublicLinkEmailReuseTest extends TestCase
         $manual = (string)file_get_contents($root . '/src/controllers/email_send.php');
         $automated = (string)file_get_contents($root . '/src/utils/invoice_notifications.php');
         $project = (string)file_get_contents($root . '/src/utils/project_invoice_notifications.php');
+        $automated = str_replace("\r\n", "\n", $automated);
 
         self::assertStringContainsString('pa_public_link_reuse_or_create($pdo, $type, $id', $manual);
         self::assertStringContainsString("pa_public_link_reuse_or_create(\n                    \$pdo, 'invoice'", $automated);

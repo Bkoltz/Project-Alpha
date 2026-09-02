@@ -970,7 +970,7 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringNotContainsString('catch (', $eligibility);
         self::assertStringContainsString("collection_mode='direct'", $receivables);
         self::assertStringContainsString("status IN ('sent','unpaid','partial','overdue')", $receivables);
-        self::assertStringContainsString("status IN ('sent','unpaid','partial')", $receivables);
+        self::assertStringContainsString("'pending_project_charges'", $receivables);
         self::assertStringContainsString('balance_due>0.005', $receivables);
         self::assertStringContainsString('summarizeProjects', $receivables);
 

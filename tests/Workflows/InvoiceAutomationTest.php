@@ -236,6 +236,12 @@ final class InvoiceAutomationTest extends TestCase
         $this->invoice($clientId, 'regular', '2026-07-01', '2026-08-06', 30, 'terms', 'draft');
         $aggregate = $this->invoice($clientId, 'regular', '2026-07-01', '2026-08-06', 30, 'terms');
         $this->pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$aggregate]);
+        $aggregateRecurring = $this->invoice($clientId, 'long_term', '2026-07-01', '2026-08-06', 30, 'terms');
+        $this->pdo->prepare(
+            'UPDATE invoices SET collection_mode="project_aggregate",finalization_source="recurring_schedule" WHERE id=?'
+        )->execute([$aggregateRecurring]);
+        self::assertFalse(invoice_notification_enqueue_generated($this->pdo, $aggregateRecurring, $this->config));
+        self::assertSame(0, $this->notificationCount($aggregateRecurring, 'on_generate'));
         $disabled = $this->config;
         $disabled['invoice_auto_send_due_7days'] = 0;
         $disabled['invoice_auto_send_overdue_weekly'] = 0;
@@ -516,6 +522,114 @@ final class InvoiceAutomationTest extends TestCase
         $queued = $this->pdo->prepare('SELECT COUNT(*) FROM project_invoice_notifications WHERE project_invoice_id=?');
         $queued->execute([$statementId]);
         self::assertSame(0, (int)$queued->fetchColumn());
+    }
+
+    public function testFirstOfMonthRunCollectsFinalizedOnDemandChargesAndLeavesDraftsForReview(): void
+    {
+        $recipientId = $this->client('monthly-on-demand@example.invalid');
+        $orgId = $this->ids['organizations'][0];
+        $this->pdo->prepare(
+            'INSERT INTO projects (client_id,organization_id,name,status,invoice_billing_period,project_invoice_auto_email)
+             VALUES (?, ?, ?, "active", "monthly", 1)'
+        )->execute([$recipientId, $orgId, 'Monthly On-Demand Project']);
+        $projectId = (int)$this->pdo->lastInsertId();
+        $this->ids['projects'][] = $projectId;
+        project_invoice_sync_clients($this->pdo, $projectId, $recipientId, [$recipientId], [$recipientId]);
+        project_invoice_sync_recipients($this->pdo, $projectId, [$recipientId]);
+
+        $readyRegular = $this->invoice($recipientId, 'regular', '2026-08-08', '2026-09-30', 30, 'terms');
+        $readyLongTerm = $this->invoice($recipientId, 'long_term', '2026-08-10', '2026-09-30', 30, 'terms');
+        $readyOnDemand = $this->invoice($recipientId, 'on_demand', '2026-08-12', '2026-09-30', 30, 'terms');
+        $draft = $this->invoice($recipientId, 'on_demand', '2026-08-20', '2026-09-30', 30, 'terms', 'draft');
+        $this->pdo->prepare(
+            'UPDATE invoices SET project_id=?,collection_mode="project_aggregate",subtotal=400,total=400,balance_due=400 WHERE id IN (?,?)'
+        )->execute([$projectId, $readyRegular, $readyLongTerm]);
+        $this->pdo->prepare(
+            'UPDATE invoices SET project_id=?,collection_mode="project_aggregate",subtotal=400,total=400,balance_due=400 WHERE id IN (?,?)'
+        )->execute([$projectId, $readyOnDemand, $draft]);
+
+        $delivered = [];
+        $sender = static function (string $to) use (&$delivered): array {
+            $delivered[] = $to;
+            return [true, ''];
+        };
+        $stats = project_invoice_generate_due_monthly_result(
+            $this->pdo,
+            $this->config,
+            new DateTimeImmutable('2026-09-01 02:00:00'),
+            $sender
+        );
+        self::assertGreaterThanOrEqual(1, $stats['generated']);
+        self::assertSame(['monthly-on-demand@example.invalid'], $delivered);
+
+        $statement = $this->pdo->prepare(
+            'SELECT id,billing_period_start,billing_period_end,total,balance_due,sent_at
+             FROM project_invoices WHERE project_id=? AND billing_period_end="2026-08-31"'
+        );
+        $statement->execute([$projectId]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertNotEmpty($row);
+        $statementId = (int)$row['id'];
+        $this->ids['project_invoices'][] = $statementId;
+        self::assertSame('2026-08-01', $row['billing_period_start']);
+        self::assertEqualsWithDelta(1200.0, (float)$row['total'], 0.005);
+        self::assertNotEmpty($row['sent_at']);
+
+        $members = $this->pdo->prepare('SELECT invoice_id FROM project_invoice_items WHERE project_invoice_id=?');
+        $members->execute([$statementId]);
+        $expectedMembers = [$readyRegular, $readyLongTerm, $readyOnDemand];
+        sort($expectedMembers);
+        $actualMembers = array_map('intval', $members->fetchAll(PDO::FETCH_COLUMN));
+        sort($actualMembers);
+        self::assertSame($expectedMembers, $actualMembers);
+        self::assertSame('draft', (string)$this->row('invoices', $draft)['status']);
+
+        $repeat = project_invoice_generate_due_monthly_result(
+            $this->pdo,
+            $this->config,
+            new DateTimeImmutable('2026-09-01 03:00:00'),
+            $sender
+        );
+        self::assertGreaterThanOrEqual(1, $repeat['existing']);
+        self::assertSame(1, $repeat['already_delivered']);
+        self::assertSame(['monthly-on-demand@example.invalid'], $delivered, 'The same monthly statement must not be emailed twice.');
+        $count = $this->pdo->prepare('SELECT COUNT(*) FROM project_invoices WHERE project_id=? AND billing_period_end="2026-08-31"');
+        $count->execute([$projectId]);
+        self::assertSame(1, (int)$count->fetchColumn());
+    }
+
+    public function testFirstOfMonthRunDoesNotStrandFinalizedChargesAfterProjectCompletion(): void
+    {
+        $recipientId = $this->client('completed-project-billing@example.invalid');
+        $orgId = $this->ids['organizations'][0];
+        $this->pdo->prepare(
+            'INSERT INTO projects (client_id,organization_id,name,status,invoice_billing_period,project_invoice_auto_email)
+             VALUES (?, ?, ?, "completed", "monthly", 0)'
+        )->execute([$recipientId, $orgId, 'Completed Monthly Project']);
+        $projectId = (int)$this->pdo->lastInsertId();
+        $this->ids['projects'][] = $projectId;
+        project_invoice_sync_clients($this->pdo, $projectId, $recipientId, [$recipientId], [$recipientId]);
+
+        $invoiceId = $this->invoice($recipientId, 'on_demand', '2026-08-28', '2026-09-30', 30, 'terms');
+        $this->pdo->prepare(
+            'UPDATE invoices SET project_id=?,collection_mode="project_aggregate" WHERE id=?'
+        )->execute([$projectId, $invoiceId]);
+
+        $stats = project_invoice_generate_due_monthly_result(
+            $this->pdo,
+            $this->config,
+            new DateTimeImmutable('2026-09-01 02:00:00')
+        );
+        self::assertGreaterThanOrEqual(1, $stats['generated']);
+        $statement = $this->pdo->prepare(
+            'SELECT id,status,total FROM project_invoices WHERE project_id=? AND billing_period_end="2026-08-31"'
+        );
+        $statement->execute([$projectId]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertNotEmpty($row);
+        $this->ids['project_invoices'][] = (int)$row['id'];
+        self::assertSame('draft', $row['status'], 'Auto-email-off statements remain reviewable drafts.');
+        self::assertEqualsWithDelta(100.0, (float)$row['total'], 0.005);
     }
 
     public function testCanonicalTenantUrlAndDocumentPdfFailureBoundaries(): void

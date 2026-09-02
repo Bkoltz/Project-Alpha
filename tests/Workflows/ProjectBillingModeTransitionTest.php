@@ -287,7 +287,11 @@ final class ProjectBillingModeTransitionTest extends TestCase
         self::assertStringContainsString('$postedOriginalBillingPeriod !== $lockedInvoiceBillingPeriod', $controller);
         self::assertStringContainsString("user_can(\$pdo, \$actorId, 'invoices.send', 0)", $controller);
         self::assertStringContainsString('$monthlyAutoEmailConfirmed', $controller);
-        self::assertStringContainsString("'per_invoice'\n\t\t&& \$invoiceBillingPeriod === 'per_invoice'", $controller);
+        $normalizedController = str_replace("\r\n", "\n", $controller);
+        self::assertStringContainsString(
+            "'per_invoice'\n\t\t&& \$invoiceBillingPeriod === 'per_invoice'",
+            $normalizedController
+        );
     }
 
     public function testLateChildStripeCheckoutRoutesToItsAssignedProjectInvoice(): void
