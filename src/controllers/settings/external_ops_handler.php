@@ -53,6 +53,9 @@ try {
     } elseif ($action === 'reconcile-client-portal') {
         $summary=(new PortalClientProvisioningService())->reconcileAll($pdo,(string)$config['application_key'],$actorUserId);
         $message=sprintf('Client portal reconciled: %d roots, %d eligible contacts, %d requiring review, %d revoked.',$summary['roots'],$summary['eligible'],$summary['review_required'],$summary['revoked']);
+    } elseif ($action === 'retry-client-portal-revocations') {
+        $retried=(new PortalClientProvisioningService())->retryFailedRevocations($pdo,(string)$config['application_key'],$actorUserId);
+        $message=sprintf('%d failed client portal revocation(s) were requeued against the unchanged retired receiver contract.',$retried);
     } elseif ($action === 'set-client-portal-root') {
         if (!user_can($pdo,$actorUserId,'users.manage',0)) throw new DomainException('User-management permission is required to change client portal login access.');
         $active=(string)($_POST['access_state']??'')==='active';

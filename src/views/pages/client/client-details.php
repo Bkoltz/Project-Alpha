@@ -102,6 +102,9 @@ $addressLines = array_values(array_filter([
   <?php if (!empty($_GET['updated'])): ?>
     <div style="margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Client updated.</div>
   <?php endif; ?>
+  <?php if (!empty($_GET['error'])): ?>
+    <div role="alert" style="margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#fef2f2;color:#991b1b;border:1px solid #fecaca"><?php echo e((string)$_GET['error']); ?></div>
+  <?php endif; ?>
   <div class="client-view__header">
     <div>
       <h2 class="client-view__title"><?php echo e((string)$client['name']); ?></h2>

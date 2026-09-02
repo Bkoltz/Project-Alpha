@@ -22,7 +22,7 @@ $accessDetail = null;
 $projectSources = [];
 $status = [];
 $directoryError = false;
-$portalStatus = ['configured'=>false,'ready'=>false,'profile'=>null,'counts'=>['active_roots'=>0,'revoked_roots'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0,'active_workspaces'=>0,'pending'=>0,'failed'=>0]];
+$portalStatus = ['configured'=>false,'ready'=>false,'profile'=>null,'counts'=>['active_roots'=>0,'revoked_roots'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0,'active_workspaces'=>0,'pending'=>0,'failed'=>0,'failed_revocations'=>0]];
 $portalStatusError = false;
 
 try {
@@ -114,6 +114,12 @@ if (!empty($config['enabled'])) {
       <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="reconcile-client-portal">
       <button class="btn btn-primary" <?=empty($portalStatus['ready'])?'disabled aria-disabled="true"':''?>>Reconcile client portal</button>
     </form>
+    <?php if((int)($portalCounts['failed_revocations']??0)>0):?>
+      <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Retry failed client portal revocations against the unchanged retired receiver? The replacement connection will remain blocked until every revocation is acknowledged.')">
+        <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="retry-client-portal-revocations">
+        <button class="btn">Retry failed revocations (<?=(int)$portalCounts['failed_revocations']?>)</button>
+      </form>
+    <?php endif;?>
   <?php endif;?>
 </div>
 

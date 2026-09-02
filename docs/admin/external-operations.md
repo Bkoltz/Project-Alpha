@@ -144,6 +144,25 @@ Project Alpha will not activate a replacement producer or send client data to
 the new origin during that drain. After the queue reaches zero, save the visible
 connection again to reuse the same bound profile with the new contract. This
 staged rotation guarantees that only one portal producer can be active.
+After every revocation is acknowledged, any older dead-lettered non-revocation
+events are administratively resolved before the replacement is activated. The
+original dead-letter timestamp and error remain available for audit; revocation
+events are never resolved this way.
+Any catalog, pricing-preview, draft-quote, and relation-projection settings on
+the bound profile are retained through this disabled drain state and restored
+when the replacement portal contract becomes active.
+The authority service also rejects any legacy or direct settings action that
+would activate a second portal producer, so the single-producer rule is not
+limited to the simplified External Operations page.
+If a revocation exhausts its delivery attempts, the simplified synchronization
+status exposes an audited retry action. It resets only failed revocations and
+keeps their original receiver/key contract; it never suppresses a tombstone or
+allows the replacement connection to activate early.
+The same unresolved-revocation barrier applies to signing-key rotation, so the
+old verification key cannot disappear before a retried tombstone is accepted.
+Re-enabling the same connection also waits for those revocations; ordinary
+saves of an already-active unchanged connection never administratively resolve
+historical dead-lettered events.
 
 The daily snapshot is reconciliation and recovery, not a replacement for the
 event path. Account email, display name, PA role, active state, and explicit-access

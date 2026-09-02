@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Workflows;
 
 use App\Services\PortalClientProvisioningService;
+use App\Services\PortalAuthorityService;
 use PDO;
 use PHPUnit\Framework\TestCase;
 
@@ -197,6 +198,131 @@ SQL);
             $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
             self::assertSame('replacement_operations',$profile['application_key']);self::assertSame('portal-v2',$profile['delivery_key_id']);
             self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
+        });
+    }
+
+    public function testOriginRotationAdministrativelyResolvesOldDeadLetteredNormalRowsOnlyAfterRevocationsDrain():void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $profileId=(int)$this->service->configureConnection($this->pdo,$this->connection('generic_operations','https://old.example.test/events'),7);
+            $this->activateWorkspace($profileId);
+            $this->pdo->prepare("INSERT INTO portal_projection_outbox(integration_profile_id,delivery_id,workspace_public_id,schema_version,source_sequence,delivery_kind,route_type,is_revocation,destination_url,signing_key_id,payload_json,dead_lettered_at,last_error_code)VALUES(?,'old-dead-letter','workspace-legacy',3,1,'event','portal',0,'https://old.example.test/api/internal/project-alpha/portal-v2','portal-v1','{}',CURRENT_TIMESTAMP,'transport_failed')")->execute([$profileId]);
+
+            $new=$this->connection('generic_operations','https://new.example.test/events');
+            $this->service->configureConnection($this->pdo,$new,7);
+            self::assertNull($this->pdo->query("SELECT delivered_at FROM portal_projection_outbox WHERE delivery_id='old-dead-letter'")->fetchColumn()?:null,'A dead-lettered normal event must remain unresolved while revocations are pending.');
+
+            $this->pdo->exec('UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP WHERE is_revocation=1');
+            $this->service->configureConnection($this->pdo,$new,7);
+
+            self::assertNotFalse($this->pdo->query("SELECT delivered_at FROM portal_projection_outbox WHERE delivery_id='old-dead-letter'")->fetchColumn());
+            self::assertSame('transport_failed',$this->pdo->query("SELECT last_error_code FROM portal_projection_outbox WHERE delivery_id='old-dead-letter'")->fetchColumn(),'The original failure remains auditable.');
+            self::assertSame('https://new.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame(1,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_integration_audit WHERE action='portal.client_provisioning.retired_events_resolved'")->fetchColumn());
+        });
+    }
+
+    public function testRotationPreservesNonPortalCapabilityContract():void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $profileId=(int)$this->service->configureConnection($this->pdo,$this->connection('generic_operations','https://old.example.test/events'),7);
+            $this->pdo->exec("UPDATE portal_integration_profiles SET relation_projection_enabled=1,catalog_projection_enabled=1,pricing_preview_enabled=1,draft_quote_enabled=1,pricing_source='pricing-v1',draft_source='draft-v1',catalog_route='https://catalog.example.test/v1' WHERE id={$profileId}");
+            $this->activateWorkspace($profileId);
+
+            $new=$this->connection('generic_operations','https://new.example.test/events');
+            $this->service->configureConnection($this->pdo,$new,7);
+            $retired=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
+            self::assertSame(0,(int)$retired['enabled']);
+            self::assertSame([1,1,1,1],array_map('intval',[$retired['relation_projection_enabled'],$retired['catalog_projection_enabled'],$retired['pricing_preview_enabled'],$retired['draft_quote_enabled']]));
+            self::assertSame('pricing-v1',$retired['pricing_source']);self::assertSame('draft-v1',$retired['draft_source']);
+
+            $this->pdo->exec('UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP WHERE is_revocation=1');
+            $this->service->configureConnection($this->pdo,$new,7);
+            $active=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
+            self::assertSame(1,(int)$active['enabled']);self::assertSame(1,(int)$active['portal_projection_enabled']);
+            self::assertSame([1,1,1,1],array_map('intval',[$active['relation_projection_enabled'],$active['catalog_projection_enabled'],$active['pricing_preview_enabled'],$active['draft_quote_enabled']]));
+            self::assertSame('pricing-v1',$active['pricing_source']);self::assertSame('draft-v1',$active['draft_source']);
+            self::assertSame('https://catalog.example.test/v1',$active['catalog_route']);
+        });
+    }
+
+    public function testLegacyProfileActionCannotEnableASecondPortalProducer():void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $this->service->configureConnection($this->pdo,$this->connection('generic_operations','https://primary.example.test/events'),7);
+            $this->pdo->exec("INSERT INTO portal_integration_profiles(application_key,display_label,enabled,portal_projection_enabled)VALUES('legacy_secondary','Legacy secondary',0,0)");
+            $secondaryId=(int)$this->pdo->lastInsertId();
+            try{
+                (new PortalAuthorityService())->saveProfile($this->pdo,[
+                    'profile_id'=>$secondaryId,'application_key'=>'legacy_secondary','display_label'=>'Legacy secondary',
+                    'enabled'=>1,'portal_projection_enabled'=>1,'portal_route'=>'https://secondary.example.test/portal',
+                ],7);
+                self::fail('A second active portal producer must be rejected.');
+            }catch(\DomainException$error){self::assertStringContainsString('Another client portal producer',$error->getMessage());}
+            self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1')->fetchColumn());
+            self::assertSame(0,(int)$this->pdo->query("SELECT enabled FROM portal_integration_profiles WHERE id={$secondaryId}")->fetchColumn());
+        });
+    }
+
+    public function testFailedRevocationRequiresAuditedRetryAndKeepsOldContractUntilDelivered():void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $profileId=(int)$this->service->configureConnection($this->pdo,$this->connection('generic_operations','https://old.example.test/events'),7);
+            $this->activateWorkspace($profileId);
+            $new=$this->connection('generic_operations','https://new.example.test/events');
+            $this->service->configureConnection($this->pdo,$new,7);
+            $this->pdo->exec("UPDATE portal_projection_outbox SET attempts=12,dead_lettered_at=CURRENT_TIMESTAMP,last_error_code='transport_failed' WHERE is_revocation=1");
+
+            self::assertSame($profileId,$this->service->configureConnection($this->pdo,$new,7));
+            self::assertSame('https://old.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame(1,(int)$this->service->status($this->pdo,'generic_operations')['counts']['failed_revocations']);
+            try{
+                (new \App\Services\PortalProjectionDeliveryConfigService())->saveProfile($this->pdo,$profileId,[
+                    'delivery_enabled'=>1,'delivery_key_id'=>'portal-v2','delivery_secret'=>str_repeat('b',32),
+                ],7);
+                self::fail('A failed revocation must block signing-key rotation.');
+            }catch(\DomainException$error){self::assertStringContainsString('pending projection records',$error->getMessage());}
+
+            self::assertSame(1,$this->service->retryFailedRevocations($this->pdo,'generic_operations',7));
+            $retried=$this->pdo->query('SELECT * FROM portal_projection_outbox WHERE is_revocation=1')->fetch(PDO::FETCH_ASSOC);
+            self::assertNull($retried['dead_lettered_at']);self::assertSame(0,(int)$retried['attempts']);self::assertSame('revocation_retry_requested',$retried['last_error_code']);
+            self::assertSame(1,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_integration_audit WHERE action='portal.client_provisioning.revocations_requeued'")->fetchColumn());
+            self::assertSame('https://old.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+
+            $this->pdo->exec('UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP WHERE is_revocation=1');
+            $this->service->configureConnection($this->pdo,$new,7);
+            self::assertSame('https://new.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+        });
+    }
+
+    public function testSameContractCannotReactivateUntilDisableRevocationDrains():void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $enabled=$this->connection('generic_operations','https://same.example.test/events');
+            $profileId=(int)$this->service->configureConnection($this->pdo,$enabled,7);$this->activateWorkspace($profileId);
+            $disabled=$enabled;$disabled['enabled']=0;$disabled['configured_enabled']=false;
+            $this->service->configureConnection($this->pdo,$disabled,7);
+
+            $this->service->configureConnection($this->pdo,$enabled,7);
+            self::assertSame(0,(int)$this->pdo->query("SELECT enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame(1,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_projection_outbox WHERE is_revocation=1 AND delivered_at IS NULL")->fetchColumn());
+
+            $this->pdo->exec('UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP WHERE is_revocation=1');
+            $this->service->configureConnection($this->pdo,$enabled,7);
+            self::assertSame(1,(int)$this->pdo->query("SELECT enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+        });
+    }
+
+    public function testUnchangedActiveSaveDoesNotResolveHistoricalDeadLetter():void
+    {
+        $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
+            $config=$this->connection('generic_operations','https://stable.example.test/events');
+            $profileId=(int)$this->service->configureConnection($this->pdo,$config,7);
+            $this->pdo->prepare("INSERT INTO portal_projection_outbox(integration_profile_id,delivery_id,workspace_public_id,schema_version,source_sequence,delivery_kind,route_type,is_revocation,destination_url,signing_key_id,payload_json,dead_lettered_at,last_error_code)VALUES(?,'stable-dead-letter','workspace-legacy',3,1,'event','portal',0,'https://stable.example.test/api/internal/project-alpha/portal-v2','portal-v1','{}',CURRENT_TIMESTAMP,'transport_failed')")->execute([$profileId]);
+
+            $this->service->configureConnection($this->pdo,$config,7);
+            self::assertNull($this->pdo->query("SELECT delivered_at FROM portal_projection_outbox WHERE delivery_id='stable-dead-letter'")->fetchColumn()?:null);
+            self::assertSame(0,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_integration_audit WHERE action='portal.client_provisioning.retired_events_resolved'")->fetchColumn());
         });
     }
 
