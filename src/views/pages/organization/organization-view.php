@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/resolver_link_policy.php';
+require_once __DIR__ . '/../../../utils/external_ops.php';
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) {
@@ -19,6 +20,21 @@ $org = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$org) {
     echo '<p>Organization not found.</p>';
     return;
+}
+
+$portalRootAccess = null;
+$portalLoginConfigured = false;
+$canManagePortalLogin = user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), 'users.manage', 0)
+    && user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), 'settings.manage', 0);
+try {
+    $portalConfig = pa_external_ops_delivery_config($pdo);
+    $portalState = (new \App\Services\PortalClientProvisioningService())->status($pdo, (string)$portalConfig['application_key']);
+    $portalLoginConfigured = !empty($portalState['configured']);
+    $portalStmt = $pdo->prepare("SELECT * FROM portal_client_access_roots WHERE root_type='organization' AND root_public_id=?");
+    $portalStmt->execute([(string)$org['public_id']]);
+    $portalRootAccess = $portalStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (Throwable $error) {
+    error_log('[organization_view] Client portal status unavailable: ' . $error->getMessage());
 }
 
 // Get clients in this organization
@@ -197,6 +213,18 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
     <div class="org-view__stat"><span>Tax Exempt</span><strong><?php echo !empty($org['tax_exempt_file']) ? 'Yes' : 'No'; ?></strong></div>
   </div>
 
+  <?php if($portalLoginConfigured):$portalRootActive=(string)($portalRootAccess['access_state']??'active')==='active';?>
+    <div class="org-card" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <div><h3 class="org-card__title" style="margin-bottom:5px">Client portal login</h3><div style="color:var(--muted);font-size:13px"><?=$portalRootActive?'Allowed for eligible organization contacts. Each person still needs a verified sign-in and an explicit content grant.':'Revoked for this organization. Project Alpha records are preserved.'?></div></div>
+      <?php if($canManagePortalLogin):?>
+        <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('<?=$portalRootActive?'Revoke portal login for this organization and tombstone its workspace?':'Restore portal login and re-evaluate eligible organization contacts?'?>')">
+          <input type="hidden" name="csrf" value="<?=htmlspecialchars(csrf_token(),ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="action" value="set-client-portal-root"><input type="hidden" name="return_to" value="organization-view"><input type="hidden" name="organization_id" value="<?=$id?>"><input type="hidden" name="root_type" value="organization"><input type="hidden" name="root_public_id" value="<?=htmlspecialchars((string)$org['public_id'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="access_state" value="<?=$portalRootActive?'revoked':'active'?>">
+          <button class="org-view__button"><?=$portalRootActive?'Revoke portal login':'Restore portal login'?></button>
+        </form>
+      <?php endif;?>
+    </div>
+  <?php endif;?>
+
   <div class="org-view__layout">
     <aside class="org-view__sidebar">
       <div class="org-card">
@@ -244,6 +272,15 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
             </dd>
           </div>
         </dl>
+      </div>
+
+      <div class="org-card" id="assigned-services">
+        <?php
+        $portalServiceAssignmentSubjectType = 'organization';
+        $portalServiceAssignmentSubjectId = $id;
+        $portalServiceAssignmentEntityPermission = 'organizations.manage';
+        include __DIR__ . '/../../components/portal_service_assignments.php';
+        ?>
       </div>
 
       <div class="org-card">
@@ -409,7 +446,7 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
                 'excluded' => 'Excluded from resolver',
             ];
           ?>
-          <div class="org-dept-card">
+          <div class="org-dept-card" id="department-<?php echo $deptId; ?>">
             <div class="org-dept-card__header">
               <div>
                 <h4 class="org-dept-card__title"><?php echo e((string)$department['name']); ?></h4>
@@ -510,6 +547,18 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
                 <?php endif; ?>
               </div>
             </div>
+
+            <details style="margin:0 16px 14px;border-top:1px solid #e5e7eb;padding-top:12px">
+              <summary style="cursor:pointer;font-weight:700">Assigned services</summary>
+              <div style="margin-top:12px">
+                <?php
+                $portalServiceAssignmentSubjectType = 'department';
+                $portalServiceAssignmentSubjectId = $deptId;
+                $portalServiceAssignmentEntityPermission = 'organizations.manage';
+                include __DIR__ . '/../../components/portal_service_assignments.php';
+                ?>
+              </div>
+            </details>
 
             <form method="post" action="/?page=organization/organization-departments" onsubmit="return confirm('Delete this department? Contacts and clients will not be deleted.')" style="padding:0 16px 14px">
               <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">

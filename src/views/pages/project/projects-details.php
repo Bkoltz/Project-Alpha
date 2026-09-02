@@ -651,6 +651,15 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                 </div>
             </div>
 
+            <div class="project-panel" id="assigned-services">
+                <?php
+                $portalServiceAssignmentSubjectType = 'project';
+                $portalServiceAssignmentSubjectId = $projectId;
+                $portalServiceAssignmentEntityPermission = 'projects.edit';
+                include __DIR__ . '/../../components/portal_service_assignments.php';
+                ?>
+            </div>
+
             <?php if ($closeoutBlocked): ?>
                 <?php
                 $closeoutIsCompletion = $closeoutTarget === 'completed';

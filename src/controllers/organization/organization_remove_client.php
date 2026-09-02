@@ -22,7 +22,7 @@ if (!$stmt->fetchColumn()) {
 }
 
 // Remove client from organization by setting organization_id to NULL
-$projection=new App\Services\PortalProjectionMutationService();portal_projection_mutate($pdo,static fn():array=>$projection->lockedClientScopes($pdo,$client_id),static function()use($pdo,$client_id,$organization_id):void{$pdo->prepare('UPDATE clients SET organization_id=NULL,source_version=? WHERE id=? AND organization_id=?')->execute([portal_projection_source_version(),$client_id,$organization_id]);},static fn():array=>$projection->clientScopes($pdo,$client_id));
+$projection=new App\Services\PortalProjectionMutationService();portal_projection_mutate($pdo,static fn():array=>$projection->lockedClientScopes($pdo,$client_id),static function()use($pdo,$client_id,$organization_id):void{$pdo->prepare('UPDATE clients SET organization_id=NULL,source_version=? WHERE id=? AND organization_id=?')->execute([portal_projection_source_version(),$client_id,$organization_id]);},static fn():array=>$projection->clientScopes($pdo,$client_id),true);
 
 header('Location: /?page=organization/organization-view&id=' . $organization_id . '&client_removed=1');
 exit;

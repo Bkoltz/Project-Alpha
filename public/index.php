@@ -1055,7 +1055,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //   settings/link-test-connection - controller validates CSRF (csrf_validate)
     //   settings/link-resolver-run    - controller validates CSRF (csrf_validate)
     //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', '2fa-setup-action', '2fa-verify-action', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'settings/managed-delivery-test', 'settings/managed-delivery-send', 'settings/managed-delivery-revoke', 'settings/managed-delivery-retry', 'legal/tos-accept'];
+    // This controller resolves an entity-specific return path before validating
+    // its own CSRF token and authorization contract.
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', '2fa-setup-action', '2fa-verify-action', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'settings/managed-delivery-test', 'settings/managed-delivery-send', 'settings/managed-delivery-revoke', 'settings/managed-delivery-retry', 'legal/tos-accept', 'portal/service-assignments-handler'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -1198,6 +1200,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'client/clients-create' || $page === 'clients-create') {
         require_once __DIR__ . '/../src/controllers/client/clients_create.php';
+        exit;
+    }
+    if ($page === 'portal/service-assignments-handler') {
+        require_once __DIR__ . '/../src/controllers/portal/service_assignments_handler.php';
         exit;
     }
     if ($page === 'client/onboarding-invite') {

@@ -359,6 +359,10 @@ if(!empty($opsConfig['enabled'])){
 if($storedBusinessUnitId!==$businessUnitId)audit_log($pdo,'project.business_unit.changed','project',$id,['from'=>$storedBusinessUnitId?:null,'to'=>$businessUnitId?:null]);
 if($storedManagerUserId!==$managerUserId)audit_log($pdo,'project.manager.changed','project',$id,['from'=>$storedManagerUserId?:null,'to'=>$managerUserId?:null]);
 $portalProjection->afterMutation($pdo, array_merge($portalBeforeScopes, $portalProjection->projectScopes($pdo, $id)));
+(new \App\Services\PortalServiceAssignmentManager())->reconcileRoots(
+	$pdo,
+	array_merge($portalBeforeScopes, $portalProjection->projectScopes($pdo, $id))
+);
 $pdo->commit();
 } catch (DomainException $error) {
 	if ($pdo->inTransaction()) {

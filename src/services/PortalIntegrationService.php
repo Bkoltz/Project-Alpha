@@ -20,7 +20,7 @@ final class PortalIntegrationService
         $applicationKey = ExternalOpsIntegrationService::normalizeApplicationKey($applicationKey);
         $allowed = [
             'portal_projection_enabled', 'relation_projection_enabled', 'catalog_projection_enabled',
-            'pricing_preview_enabled', 'draft_quote_enabled',
+            'service_assignment_projection_enabled', 'pricing_preview_enabled', 'draft_quote_enabled',
         ];
         if (!in_array($capability, $allowed, true)) throw new DomainException('integration-capability-invalid');
         $statement = $pdo->prepare("SELECT * FROM portal_integration_profiles WHERE application_key=? AND enabled=1 AND {$capability}=1");

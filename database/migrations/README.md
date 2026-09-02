@@ -42,3 +42,15 @@ portal capability disabled. It adds durable command correlation/outcomes,
 incremental projection checkpoints, per-scope manager recovery state, and
 optional private pricing-range policy fields. It also permits the distinct
 `viewer.share.create` entitlement value without creating or enabling any grant.
+
+Migration `0079_client_portal_provisioning.sql` adds durable organization-root
+and standalone-client portal access controls plus fail-closed per-client login
+eligibility. It does not create identity-provider bindings or delivery grants;
+the post-migration reconciliation publishes only explicit invitation intent.
+
+Migration `0080_portal_service_assignment_projection.sql` adds the explicit,
+default-off service-assignment producer to the same External Operations profile,
+signed delivery credentials, and durable projection outbox. It does not infer
+assignments from catalog visibility, billing records, portal eligibility, or
+workspace membership. Migration `0081_portal_service_assignment_management_permission.sql`
+adds the separate staff permission used to administer those assignments.
