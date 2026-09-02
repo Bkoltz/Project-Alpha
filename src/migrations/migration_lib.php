@@ -327,7 +327,10 @@ function migration_required_columns_for_version(array $requiredColumns, int $thr
             'eligibility_status' => 79, 'review_reason' => 79, 'canonical_email' => 79,
             'source_version' => 79, 'last_reconciled_at' => 79, 'updated_by' => 79,
         ],
-        'portal_integration_profiles' => ['service_assignment_projection_enabled' => 80],
+        'portal_integration_profiles' => [
+            'service_assignment_projection_enabled' => 80,
+            'contact_assignment_projection_enabled' => 82,
+        ],
         'portal_service_assignments' => [
             'public_id' => 80, 'subject_type' => 80, 'subject_public_id' => 80,
             'service_public_id' => 80, 'active' => 80, 'effective_from' => 80,
@@ -457,7 +460,7 @@ function migration_schema_health(PDO $pdo, ?int $throughVersion = null): void
         'api_keys' => ['name', 'key_prefix', 'key_hash', 'scopes', 'allowed_ips', 'created_at', 'last_used_at', 'revoked_at'],
         'api_usage' => ['api_key_id', 'used_at'],
         'portal_integration_audit' => ['integration_profile_id','api_key_id','correlation_id','action','outcome','target_type','target_public_id','metadata_json'],
-        'portal_integration_profiles' => ['service_assignment_projection_enabled'],
+        'portal_integration_profiles' => ['service_assignment_projection_enabled', 'contact_assignment_projection_enabled'],
         'portal_service_assignments' => ['public_id','subject_type','subject_public_id','service_public_id','active','effective_from','effective_until','deleted_at'],
         'portal_service_assignment_projection_state' => ['integration_profile_id','source_generation','source_sequence','snapshot_hash'],
         'portal_service_assignment_projection_records' => ['integration_profile_id','assignment_public_id','source_version','payload_hash','record_json'],

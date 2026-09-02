@@ -19,12 +19,14 @@ final class PortalAuthorityService
         $label=trim((string)($input['display_label']??''));if($label===''||mb_strlen($label)>100)throw new DomainException('Integration display label is required and must be at most 100 characters.');
         $pricingSource=$this->nullableAscii($input['pricing_source']??null,100);$draftSource=$this->nullableAscii($input['draft_source']??null,100);
         $serviceAssignmentsRequested=array_key_exists('service_assignment_projection_enabled',$input)?!empty($input['service_assignment_projection_enabled']):null;
-        $enabled=!empty($input['enabled']);$portal=!empty($input['portal_projection_enabled']);$relations=!empty($input['relation_projection_enabled']);$catalog=!empty($input['catalog_projection_enabled']);$serviceAssignments=$serviceAssignmentsRequested??false;$pricing=!empty($input['pricing_preview_enabled']);$draft=!empty($input['draft_quote_enabled']);
+        $contactAssignmentsRequested=array_key_exists('contact_assignment_projection_enabled',$input)?!empty($input['contact_assignment_projection_enabled']):null;
+        $enabled=!empty($input['enabled']);$portal=!empty($input['portal_projection_enabled']);$relations=!empty($input['relation_projection_enabled']);$contactAssignments=$contactAssignmentsRequested??false;$catalog=!empty($input['catalog_projection_enabled']);$serviceAssignments=$serviceAssignmentsRequested??false;$pricing=!empty($input['pricing_preview_enabled']);$draft=!empty($input['draft_quote_enabled']);
         // A disabled profile may retain its capability intent while portal
         // revocations drain. The dependency must hold whenever the producer is
         // active, but clearing it during retirement would silently lose the
         // contract that must be restored after rotation.
         if($enabled&&$relations&&!$portal)throw new DomainException('Relation projection requires portal projection.');
+        if($enabled&&$contactAssignments&&(!$portal||!$relations))throw new DomainException('Contact assignment projection requires portal relation projection.');
         if($enabled&&$serviceAssignments&&!$portal)throw new DomainException('Service assignment projection requires portal projection.');
         if($pricing&&$pricingSource===null)throw new DomainException('Pricing source is required before pricing preview can be enabled.');
         if($draft&&$draftSource===null)throw new DomainException('Draft source is required before draft creation can be enabled.');
@@ -35,7 +37,9 @@ final class PortalAuthorityService
                 if($owns)$pdo->beginTransaction();
                 $current=PortalProjectionService::lockProfileContract($pdo,$id);
                 if($serviceAssignmentsRequested===null)$serviceAssignments=!empty($current['service_assignment_projection_enabled']);
+                if($contactAssignmentsRequested===null)$contactAssignments=!empty($current['contact_assignment_projection_enabled']);
                 if($enabled&&$serviceAssignments&&!$portal)throw new DomainException('Service assignment projection requires portal projection.');
+                if($enabled&&$contactAssignments&&(!$portal||!$relations))throw new DomainException('Contact assignment projection requires portal relation projection.');
                 if($enabled&&$portal)$this->assertOnlyPortalProducer($pdo,$id);
                 $revoking=!empty($current['enabled'])&&!empty($current['portal_projection_enabled'])&&(!$enabled||!$portal);
                 $catalogStopping=!empty($current['enabled'])&&!empty($current['catalog_projection_enabled'])&&(!$enabled||!$catalog);
@@ -57,8 +61,10 @@ final class PortalAuthorityService
                     }
                 }
                 $revoked=$revoking?$this->queueProfileRevocations($pdo,$current):0;
-                $pdo->prepare('UPDATE portal_integration_profiles SET application_key=?,display_label=?,enabled=?,portal_projection_enabled=?,relation_projection_enabled=?,catalog_projection_enabled=?,service_assignment_projection_enabled=?,pricing_preview_enabled=?,draft_quote_enabled=?,pricing_source=?,draft_source=?,portal_route=?,catalog_route=?,updated_by=? WHERE id=?')
-                    ->execute([$key,$label,$enabled,$portal,$relations,$catalog,$serviceAssignments,$pricing,$draft,$pricingSource,$draftSource,$portalRoute,$catalogRoute,$actorId,$id]);
+                $oldSchema=!empty($current['contact_assignment_projection_enabled'])?4:(!empty($current['relation_projection_enabled'])?3:2);$newSchema=$contactAssignments?4:($relations?3:2);
+                $pdo->prepare('UPDATE portal_integration_profiles SET application_key=?,display_label=?,enabled=?,portal_projection_enabled=?,relation_projection_enabled=?,contact_assignment_projection_enabled=?,catalog_projection_enabled=?,service_assignment_projection_enabled=?,pricing_preview_enabled=?,draft_quote_enabled=?,pricing_source=?,draft_source=?,portal_route=?,catalog_route=?,updated_by=? WHERE id=?')
+                    ->execute([$key,$label,$enabled,$portal,$relations,$contactAssignments,$catalog,$serviceAssignments,$pricing,$draft,$pricingSource,$draftSource,$portalRoute,$catalogRoute,$actorId,$id]);
+                if(!empty($current['enabled'])&&!empty($current['portal_projection_enabled'])&&$enabled&&$portal&&$oldSchema!==$newSchema)$this->queueReplacementWorkspaceSnapshots($pdo,$id);
                 if($revoking)$this->audit($pdo,$id,null,'portal.profile.revocation_queued','profile',(string)$id,['workspace_count'=>$revoked,'actor_id'=>$actorId]);
                 if($owns)$pdo->commit();
                 return$id;
@@ -67,7 +73,7 @@ final class PortalAuthorityService
                 throw$e;
             }
         }
-        $owns=!$pdo->inTransaction();try{if($owns)$pdo->beginTransaction();if($enabled&&$portal)$this->assertOnlyPortalProducer($pdo,null);$pdo->prepare('INSERT INTO portal_integration_profiles (application_key,display_label,enabled,portal_projection_enabled,relation_projection_enabled,catalog_projection_enabled,service_assignment_projection_enabled,pricing_preview_enabled,draft_quote_enabled,pricing_source,draft_source,portal_route,catalog_route,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute([$key,$label,$enabled,$portal,$relations,$catalog,$serviceAssignments,$pricing,$draft,$pricingSource,$draftSource,$portalRoute,$catalogRoute,$actorId,$actorId]);$created=(int)$pdo->lastInsertId();if($owns)$pdo->commit();return$created;}catch(Throwable$e){if($owns&&$pdo->inTransaction())$pdo->rollBack();throw$e;}
+        $owns=!$pdo->inTransaction();try{if($owns)$pdo->beginTransaction();if($enabled&&$portal)$this->assertOnlyPortalProducer($pdo,null);$pdo->prepare('INSERT INTO portal_integration_profiles (application_key,display_label,enabled,portal_projection_enabled,relation_projection_enabled,contact_assignment_projection_enabled,catalog_projection_enabled,service_assignment_projection_enabled,pricing_preview_enabled,draft_quote_enabled,pricing_source,draft_source,portal_route,catalog_route,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute([$key,$label,$enabled,$portal,$relations,$contactAssignments,$catalog,$serviceAssignments,$pricing,$draft,$pricingSource,$draftSource,$portalRoute,$catalogRoute,$actorId,$actorId]);$created=(int)$pdo->lastInsertId();if($owns)$pdo->commit();return$created;}catch(Throwable$e){if($owns&&$pdo->inTransaction())$pdo->rollBack();throw$e;}
     }
 
     public function saveWorkspace(PDO $pdo,int $profileId,string $rootType,string $rootPublicId,string $displayName,int $actorId):string
@@ -206,6 +212,7 @@ final class PortalAuthorityService
         $insert=$pdo->prepare('INSERT INTO portal_principal_clients (portal_principal_id,client_id,created_by) VALUES (?,?,?)');foreach($clientIds as$clientId)$insert->execute([$principalId,$clientId,$actorId]);
     }
     private function upsertViewerShareEffect(PDO$pdo,int$principalId,string$scopeType,string$scopePublicId,string$effect,bool$active,int$actorId):void{$existing=$pdo->prepare("SELECT id FROM portal_v2_entitlements WHERE portal_principal_id=? AND capability='viewer.share.create' AND effect=? AND scope_type=? AND scope_public_id=?");$existing->execute([$principalId,$effect,$scopeType,$scopePublicId]);$id=$existing->fetchColumn();if($id)$pdo->prepare('UPDATE portal_v2_entitlements SET active=?,source_version=?,valid_from=CURRENT_TIMESTAMP,expires_at=NULL,updated_by=? WHERE id=?')->execute([$active?1:0,self::version(),$actorId,(int)$id]);elseif($active)$pdo->prepare("INSERT INTO portal_v2_entitlements (public_id,portal_principal_id,capability,effect,scope_type,scope_public_id,source_version,active,valid_from,created_by,updated_by) VALUES (?,?,'viewer.share.create',?,?,?,?,1,CURRENT_TIMESTAMP,?,?)")->execute([bin2hex(random_bytes(16)),$principalId,$effect,$scopeType,$scopePublicId,self::version(),$actorId,$actorId]);}
+    private function queueReplacementWorkspaceSnapshots(PDO$pdo,int$profileId):void{$profile=$this->profileRequired($pdo,$profileId);$workspaces=$pdo->prepare('SELECT w.public_id FROM portal_integration_profile_workspaces pw JOIN portal_v2_workspaces w ON w.id=pw.workspace_id AND w.active=1 WHERE pw.profile_id=? AND pw.active=1 ORDER BY w.public_id');$workspaces->execute([$profileId]);$projection=new PortalProjectionService();foreach($workspaces->fetchAll(PDO::FETCH_COLUMN)as$workspaceId)$projection->queueWorkspaceSnapshot($pdo,$profile,(string)$workspaceId);}
     private function queueEveryEnabledProfile(PDO$pdo,string$workspaceId):void{$profiles=$pdo->prepare('SELECT p.* FROM portal_integration_profiles p JOIN portal_integration_profile_workspaces pw ON pw.profile_id=p.id AND pw.active=1 JOIN portal_v2_workspaces w ON w.id=pw.workspace_id WHERE p.enabled=1 AND p.portal_projection_enabled=1 AND w.public_id=? ORDER BY p.id');$profiles->execute([$workspaceId]);$projection=new PortalProjectionService();foreach($profiles->fetchAll(PDO::FETCH_ASSOC)as$profile)$projection->queueWorkspaceChanges($pdo,$profile,$workspaceId);}
     /** @return list<string> */
     private function affectedPrincipalWorkspaces(PDO$pdo,int$principalId,string$selectedWorkspace):array

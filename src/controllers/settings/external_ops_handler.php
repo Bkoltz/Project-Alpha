@@ -39,6 +39,7 @@ try {
             // integration config or deployment secrets. It remains an
             // explicit, administrator-controlled checkbox on the one connection.
             $config['service_assignment_projection_enabled'] = !empty($_POST['service_assignment_projection_enabled']);
+            $config['contact_assignment_projection_enabled'] = !empty($_POST['contact_assignment_projection_enabled']);
             $portalProvisioning = new PortalClientProvisioningService();
             $profileId = $portalProvisioning->configureConnection($pdo, $config, $actorUserId);
             $portalConnectionStatus = $portalProvisioning->status($pdo, (string)$config['application_key']);

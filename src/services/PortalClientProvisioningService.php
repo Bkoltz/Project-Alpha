@@ -46,6 +46,9 @@ final class PortalClientProvisioningService
         $serviceAssignmentsEnabled = array_key_exists('service_assignment_projection_enabled', $externalConfig)
             ? !empty($externalConfig['service_assignment_projection_enabled'])
             : !empty($existing['service_assignment_projection_enabled']);
+        $contactAssignmentsEnabled = array_key_exists('contact_assignment_projection_enabled', $externalConfig)
+            ? !empty($externalConfig['contact_assignment_projection_enabled'])
+            : !empty($existing['contact_assignment_projection_enabled']);
 
         $contractChanged = $existing && (
             !hash_equals((string)$existing['application_key'], $applicationKey)
@@ -96,6 +99,7 @@ final class PortalClientProvisioningService
             'enabled' => 1,
             'portal_projection_enabled' => 1,
             'relation_projection_enabled' => 1,
+            'contact_assignment_projection_enabled' => $contactAssignmentsEnabled,
             'catalog_projection_enabled' => !empty($existing['catalog_projection_enabled']),
             'service_assignment_projection_enabled' => $serviceAssignmentsEnabled,
             'pricing_preview_enabled' => !empty($existing['pricing_preview_enabled']),
@@ -405,6 +409,7 @@ final class PortalClientProvisioningService
             'profile_id'=>(int)$profile['id'],'application_key'=>(string)$profile['application_key'],'display_label'=>(string)$profile['display_label'],
             'enabled'=>0,'portal_projection_enabled'=>0,
             'relation_projection_enabled'=>!empty($profile['relation_projection_enabled']),
+            'contact_assignment_projection_enabled'=>!empty($profile['contact_assignment_projection_enabled']),
             'catalog_projection_enabled'=>!empty($profile['catalog_projection_enabled']),
             'service_assignment_projection_enabled'=>!empty($profile['service_assignment_projection_enabled']),
             'pricing_preview_enabled'=>!empty($profile['pricing_preview_enabled']),

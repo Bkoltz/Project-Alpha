@@ -187,6 +187,15 @@ connection rotation queues a new complete snapshot against the replacement
 contract. Leave the option clear until migrations 0080 and 0081 are applied and
 the receiver capability is verified.
 
+The optional contact-assignment producer also uses this same profile, route,
+workspace allowlist, credentials, and portal outbox. **Publish scoped contact
+roles to the client portal** is disabled by default and requires portal and
+relation projection. It publishes only explicit department and project contact
+assignments; it never creates login or content access. Enabling or disabling it
+queues a complete replacement portal generation. Leave it clear until migration
+0082 and the receiver's schema-v4 capability are deployed. See
+[Portal contact-assignment projection v4](../architecture/portal-contact-assignment-projection-v4.md).
+
 If a revocation exhausts its delivery attempts, the simplified synchronization
 status exposes an audited retry action. It resets only failed revocations and
 keeps their original receiver/key contract; it never suppresses a tombstone or

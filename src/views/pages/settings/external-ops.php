@@ -90,6 +90,8 @@ if (!empty($config['enabled'])) {
       <label class="field"><span class="label">Maximum attempts</span><input class="input" type="number" name="max_attempts" min="1" max="100" value="<?=(int)$config['max_attempts']?>"></label>
       <label class="check-row" style="grid-column:1/-1"><input type="checkbox" name="service_assignment_projection_enabled" value="1" <?=!empty($portalStatus['profile']['service_assignment_projection_enabled'])?'checked':''?>> Publish assigned services to the client portal</label>
       <small style="grid-column:1/-1">Default off. This publishes explicit service availability through the same signed connection. It never grants portal login, workspace membership, file access, billing access, or notifications.</small>
+      <label class="check-row" style="grid-column:1/-1"><input type="checkbox" name="contact_assignment_projection_enabled" value="1" <?=!empty($portalStatus['profile']['contact_assignment_projection_enabled'])?'checked':''?>> Publish scoped contact roles to the client portal</label>
+      <small style="grid-column:1/-1">Default off. This publishes explicit department and project contact roles as informational metadata. It never creates a login, membership, entitlement, file grant, billing authority, or notification recipient.</small>
     </div>
     <button class="btn btn-primary">Save integration</button>
   </form>

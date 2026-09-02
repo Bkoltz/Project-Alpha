@@ -19,7 +19,7 @@ final class PortalIntegrationService
     {
         $applicationKey = ExternalOpsIntegrationService::normalizeApplicationKey($applicationKey);
         $allowed = [
-            'portal_projection_enabled', 'relation_projection_enabled', 'catalog_projection_enabled',
+            'portal_projection_enabled', 'relation_projection_enabled', 'contact_assignment_projection_enabled', 'catalog_projection_enabled',
             'service_assignment_projection_enabled', 'pricing_preview_enabled', 'draft_quote_enabled',
         ];
         if (!in_array($capability, $allowed, true)) throw new DomainException('integration-capability-invalid');
