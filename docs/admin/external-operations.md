@@ -61,6 +61,27 @@ shows only client-portal health and one idempotent reconcile/repair action. The
 ordinary organization and client pages contain the relevant portal-login
 revoke/restore action.
 
+Historical clients do not require that repair button. Once the complete signed
+producer preflight is ready, `reconcile_client_portal.php` automatically discovers
+unprocessed organization and standalone roots every minute, at most 25 roots per
+run. Each root, its eligibility, relationships, projection outbox records, and
+completion marker commit atomically. Restarts resume unfinished roots; repeated
+runs do not duplicate workspaces, principals, or published snapshots. Producer
+application-key/receiver changes invalidate the old completion fingerprint.
+This job uses the portal producer gates, like the outbox sender, rather than the
+unrelated automatic-invoice `cron_enabled` preference. It sends no email.
+
+Progress is recorded in `portal_client_provisioning_backfill`,
+`portal_integration_audit`, and the `portal_client_provisioning_backfill` entry in
+`cron_job_runs`. A failed root rolls back without blocking the rest. It retries
+after 1, 2, 4, and 8 minutes, stopping after five attempts. Logs include counts;
+root records include only the stable `storage_failure`/`projection_failure`
+category and a diagnostic hash, not raw customer data or credentials. Terminal
+failures keep cron health failed until repaired. After correcting the cause,
+the existing audited reconcile/repair action also clears its backfill failure
+by marking successfully reconciled roots complete. Never remove access-control
+or eligibility rows to retry: those preserve manual revocations.
+
 Project Alpha automatically publishes login eligibility for an active human
 contact only when it has one valid canonical email that is unique among active
 client records. Missing, invalid, or duplicate email, an unclassified standalone

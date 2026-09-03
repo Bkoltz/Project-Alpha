@@ -10,6 +10,7 @@ On container startup, the entrypoint runs a scheduled backup catch-up check and 
 |---|---|---|
 | Every minute | `process_notification_relay.php` | Process the disabled-by-default internal notification relay queue |
 | Every minute | `send_portal_projection_outbox.php` | Deliver enabled, signed portal projection outbox records with bounded retries |
+| Every minute | `reconcile_client_portal.php` | Resume the bounded historical client-portal provisioning backfill after producer preflight is ready |
 | Daily 02:00 | `generate_recurring_invoices.php` | Generate due long-term invoices and catch up missed periods |
 | Daily 02:15 | `generate_recurring_expenses.php` | Generate due recurring expenses once per scheduled occurrence |
 | Daily 02:30 | `purge_mileage_tracking_points.php` | Delete finalized GPS route points after 90 days and discarded points immediately |
@@ -54,6 +55,7 @@ docker compose exec cron php /var/www/src/cron/generate_recurring_invoices.php
 docker compose exec cron php /var/www/src/cron/generate_recurring_expenses.php
 docker compose exec cron php /var/www/src/cron/daily_link_resolver.php
 docker compose exec cron php /var/www/src/cron/send_portal_projection_outbox.php
+docker compose exec cron php /var/www/src/cron/reconcile_client_portal.php
 ```
 
 ## Application Settings
@@ -67,6 +69,12 @@ The container schedule always starts with the service. Individual scripts also h
 - Stripe and SMTP configuration
 - internal notification relay enablement and policy (disabled by default)
 - portal authoritative mutation and outbound delivery gates, plus each profile's delivery switch (all disabled by default)
+
+Historical portal provisioning is automatic after all of those producer
+prerequisites are ready. It is profile-scoped, idempotent, and bounded to 25
+roots per run. Future client mutations continue through the authoritative
+mutation hook. Explicit root or client revocations remain authoritative and no
+invitation email is sent.
 
 Database backups are infrastructure protection and do not depend on the automatic-invoice `cron_enabled` setting.
 

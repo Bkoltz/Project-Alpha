@@ -136,6 +136,12 @@ final class PortalClientProvisioningService
             'receiver_host' => (string)(parse_url($receiver, PHP_URL_HOST) ?: ''),
         ]);
         $this->bindProfile($pdo, $profileId);
+        if ($retiredState) {
+            // A disabled producer may be re-enabled with the same contract.
+            // Its previous completion markers must not suppress re-publication.
+            $pdo->prepare("UPDATE portal_client_provisioning_backfill SET state='retry',attempts=0,next_attempt_at=?,last_error_code=NULL,completed_at=NULL WHERE integration_profile_id=?")
+                ->execute([gmdate('Y-m-d H:i:s'),$profileId]);
+        }
         return $profileId;
     }
 
@@ -244,6 +250,9 @@ final class PortalClientProvisioningService
             if (count($scopes) > 1000) throw new DomainException('Client portal reconciliation is limited to 1000 roots per run.');
             $summary = $this->ensureScopes($pdo, $scopes, $actorId, $profile);
             (new PortalProjectionMutationService())->afterMutation($pdo, $scopes, true);
+            foreach ($scopes as $scope) {
+                $this->saveBackfillState($pdo, (int)$profile['id'], $this->backfillContractFingerprint($profile), $scope, 'complete', 0, null, null);
+            }
             $this->audit($pdo, (int)$profile['id'], 'portal.client_provisioning.reconciled', 'profile', (string)$profile['id'], $summary + ['actor_id'=>$actorId]);
             if ($owns) $pdo->commit();
             return $summary;
@@ -251,6 +260,123 @@ final class PortalClientProvisioningService
             if ($owns && $pdo->inTransaction()) $pdo->rollBack();
             throw $error;
         }
+    }
+
+    /**
+     * Automatically provision historical roots once the complete producer
+     * contract is ready. Each root commits with its projection and completion
+     * marker; a process crash therefore leaves no half-provisioned root.
+     *
+     * @return array{ready:bool,considered:int,completed:int,retrying:int,failed:int,remaining:int}
+     */
+    public function reconcileHistoricalBatch(PDO $pdo, string $applicationKey, int $limit = 25): array
+    {
+        if ($pdo->inTransaction()) throw new DomainException('Historical reconciliation owns its transactions.');
+        if ($limit < 1 || $limit > 100) throw new DomainException('Historical reconciliation batch size must be between 1 and 100.');
+        $summary = ['ready'=>false,'considered'=>0,'completed'=>0,'retrying'=>0,'failed'=>0,'remaining'=>0];
+        if (!$this->status($pdo, $applicationKey)['ready']) return $summary;
+        $profile = $this->requireReadyProfile($pdo, $applicationKey);
+        $profileId = (int)$profile['id'];
+        $this->assertOnlyProducer($pdo, $profileId);
+        $fingerprint = $this->backfillContractFingerprint($profile);
+        $summary['ready'] = true;
+        $sql = 'SELECT roots.root_type,roots.root_public_id FROM ('.$this->scopeQuery().') roots
+            LEFT JOIN portal_client_provisioning_backfill b ON b.integration_profile_id=? AND b.root_type=roots.root_type AND b.root_public_id=roots.root_public_id
+            WHERE b.integration_profile_id IS NULL OR b.contract_fingerprint<>? OR (b.state=\'retry\' AND b.next_attempt_at<=?)
+            ORDER BY CASE WHEN b.integration_profile_id IS NULL THEN 0 ELSE 1 END,roots.root_type,roots.root_public_id LIMIT '.$limit;
+        $statement = $pdo->prepare($sql);
+        $statement->execute([$profileId, $fingerprint, gmdate('Y-m-d H:i:s')]);
+        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $scope) {
+            $summary['considered']++;
+            try {
+                $pdo->beginTransaction();
+                PortalProjectionService::lockProfileContract($pdo, $profileId);
+                // Recheck under the shared producer lock: disable/rotation or
+                // another cron run may have raced the initial candidate query.
+                if (!$this->status($pdo, $applicationKey)['ready']) {
+                    $pdo->rollBack();
+                    $summary['ready'] = false;
+                    break;
+                }
+                $state = $this->backfillState($pdo, $profileId, $scope);
+                if ($state && $state['contract_fingerprint'] === $fingerprint && ($state['state'] !== 'retry' || (string)$state['next_attempt_at'] > gmdate('Y-m-d H:i:s'))) {
+                    $pdo->commit();
+                    continue;
+                }
+                $currentProfile = $this->requireReadyProfile($pdo, $applicationKey);
+                if ((int)$currentProfile['id'] !== $profileId || $this->backfillContractFingerprint($currentProfile) !== $fingerprint) {
+                    $pdo->rollBack();
+                    $summary['ready'] = false;
+                    break;
+                }
+                $this->assertOnlyProducer($pdo, $profileId);
+                // Older configured producers may predate the unified binding.
+                // Bind only this fully preflighted, unique producer so the
+                // normal mutation hook cannot silently skip provisioning.
+                $this->bindProfile($pdo, $profileId);
+                // The mutation service provisions exactly once, then publishes
+                // its complete relationship graph in this same transaction.
+                (new PortalProjectionMutationService())->afterMutation($pdo, [$scope], true);
+                $this->saveBackfillState($pdo, $profileId, $fingerprint, $scope, 'complete', (int)($state['attempts'] ?? 0), null, null);
+                $this->audit($pdo, $profileId, 'portal.client_provisioning.backfill_completed', $scope['root_type'], $scope['root_public_id'], ['automatic'=>true]);
+                $pdo->commit();
+                $summary['completed']++;
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                $code = ($error instanceof \PDOException ? 'storage_failure:' : 'projection_failure:').substr(hash('sha256', get_class($error).':'.$error->getMessage()), 0, 12);
+                $pdo->beginTransaction();
+                try {
+                    PortalProjectionService::lockProfileContract($pdo, $profileId);
+                    $state = $this->backfillState($pdo, $profileId, $scope);
+                    $failureProfile = $this->profileById($pdo, $profileId);
+                    if ($failureProfile && $this->backfillContractFingerprint($failureProfile) === $fingerprint
+                        && (!$state || $state['contract_fingerprint'] !== $fingerprint || $state['state'] !== 'complete')) {
+                        $attempts = ($state && $state['contract_fingerprint'] === $fingerprint ? (int)$state['attempts'] : 0) + 1;
+                        $failed = $attempts >= 5;
+                        $next = $failed ? null : gmdate('Y-m-d H:i:s', time() + min(3600, 60 * (2 ** ($attempts - 1))));
+                        $this->saveBackfillState($pdo, $profileId, $fingerprint, $scope, $failed ? 'failed' : 'retry', $attempts, $next, $code);
+                        $this->audit($pdo, $profileId, 'portal.client_provisioning.backfill_failed', $scope['root_type'], $scope['root_public_id'], ['automatic'=>true,'attempts'=>$attempts,'error_code'=>$code,'terminal'=>$failed]);
+                        $summary[$failed ? 'failed' : 'retrying']++;
+                    }
+                    $pdo->commit();
+                } catch (Throwable $persistenceError) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    throw $persistenceError;
+                }
+            }
+        }
+        $count = $pdo->prepare('SELECT COUNT(*) FROM ('.$this->scopeQuery().') roots LEFT JOIN portal_client_provisioning_backfill b ON b.integration_profile_id=? AND b.root_type=roots.root_type AND b.root_public_id=roots.root_public_id WHERE b.integration_profile_id IS NULL OR b.contract_fingerprint<>? OR b.state<>\'complete\'');
+        $count->execute([$profileId, $fingerprint]);
+        $summary['remaining'] = (int)$count->fetchColumn();
+        $failed = $pdo->prepare("SELECT COUNT(*) FROM portal_client_provisioning_backfill WHERE integration_profile_id=? AND contract_fingerprint=? AND state='failed'");
+        $failed->execute([$profileId,$fingerprint]);
+        $summary['failed'] = (int)$failed->fetchColumn();
+        return $summary;
+    }
+
+    /** @param array{root_type:string,root_public_id:string} $scope @return array<string,mixed>|false */
+    private function backfillState(PDO $pdo, int $profileId, array $scope): array|false
+    {
+        $statement = $pdo->prepare('SELECT * FROM portal_client_provisioning_backfill WHERE integration_profile_id=? AND root_type=? AND root_public_id=?');
+        $statement->execute([$profileId, $scope['root_type'], $scope['root_public_id']]);
+        return $statement->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /** @param array{root_type:string,root_public_id:string} $scope */
+    private function saveBackfillState(PDO $pdo, int $profileId, string $fingerprint, array $scope, string $state, int $attempts, ?string $next, ?string $code): void
+    {
+        $values = [$state,$attempts,$next,$code,$state === 'complete' ? gmdate('Y-m-d H:i:s') : null,$fingerprint,$profileId,$scope['root_type'],$scope['root_public_id']];
+        if ($this->backfillState($pdo, $profileId, $scope)) {
+            $pdo->prepare('UPDATE portal_client_provisioning_backfill SET state=?,attempts=?,next_attempt_at=?,last_error_code=?,completed_at=?,contract_fingerprint=? WHERE integration_profile_id=? AND root_type=? AND root_public_id=?')->execute($values);
+        } else {
+            $pdo->prepare('INSERT INTO portal_client_provisioning_backfill(state,attempts,next_attempt_at,last_error_code,completed_at,contract_fingerprint,integration_profile_id,root_type,root_public_id) VALUES(?,?,?,?,?,?,?,?,?)')->execute($values);
+        }
+    }
+
+    /** @param array<string,mixed> $profile */
+    private function backfillContractFingerprint(array $profile): string
+    {
+        return hash('sha256', json_encode([(string)$profile['application_key'],(string)$profile['portal_route']], JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -424,12 +550,16 @@ final class PortalClientProvisioningService
     /** @return list<array{root_type:string,root_public_id:string}> */
     private function allScopes(PDO $pdo): array
     {
-        $rows = $pdo->query("SELECT 'organization' root_type,o.public_id root_public_id FROM organizations o WHERE EXISTS(SELECT 1 FROM clients c WHERE c.organization_id=o.id AND c.archived=0 AND c.deleted_at IS NULL)
+        $rows = $pdo->query($this->scopeQuery().' ORDER BY root_type,root_public_id')->fetchAll(PDO::FETCH_ASSOC);
+        return $this->uniqueScopes($rows);
+    }
+
+    private function scopeQuery(): string
+    {
+        return "SELECT 'organization' root_type,o.public_id root_public_id FROM organizations o WHERE EXISTS(SELECT 1 FROM clients c WHERE c.organization_id=o.id AND c.archived=0 AND c.deleted_at IS NULL)
             UNION SELECT 'standalone_client',c.public_id FROM clients c WHERE c.organization_id IS NULL AND c.archived=0 AND c.deleted_at IS NULL
             UNION SELECT root_type,root_public_id FROM portal_client_access_roots
-            UNION SELECT root_type,root_public_id FROM portal_v2_workspaces
-            ORDER BY root_type,root_public_id")->fetchAll(PDO::FETCH_ASSOC);
-        return $this->uniqueScopes($rows);
+            UNION SELECT root_type,root_public_id FROM portal_v2_workspaces";
     }
 
     /** @return array<string,mixed>|null */
@@ -478,8 +608,14 @@ final class PortalClientProvisioningService
             if($status==='eligible'&&$principalId){
                 $this->activatePrincipal($pdo,$principalId,$email,(string)$client['name'],$actorId);
                 $this->linkPrincipalClient($pdo,$principalId,$clientId,$actorId);
-                $scopeType=$scope['root_type']==='organization'?'client':'standalone_client';
+                // standalone_client is a workspace/entity root, not a wire
+                // entitlement scope. Both kinds of client use client scope.
+                $scopeType='client';
                 $scopeId=(string)$client['public_id'];
+                if ($scope['root_type']==='standalone_client') {
+                    $pdo->prepare("UPDATE portal_v2_entitlements SET active=0,source_version=? WHERE portal_principal_id=? AND scope_type='standalone_client' AND scope_public_id=? AND capability IN ('workspace.view','directory.read','delivery.view') AND active=1")
+                        ->execute([PortalSourceVersion::from(['clientPublicId'=>$scopeId,'legacyStandaloneScope'=>false]),$principalId,$scopeId]);
+                }
                 foreach(self::DEFAULT_CAPABILITIES as$capability)$this->upsertEntitlement($pdo,$principalId,$capability,$scopeType,$scopeId,$actorId);
             }
         }
