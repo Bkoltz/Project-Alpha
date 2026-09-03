@@ -28,6 +28,7 @@ final class PortalV2CompatibilityTest extends TestCase
         $hashes = [
             'project-alpha-portal-v2.json'=>'808185cb582476f7e64f5a2c1f8c9c283d1bb5c4db1550227b19ff82887301bd',
             'project-alpha-portal-relations-v3.json'=>'87508874a56c76eb768e1b2a87fe77dec28b58fb06802c45d85c640685890a28',
+            'project-alpha-portal-contact-assignments-v4.json'=>'c545eebf02cec56013ede3ebe0dcc1c7c11947dc8e5592905c3a9d36ffda434b',
             'project-alpha-catalog-v2.json'=>'9626ee5147ac9cd2198e6bca58eee9bb464c2105861c679a16745e1d9bf022fe',
             'project-alpha-pricing-hint-v1.json'=>'6354ad8fb2439e4463202290516a05198ec03cf0a966fbfb4bd83fcf18449d6b',
             'project-alpha-draft-quote-v1.json'=>'fc47be82960b11ab6cb705e2dcaa11f76f39ef9c5c3199ff6861e8a787034f90',
