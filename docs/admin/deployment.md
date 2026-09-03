@@ -94,10 +94,14 @@ services:
     environment:
       EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL: "${EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL:?set in the untracked .env file}"
       PORTAL_INTEGRATION_HMAC_SECRETS_JSON: "${PORTAL_INTEGRATION_HMAC_SECRETS_JSON:?set in the untracked .env file}"
+  cron:
+    environment:
+      EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL: "${EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL:?set in the untracked .env file}"
 ```
 
 Compose loads this override automatically. Confirm the merged service has both
-keys without printing their values, then start the web service. Give both local
+keys without printing their values, and that cron has the same receiver URL,
+then recreate both web and cron. Give both local
 files the narrowest host permissions supported by the deployment and never
 paste their contents into tracked Compose YAML, logs, support messages, or the
 repository. Configure the connected application's portal receiver with the
@@ -113,7 +117,12 @@ secret; the saved previous credential remains available only for the bounded
 receiver overlap. These variables are read by the web service when the
 administrator saves the connection. Encrypted delivery credentials are stored
 in the database, so the cron and worker services do not need the raw portal
-secret. Keep the visible connection and producer toggle off until the receiver
+secret. Cron does need the same non-secret receiver-origin override: historical
+reconciliation compares the saved producer route against the configured
+connection. Omitting that override can leave cron paused even when web reports
+the producer ready. Do not run `docker compose config` unfiltered in shared
+diagnostics because it can print expanded credentials.
+Keep the visible connection and producer toggle off until the receiver
 has passed preflight. See [External Operations](external-operations.html).
 
 ## Administrator Recovery

@@ -491,6 +491,36 @@ SQL);
         self::assertSame(0,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_client_provisioning_backfill')->fetchColumn());
     }
 
+    public function testCronReadinessUsesMatchingReceiverOverrideWithoutRawSigningSecret(): void
+    {
+        $previousReceiver = getenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL');
+        try {
+            putenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL=https://portal.example.test');
+            $this->withPortalCapabilities([
+                'generic_operations'=>['portal'=>['keyId'=>'portal-cron-v1','current'=>str_repeat('p',32)]],
+            ], function (): void {
+                $this->pdo->exec('DELETE FROM portal_integration_profiles');
+                $this->prepareHistoricalBackfill();
+                self::assertTrue($this->service->status($this->pdo, 'generic_operations')['ready']);
+                $this->pdo->exec("INSERT INTO clients VALUES(20,'client-cron','Cron Fixture','cron@example.test',NULL,'consumer',0,NULL,'v1')");
+
+                // Cron relies on encrypted stored credentials, not web's raw secret.
+                putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON');
+                putenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL');
+                self::assertFalse($this->service->status($this->pdo, 'generic_operations')['ready']);
+                self::assertFalse($this->service->reconcileHistoricalBatch($this->pdo, 'generic_operations')['ready']);
+
+                putenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL=https://portal.example.test');
+                self::assertTrue($this->service->status($this->pdo, 'generic_operations')['ready']);
+                $summary = $this->service->reconcileHistoricalBatch($this->pdo, 'generic_operations', 1);
+                self::assertTrue($summary['ready']);
+                self::assertSame(1, $summary['completed']);
+            });
+        } finally {
+            $previousReceiver === false ? putenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL') : putenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL='.$previousReceiver);
+        }
+    }
+
     public function testHistoricalBackfillIsBoundedResumableAndIdempotent(): void
     {
         $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('p',32)]]],function():void{

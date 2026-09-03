@@ -100,6 +100,8 @@ services:
       MYSQL_PASSWORD: changeme_secure_pass
       APP_ENV: production
       AUTOPAY_BETA_ENABLED: "false"
+      # Match web's non-secret receiver override for provisioning preflight.
+      EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL: ""
       # Optional. Match the web value exactly and retain it for restores.
       BACKUP_ENCRYPTION_KEY: ""
       BACKUP_RETENTION_DAYS: "10"

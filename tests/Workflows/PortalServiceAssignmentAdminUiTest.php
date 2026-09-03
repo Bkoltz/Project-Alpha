@@ -100,6 +100,14 @@ final class PortalServiceAssignmentAdminUiTest extends TestCase
         self::assertStringContainsString('docker-compose.override.yml', $deployment);
         self::assertStringContainsString('do not configure both representations', $deployment);
         self::assertStringContainsString('cron and worker services do not need the raw portal', $deployment);
+        preg_match('/^  cron:\R(.*?)(?=^  [a-z]+:|\z)/ms', $compose, $cron);
+        self::assertStringContainsString('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL: ""', $cron[1] ?? '');
+        self::assertStringNotContainsString('PORTAL_INTEGRATION_HMAC_SECRETS_JSON', $cron[1] ?? '');
+        self::assertSame(2, substr_count($deployment, 'EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL: "${EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL:?set in the untracked .env file}"'));
+        $entrypoint = (string)file_get_contents($root . '/cron/entrypoint.sh');
+        self::assertStringContainsString('|EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL)', $entrypoint);
+        self::assertStringNotContainsString('EXTERNAL_OPS_*', $entrypoint);
+        self::assertStringNotContainsString('PORTAL_INTEGRATION_HMAC_SECRETS_JSON', $entrypoint);
         self::assertStringNotContainsString(str_repeat('a', 32), $env);
     }
 
