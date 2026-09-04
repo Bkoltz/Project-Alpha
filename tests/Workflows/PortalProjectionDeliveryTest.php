@@ -110,6 +110,88 @@ final class PortalProjectionDeliveryTest extends TestCase
         }
     }
 
+    public function testUrlRotationCannotRetargetAnAlreadyQueuedProjection(): void
+    {
+        $pdo = $this->deliveryDatabase();
+        $pdo->exec('UPDATE portal_integration_profiles SET enabled=1,portal_projection_enabled=1 WHERE id=1');
+        $this->insertDelivery($pdo, 1, 'queued-before-url-rotation', '{"kind":"event"}');
+
+        try {
+            (new \App\Services\ExternalOpsConfigService())->save($pdo, [
+                'enabled' => 1,
+                'application_key' => 'portal_test',
+                'label' => 'Operations',
+                'webhook_url' => 'https://replacement.example/internal/events',
+            ]);
+            self::fail('A replacement receiver must not inherit queued portal data.');
+        } catch (DomainException $error) {
+            self::assertStringContainsString('pending client portal projection', $error->getMessage());
+        }
+
+        $current = (new \App\Services\ExternalOpsConfigService())->load($pdo);
+        self::assertSame('https://receiver.example/internal/portal', $current['webhook_url']);
+        $receivers = [];
+        $summary = (new PortalProjectionOutboxSender())->deliverDue(
+            $pdo,
+            1,
+            static function (string $url) use (&$receivers): array {
+                $receivers[] = $url;
+                return ['status' => 204];
+            }
+        );
+        self::assertSame(1, $summary['delivered']);
+        self::assertSame(['https://receiver.example/internal/portal'], $receivers);
+    }
+
+    public function testApplicationRotationCannotLoseOrRetargetAQueuedRevocation(): void
+    {
+        $pdo = $this->deliveryDatabase();
+        $this->insertDelivery($pdo, 1, 'revocation-before-application-rotation', '{"kind":"event"}', true);
+        $config = new \App\Services\ExternalOpsConfigService();
+        $config->save($pdo, [
+            'enabled' => 0,
+            'application_key' => 'portal_test',
+            'label' => 'Operations',
+            'webhook_url' => 'https://receiver.example/internal/portal',
+        ]);
+
+        try {
+            $config->save($pdo, [
+                'enabled' => 0,
+                'application_key' => 'replacement_app',
+                'label' => 'Replacement',
+                'webhook_url' => 'https://replacement.example/internal/events',
+            ]);
+            self::fail('A replacement application must not inherit a queued revocation.');
+        } catch (DomainException $error) {
+            self::assertStringContainsString('pending client portal projection', $error->getMessage());
+        }
+
+        $unchanged = $config->load($pdo);
+        self::assertSame('portal_test', $unchanged['application_key']);
+        self::assertSame('https://receiver.example/internal/portal', $unchanged['webhook_url']);
+        self::assertFalse($unchanged['configured_enabled']);
+        $config->save($pdo, [
+            'enabled' => 1,
+            'application_key' => 'portal_test',
+            'label' => 'Operations',
+            'webhook_url' => 'https://receiver.example/internal/portal',
+        ]);
+
+        $receivers = [];
+        $summary = (new PortalProjectionOutboxSender())->deliverDue(
+            $pdo,
+            1,
+            static function (string $url) use (&$receivers): array {
+                $receivers[] = $url;
+                return ['status' => 204];
+            }
+        );
+        self::assertSame(1, $summary['delivered']);
+        self::assertSame(['https://receiver.example/internal/portal'], $receivers);
+        self::assertSame(1, (int)$pdo->query("SELECT COUNT(*) FROM portal_projection_outbox WHERE delivery_id='revocation-before-application-rotation' AND delivered_at IS NOT NULL")->fetchColumn());
+    }
+
     public function testOrdinaryTombstoneCannotLeapAQueuedEarlierSequence(): void
     {
         $pdo = $this->deliveryDatabase();

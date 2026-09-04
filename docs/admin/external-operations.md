@@ -163,14 +163,18 @@ unchanged inner projection. The complete outer body is signed using the same
 exact saved signed event URL. Operations authenticates it once and routes the
 inner record to the client portal internally.
 
-Disabling the visible connection, changing its application key, or changing
-the signed-event URL first retires the bound portal state and queues its
-workspace tombstones. Portal delivery and the
-global outbound worker stay enabled until every revocation is acknowledged.
-Project Alpha will not activate a replacement producer or send client data to
-the new origin during that drain. After the queue reaches zero, save the visible
-connection again to reuse the same bound profile with the new contract. This
-staged rotation guarantees that only one portal producer can be active.
+To rotate the receiver contract, first disable the visible connection without
+changing its URL, application key, or credentials. That retires the bound portal
+state and queues its workspace tombstones. Re-enable the unchanged connection
+long enough to drain those records to the original receiver. Project Alpha
+blocks changes to the signed-event URL, application key, Access service token,
+or HMAC secret while any deliverable portal outbox row remains unresolved,
+including a dead-lettered revocation. Dead-lettered normal events are resolved
+through the existing retirement audit step and are never replayed against the
+replacement contract. Only after the queue reaches zero may an administrator
+save the replacement contract and reconcile its complete snapshot. This staged
+rotation prevents old client data or revocations from being signed for, or sent
+to, a replacement receiver.
 After every revocation is acknowledged, any older dead-lettered non-revocation
 events are administratively resolved before the replacement is activated. The
 original dead-letter timestamp and error remain available for audit; revocation
