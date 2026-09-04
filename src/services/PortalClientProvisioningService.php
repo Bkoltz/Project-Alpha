@@ -22,8 +22,9 @@ final class PortalClientProvisioningService
     private const BOUND_PROFILE_KEY = 'external_ops_client_portal_profile_id';
 
     /**
-     * Keep the portal producer behind the same administrator-facing connection
-     * while retaining a distinct signed-delivery contract internally.
+     * Keep the portal producer on the one administrator-managed External
+     * Operations connection. Portal records use the same signed-event URL,
+     * Access service identity, and HMAC secret as every other outbound event.
      *
      * @param array<string,mixed> $externalConfig
      */
@@ -31,7 +32,7 @@ final class PortalClientProvisioningService
     {
         $applicationKey = trim((string)($externalConfig['application_key'] ?? ''));
         $requestedEnabled = !empty($externalConfig['configured_enabled']) || !empty($externalConfig['enabled']);
-        $receiver = $this->portalReceiver((string)($externalConfig['webhook_url'] ?? ''));
+        $receiver = $this->signedEventReceiver((string)($externalConfig['webhook_url'] ?? ''));
         $existing = $this->boundProfile($pdo);
         if (!$existing && $applicationKey !== '') $existing = $this->profile($pdo, $applicationKey);
         if (!$existing) {
@@ -67,23 +68,11 @@ final class PortalClientProvisioningService
         }
         $this->assertOnlyProducer($pdo, $existing ? (int)$existing['id'] : null);
 
-        $keyId = $existing ? trim((string)($existing['delivery_key_id'] ?? '')) : '';
-        $capability = $this->portalCapability($applicationKey);
-        $rekeying = $existing && !hash_equals((string)$existing['application_key'], $applicationKey);
-        $rotatingSigningKey = $existing && $capability['keyId'] !== '' && $keyId !== ''
-            && !hash_equals($keyId, $capability['keyId']);
-        if ($keyId === '' || $rekeying || $rotatingSigningKey) $keyId = $capability['keyId'];
-        $secret = $capability['secret'];
-        $storedSecret = $existing ? (new PortalProjectionDeliveryConfigService())->credentials($existing, false)['currentSecret'] : '';
-        if ($storedSecret !== '' && !$rekeying && !$rotatingSigningKey) {
-            if ($secret !== '' && !hash_equals($storedSecret, $secret)) {
-                throw new DomainException('Portal signing-secret rotation requires a distinct signing key ID.');
-            }
-            $secret = '';
+        // The ordinary connection readiness gate owns all outbound credentials.
+        // Never require or persist a second portal-only destination or secret.
+        if (ExternalOpsConfigService::deliveryIssues($externalConfig) !== []) {
+            return $existing ? (int)$existing['id'] : null;
         }
-        // A connection can continue serving business synchronization while its
-        // independently signed portal producer remains visibly paused.
-        if ($keyId === '' || ($secret === '' && $storedSecret === '')) return $existing ? (int)$existing['id'] : null;
 
         // PortalAuthorityService deliberately refuses to mutate a delivery
         // contract while any unresolved outbox row remains. Rows superseded by
@@ -110,20 +99,13 @@ final class PortalClientProvisioningService
             'catalog_route' => $existing['catalog_route'] ?? null,
         ], $actorId);
 
-        $headers = [];
-        $accessId = trim((string)($externalConfig['access_client_id'] ?? ''));
-        $accessSecret = trim((string)($externalConfig['access_client_secret'] ?? ''));
-        if ($accessId !== '' && $accessSecret !== '') {
-            $headers = ['CF-Access-Client-Id' => $accessId, 'CF-Access-Client-Secret' => $accessSecret];
-        }
-        (new PortalProjectionDeliveryConfigService())->saveProfile($pdo, $profileId, [
-            'delivery_enabled' => 1,
-            'delivery_key_id' => $keyId,
-            'delivery_secret' => $secret,
-            'delivery_auth_headers_json' => json_encode($headers, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
-            'delivery_timeout_seconds' => (int)($externalConfig['timeout_seconds'] ?? 15),
-            'delivery_max_attempts' => (int)($externalConfig['max_attempts'] ?? 12),
-        ], $actorId);
+        $pdo->prepare('UPDATE portal_integration_profiles SET delivery_enabled=1,delivery_key_id=NULL,delivery_previous_key_id=NULL,delivery_previous_valid_until=NULL,delivery_credentials_enc=NULL,delivery_timeout_seconds=?,delivery_max_attempts=?,updated_by=? WHERE id=?')
+            ->execute([
+                max(2, min(30, (int)($externalConfig['timeout_seconds'] ?? 15))),
+                max(1, min(50, (int)($externalConfig['max_attempts'] ?? 12))),
+                $actorId,
+                $profileId,
+            ]);
         (new PortalProjectionDeliveryConfigService())->saveRuntime($pdo, [
             'outbound_enabled' => 1,
             'hooks_enabled' => 1,
@@ -166,14 +148,13 @@ final class PortalClientProvisioningService
         }
         $delivery = new PortalProjectionDeliveryConfigService();
         $runtime = $delivery->runtime($pdo);
-        $credentials = $profile ? $delivery->credentials($profile, false) : ['currentSecret'=>'','previousSecret'=>'','authHeaders'=>[]];
         $config = (new ExternalOpsConfigService())->load($pdo);
-        $preflight = $this->activationPreflight($config, $profile, $runtime, $credentials);
+        $preflight = $this->activationPreflight($config, $profile, $runtime);
         $ready = $preflight['ready'];
         $transition = $profile ? 'stable' : 'unpaired';
         $transitionMessage = null;
         if ($profile) {
-            $desiredReceiver = $this->portalReceiver((string)($config['webhook_url'] ?? ''));
+            $desiredReceiver = $this->signedEventReceiver((string)($config['webhook_url'] ?? ''));
             $changed = !hash_equals((string)$profile['application_key'], (string)($config['application_key'] ?? $applicationKey))
                 || !hash_equals(trim((string)($profile['portal_route'] ?? '')), $desiredReceiver);
             $undelivered = $this->undeliveredCount($pdo, (int)$profile['id']);
@@ -191,10 +172,10 @@ final class PortalClientProvisioningService
                     : 'The previous portal contract is retired. Save the connection again to activate its replacement.';
             } elseif (!$ready) {
                 $transition = 'prerequisites_missing';
-                $transitionMessage = 'Client portal projection is paused until every producer prerequisite below is complete.';
+                $transitionMessage = 'Client portal events are paused until the External Operations connection is ready.';
             }
         } elseif (!empty($config['configured_enabled'])) {
-            $transitionMessage = 'Operations synchronization can continue, but the separately signed client portal projection has not been activated.';
+            $transitionMessage = 'Save the enabled External Operations connection to activate client portal events on that same connection.';
         }
         return [
             'configured' => (bool)$profile,
@@ -204,6 +185,7 @@ final class PortalClientProvisioningService
             // part of administrator-facing status.
             'profile' => $profile ? [
                 'service_assignment_projection_enabled' => !empty($profile['service_assignment_projection_enabled']),
+                'contact_assignment_projection_enabled' => !empty($profile['contact_assignment_projection_enabled']),
             ] : null,
             'counts' => $counts,
             'preflight' => $preflight,
@@ -648,24 +630,19 @@ final class PortalClientProvisioningService
     /**
      * Build a non-secret activation checklist for the administrator surface.
      *
-     * The ordinary Operations event connection and the client-portal producer
-     * intentionally share an origin and service authentication, but they do
-     * not share signing keys. Returning fixed labels and booleans keeps that
-     * distinction observable without exposing routes, key IDs, or credentials.
+     * Portal records are another event family on the External Operations
+     * connection. Returning fixed labels and booleans keeps readiness
+     * observable without exposing its URL or credentials.
      *
      * @param array<string,mixed> $config
      * @param array<string,mixed>|false|null $profile
      * @param array{outbound_enabled:bool,hooks_enabled:bool} $runtime
-     * @param array{currentSecret:string,previousSecret:string,authHeaders:array<string,string>} $credentials
      * @return array{ready:bool,operations_delivery_ready:bool,checks:list<array{key:string,label:string,ready:bool}>,issues:list<string>,receiver_verification:string}
      */
-    private function activationPreflight(array $config, array|false|null $profile, array $runtime, array $credentials): array
+    private function activationPreflight(array $config, array|false|null $profile, array $runtime): array
     {
         $applicationKey = (string)($config['application_key'] ?? '');
-        $receiver = $this->portalReceiver((string)($config['webhook_url'] ?? ''));
-        $capability = $this->portalCapability($applicationKey);
-        $storedKey = $profile ? trim((string)($profile['delivery_key_id'] ?? '')) : '';
-        $storedSecret = trim((string)($credentials['currentSecret'] ?? ''));
+        $receiver = $this->signedEventReceiver((string)($config['webhook_url'] ?? ''));
         $contractMatches = (bool)$profile
             && $applicationKey !== ''
             && hash_equals((string)$profile['application_key'], $applicationKey)
@@ -673,10 +650,9 @@ final class PortalClientProvisioningService
             && hash_equals(trim((string)($profile['portal_route'] ?? '')), $receiver);
         $checks = [
             ['key'=>'external_connection','label'=>'enabled external application connection','ready'=>!empty($config['configured_enabled'])],
-            ['key'=>'portal_receiver','label'=>'valid portal receiver origin','ready'=>$receiver !== ''],
+            ['key'=>'signed_event_receiver','label'=>'valid signed event URL','ready'=>$receiver !== ''],
             ['key'=>'service_authentication','label'=>'service authentication ID and secret','ready'=>trim((string)($config['access_client_id'] ?? '')) !== '' && trim((string)($config['access_client_secret'] ?? '')) !== ''],
-            ['key'=>'portal_signing_key','label'=>'deployment-managed portal signing key ID','ready'=>$storedKey !== '' || $capability['keyId'] !== ''],
-            ['key'=>'portal_signing_secret','label'=>'deployment-managed portal signing secret','ready'=>$storedSecret !== '' || $capability['secret'] !== ''],
+            ['key'=>'event_signing_secret','label'=>'HMAC secret','ready'=>strlen(trim((string)($config['hmac_secret'] ?? ''))) >= 32],
             ['key'=>'producer_contract','label'=>'portal producer saved for this connection','ready'=>$contractMatches],
             ['key'=>'producer_enabled','label'=>'portal projection producer enabled','ready'=>(bool)$profile && !empty($profile['enabled']) && !empty($profile['portal_projection_enabled'])],
             ['key'=>'producer_delivery','label'=>'portal projection delivery enabled','ready'=>(bool)$profile && !empty($profile['delivery_enabled'])],
@@ -684,12 +660,12 @@ final class PortalClientProvisioningService
             ['key'=>'authoritative_hooks','label'=>'portal authoritative hooks enabled','ready'=>!empty($runtime['hooks_enabled'])],
         ];
         $issues = [];
-        foreach (array_slice($checks, 0, 5) as $check) if (!$check['ready']) $issues[] = $check['label'];
+        foreach (array_slice($checks, 0, 4) as $check) if (!$check['ready']) $issues[] = $check['label'];
         if ($issues === []) {
             if (!$contractMatches) {
                 $issues[] = 'portal producer saved for this connection';
             } else {
-                foreach (array_slice($checks, 6) as $check) if (!$check['ready']) $issues[] = $check['label'];
+                foreach (array_slice($checks, 5) as $check) if (!$check['ready']) $issues[] = $check['label'];
             }
         }
         return [
@@ -697,39 +673,18 @@ final class PortalClientProvisioningService
             'operations_delivery_ready' => !empty($config['delivery_ready']),
             'checks' => $checks,
             'issues' => $issues,
-            'receiver_verification' => 'Verify the matching portal key ID and secret in the connected application before reconciliation.',
+            'receiver_verification' => 'Portal records use this connection’s signed event URL and credentials; Operations routes them internally.',
         ];
     }
 
-    private function portalReceiver(string $signedEventUrl):string
+    private function signedEventReceiver(string $signedEventUrl):string
     {
-        $override=trim((string)(getenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL')?:''));
-        $candidate=$override!==''?$override:$signedEventUrl;
+        $candidate=trim($signedEventUrl);
         $parts=parse_url($candidate);
         $scheme=strtolower((string)($parts['scheme']??''));$host=(string)($parts['host']??'');
-        if($host===''||($scheme!=='https'&&!in_array(strtolower($host),['localhost','127.0.0.1','::1'],true)))return'';
-        $port=isset($parts['port'])?':'.(int)$parts['port']:'';
-        return $scheme.'://'.$host.$port.'/api/internal/project-alpha/portal-v2';
-    }
-
-    /** @return array{keyId:string,secret:string} */
-    private function portalCapability(string $applicationKey):array
-    {
-        $keyId=trim((string)(getenv('EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_KEY_ID')?:''));
-        $secret=trim((string)(getenv('EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_SECRET')?:''));
-        $raw=getenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON');
-        if(is_string($raw)&&trim($raw)!==''){
-            try{$decoded=json_decode($raw,true,32,JSON_THROW_ON_ERROR);$configured=$decoded[$applicationKey]['portal']??null;
-                if(is_string($configured)){$secret=trim($configured);}
-                elseif(is_array($configured)){
-                    $secret=trim((string)($configured['current']??$secret));
-                    $keyId=trim((string)($configured['keyId']??$configured['currentKeyId']??$keyId));
-                }
-            }catch(Throwable){}
-        }
-        if($keyId!==''&&preg_match('/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/D',$keyId)!==1)$keyId='';
-        if(strlen($secret)<32||strlen($secret)>1000)$secret='';
-        return['keyId'=>$keyId,'secret'=>$secret];
+        $local=in_array(strtolower($host),['localhost','127.0.0.1','::1'],true);
+        if($candidate===''||filter_var($candidate,FILTER_VALIDATE_URL)===false||$host===''||($scheme!=='https'&&!$local)||isset($parts['user'])||isset($parts['pass'])||isset($parts['fragment']))return'';
+        return $candidate;
     }
 
     private function activatePrincipal(PDO$pdo,int$id,string$email,string$name,int$actorId):void{$version=PortalSourceVersion::from(['emailHint'=>$email,'displayName'=>$name,'active'=>true]);$pdo->prepare('UPDATE portal_principals SET email_hint=?,display_name=?,source_version=?,enabled=1,revoked_at=NULL,activated_at=COALESCE(activated_at,CURRENT_TIMESTAMP),authorization_version=authorization_version+1,updated_by=? WHERE id=?')->execute([$email,$name,$version,$actorId?:null,$id]);}

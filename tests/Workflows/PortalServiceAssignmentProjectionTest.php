@@ -117,8 +117,8 @@ final class PortalServiceAssignmentProjectionTest extends TestCase
         self::assertSame(2, (int)$pdo->query("SELECT COUNT(*) FROM portal_service_assignment_projection_records WHERE assignment_public_id='assignment-shared'")->fetchColumn());
         $rows = $pdo->query("SELECT integration_profile_id,destination_url,payload_json FROM portal_projection_outbox WHERE delivery_kind='snapshot.page' ORDER BY integration_profile_id")
             ->fetchAll(PDO::FETCH_ASSOC);
-        self::assertSame('https://ops.example/api/internal/project-alpha/sources/project-alpha%3Asource-a/service-assignments-v1', $rows[0]['destination_url']);
-        self::assertSame('https://ops.example/api/internal/project-alpha/sources/project-alpha%3Asource-b/service-assignments-v1', $rows[1]['destination_url']);
+        self::assertSame('https://ops.example/v1/project-alpha/events', $rows[0]['destination_url']);
+        self::assertSame('https://ops.example/v1/project-alpha/events', $rows[1]['destination_url']);
         self::assertSame('alpha_a', json_decode((string)$rows[0]['payload_json'], true)['applicationKey']);
         self::assertSame('alpha_b', json_decode((string)$rows[1]['payload_json'], true)['applicationKey']);
     }
@@ -431,7 +431,9 @@ final class PortalServiceAssignmentProjectionTest extends TestCase
 
     private function insertProfile(PDO $pdo, int $id, string $key, string $source, bool $assignmentEnabled, ?string $route = 'default'): void
     {
-        $portalRoute = $route === null ? 'https://ops.example/unrelated' : "https://ops.example/api/internal/project-alpha/sources/{$source}/portal-v2";
+        // Every projection kind shares the one configured External Operations
+        // webhook. The source identifier scopes data, not the transport URL.
+        $portalRoute = $route === null ? 'not-a-valid-url' : 'https://ops.example/v1/project-alpha/events';
         $statement = $pdo->prepare('INSERT INTO portal_integration_profiles VALUES(?,?,?,?,?,?,?,?,?,?,15,12)');
         $statement->execute([$id, $key, 1, 1, 1, $assignmentEnabled ? 1 : 0, $portalRoute,
             'https://ops.example/api/internal/project-alpha/catalog-v2', 1, 'key-current']);

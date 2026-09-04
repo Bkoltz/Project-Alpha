@@ -117,7 +117,7 @@ SQL);
         self::assertLessThan(strpos($source,'$this->reconcileRelations($pdo,$scopes);'),strpos($source,'PortalClientProvisioningService())->ensureScopes'));
     }
 
-    public function testStatusSeparatesHealthyOperationsDeliveryFromMissingPortalSigningCapability(): void
+    public function testStatusRequiresTheSavedProducerButNoSecondPortalCredential(): void
     {
         $this->withPortalCapabilities([], function (): void {
             $this->pdo->exec('DELETE FROM portal_integration_profiles');
@@ -138,12 +138,9 @@ SQL);
             self::assertFalse($status['configured']);
             self::assertFalse($status['ready']);
             self::assertTrue($status['preflight']['operations_delivery_ready']);
-            self::assertSame([
-                'deployment-managed portal signing key ID',
-                'deployment-managed portal signing secret',
-            ],$status['preflight']['issues']);
+            self::assertSame(['portal producer saved for this connection'],$status['preflight']['issues']);
             self::assertSame('unpaired',$status['transition_state']);
-            self::assertStringContainsString('Operations synchronization can continue',(string)$status['transition_message']);
+            self::assertStringContainsString('same connection',(string)$status['transition_message']);
             $serialized=json_encode($status,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
             self::assertStringNotContainsString('service-id-do-not-return',$serialized);
             self::assertStringNotContainsString('service-secret-do-not-return',$serialized);
@@ -151,7 +148,7 @@ SQL);
         });
     }
 
-    public function testStatusPreflightBecomesReadyAfterDedicatedPortalProducerActivation(): void
+    public function testStatusPreflightBecomesReadyFromTheSingleExternalOperationsConnection(): void
     {
         $this->withPortalCapabilities([
             'generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('p',32)]],
@@ -186,38 +183,31 @@ SQL);
         });
     }
 
-    public function testSingleConnectionDerivesPortalReceiverAndUsesDeploymentCapability(): void
+    public function testSingleConnectionUsesExactSignedEventUrlAndExistingCredentials(): void
     {
         $previousEncryption=getenv('APP_ENCRYPTION_KEY');
-        $previousCapabilities=getenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON');
         putenv('APP_ENCRYPTION_KEY=portal-provisioning-test-key');
-        putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.json_encode([
-            'new_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('s',32)]],
-        ],JSON_THROW_ON_ERROR));
         try{
             $profileId=$this->service->configureConnection($this->pdo,[
                 'enabled'=>1,
                 'application_key'=>'new_operations',
                 'label'=>'Operations',
-                'webhook_url'=>'https://operations.example.test/api/integration/events?source=ignored',
+                'webhook_url'=>'https://operations.example.test/api/integration/events',
                 'access_client_id'=>'access-id',
                 'access_client_secret'=>'access-secret',
+                'hmac_secret'=>str_repeat('s',32),
                 'timeout_seconds'=>15,
                 'max_attempts'=>12,
             ],7);
             self::assertNotNull($profileId);
             $profile=$this->pdo->query('SELECT * FROM portal_integration_profiles WHERE id='.(int)$profileId)->fetch(PDO::FETCH_ASSOC);
-            self::assertSame('https://operations.example.test/api/internal/project-alpha/portal-v2',$profile['portal_route']);
-            self::assertSame('portal-v1',$profile['delivery_key_id']);
+            self::assertSame('https://operations.example.test/api/integration/events',$profile['portal_route']);
+            self::assertNull($profile['delivery_key_id']);
             self::assertSame(1,(int)$profile['portal_projection_enabled']);
             self::assertSame(1,(int)$profile['relation_projection_enabled']);
-            $credentials=(new \App\Services\PortalProjectionDeliveryConfigService())->credentials($profile);
-            self::assertSame(str_repeat('s',32),$credentials['currentSecret']);
-            self::assertSame('access-id',$credentials['authHeaders']['CF-Access-Client-Id']);
-            self::assertSame('access-secret',$credentials['authHeaders']['CF-Access-Client-Secret']);
+            self::assertNull($profile['delivery_credentials_enc']);
         }finally{
             $previousEncryption===false?putenv('APP_ENCRYPTION_KEY'):putenv('APP_ENCRYPTION_KEY='.$previousEncryption);
-            $previousCapabilities===false?putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON'):putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.$previousCapabilities);
         }
     }
 
@@ -270,7 +260,7 @@ SQL);
 
             $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
             self::assertSame(0,(int)$profile['enabled']);self::assertSame(0,(int)$profile['portal_projection_enabled']);self::assertSame(1,(int)$profile['delivery_enabled']);
-            self::assertSame('https://old.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT destination_url FROM portal_projection_outbox WHERE integration_profile_id={$profileId} AND is_revocation=1")->fetchColumn());
+            self::assertSame('https://old.example.test/events',$this->pdo->query("SELECT destination_url FROM portal_projection_outbox WHERE integration_profile_id={$profileId} AND is_revocation=1")->fetchColumn());
             self::assertSame('1',$this->pdo->query("SELECT config_value FROM app_config WHERE config_key='portal_outbound_delivery_enabled'")->fetchColumn());
         });
     }
@@ -283,14 +273,14 @@ SQL);
             $new=$this->connection('generic_operations','https://new.example.test/events');
             self::assertSame($profileId,$this->service->configureConnection($this->pdo,$new,7));
             self::assertSame(0,(int)$this->pdo->query("SELECT enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
-            self::assertSame('https://old.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT destination_url FROM portal_projection_outbox WHERE is_revocation=1")->fetchColumn());
+            self::assertSame('https://old.example.test/events',$this->pdo->query("SELECT destination_url FROM portal_projection_outbox WHERE is_revocation=1")->fetchColumn());
             $this->service->configureConnection($this->pdo,$new,7);
             self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
             self::assertSame(0,(int)$this->pdo->query("SELECT enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn(),'Replacement must remain inactive before drain.');
             $this->pdo->exec("UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP WHERE is_revocation=1");
             self::assertSame($profileId,$this->service->configureConnection($this->pdo,$new,7));
             $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
-            self::assertSame(1,(int)$profile['enabled']);self::assertSame('https://new.example.test/api/internal/project-alpha/portal-v2',$profile['portal_route']);
+            self::assertSame(1,(int)$profile['enabled']);self::assertSame('https://new.example.test/events',$profile['portal_route']);
             self::assertSame('profile_disabled_superseded',$this->pdo->query("SELECT last_error_code FROM portal_projection_outbox WHERE delivery_id='normal-before-rotation'")->fetchColumn());
             self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1')->fetchColumn());
         });
@@ -309,32 +299,26 @@ SQL);
             $this->pdo->exec('UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP WHERE is_revocation=1');
             $this->service->configureConnection($this->pdo,$new,7);
             $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
-            self::assertSame('replacement_operations',$profile['application_key']);self::assertSame('portal-v2',$profile['delivery_key_id']);
+            self::assertSame('replacement_operations',$profile['application_key']);self::assertNull($profile['delivery_key_id']);
             self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
         });
     }
 
-    public function testStableConnectionCanRotateDeploymentManagedPortalSigningKey():void
+    public function testStableConnectionNeverCopiesASecondPortalCredential():void
     {
         $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
             $config=$this->connection('generic_operations','https://stable.example.test/events');
             $profileId=(int)$this->service->configureConnection($this->pdo,$config,7);
-            putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.json_encode([
-                'generic_operations'=>['portal'=>['keyId'=>'portal-v2','current'=>str_repeat('b',32)]],
-            ],JSON_THROW_ON_ERROR));
-
+            $config['hmac_secret']=str_repeat('b',32);
             self::assertSame($profileId,$this->service->configureConnection($this->pdo,$config,7));
             $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
-            $credentials=(new \App\Services\PortalProjectionDeliveryConfigService())->credentials($profile);
-            self::assertSame('portal-v2',$profile['delivery_key_id']);
-            self::assertSame('portal-v1',$profile['delivery_previous_key_id']);
-            self::assertSame(str_repeat('b',32),$credentials['currentSecret']);
-            self::assertSame(str_repeat('a',32),$credentials['previousSecret']);
-            self::assertNotEmpty($profile['delivery_previous_valid_until']);
+            self::assertNull($profile['delivery_key_id']);
+            self::assertNull($profile['delivery_previous_key_id']);
+            self::assertNull($profile['delivery_credentials_enc']);
         });
     }
 
-    public function testStableConnectionRejectsAReplacementSecretUnderTheSameSigningKeyId():void
+    public function testStableConnectionIgnoresObsoletePortalSecretMap():void
     {
         $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
             $config=$this->connection('generic_operations','https://stable.example.test/events');
@@ -342,17 +326,10 @@ SQL);
             putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.json_encode([
                 'generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('b',32)]],
             ],JSON_THROW_ON_ERROR));
-
-            $this->expectException(\DomainException::class);
-            $this->expectExceptionMessage('distinct signing key ID');
-            try {
-                $this->service->configureConnection($this->pdo,$config,7);
-            } finally {
-                $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
-                $credentials=(new \App\Services\PortalProjectionDeliveryConfigService())->credentials($profile);
-                self::assertSame('portal-v1',$profile['delivery_key_id']);
-                self::assertSame(str_repeat('a',32),$credentials['currentSecret']);
-            }
+            self::assertSame($profileId,$this->service->configureConnection($this->pdo,$config,7));
+            $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
+            self::assertNull($profile['delivery_key_id']);
+            self::assertNull($profile['delivery_credentials_enc']);
         });
     }
 
@@ -372,7 +349,7 @@ SQL);
 
             self::assertNotFalse($this->pdo->query("SELECT delivered_at FROM portal_projection_outbox WHERE delivery_id='old-dead-letter'")->fetchColumn());
             self::assertSame('transport_failed',$this->pdo->query("SELECT last_error_code FROM portal_projection_outbox WHERE delivery_id='old-dead-letter'")->fetchColumn(),'The original failure remains auditable.');
-            self::assertSame('https://new.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame('https://new.example.test/events',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
             self::assertSame(1,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_integration_audit WHERE action='portal.client_provisioning.retired_events_resolved'")->fetchColumn());
         });
     }
@@ -429,24 +406,21 @@ SQL);
             $this->pdo->exec("UPDATE portal_projection_outbox SET attempts=12,dead_lettered_at=CURRENT_TIMESTAMP,last_error_code='transport_failed' WHERE is_revocation=1");
 
             self::assertSame($profileId,$this->service->configureConnection($this->pdo,$new,7));
-            self::assertSame('https://old.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame('https://old.example.test/events',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
             self::assertSame(1,(int)$this->service->status($this->pdo,'generic_operations')['counts']['failed_revocations']);
-            try{
-                (new \App\Services\PortalProjectionDeliveryConfigService())->saveProfile($this->pdo,$profileId,[
-                    'delivery_enabled'=>1,'delivery_key_id'=>'portal-v2','delivery_secret'=>str_repeat('b',32),
-                ],7);
-                self::fail('A failed revocation must block signing-key rotation.');
-            }catch(\DomainException$error){self::assertStringContainsString('pending projection records',$error->getMessage());}
+            $profile=$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC);
+            self::assertNull($profile['delivery_key_id'],'The unified connection has no independently rotated portal signing key.');
+            self::assertNull($profile['delivery_credentials_enc'],'The unified connection has no duplicate portal credential payload.');
 
             self::assertSame(1,$this->service->retryFailedRevocations($this->pdo,'generic_operations',7));
             $retried=$this->pdo->query('SELECT * FROM portal_projection_outbox WHERE is_revocation=1')->fetch(PDO::FETCH_ASSOC);
             self::assertNull($retried['dead_lettered_at']);self::assertSame(0,(int)$retried['attempts']);self::assertSame('revocation_retry_requested',$retried['last_error_code']);
             self::assertSame(1,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_integration_audit WHERE action='portal.client_provisioning.revocations_requeued'")->fetchColumn());
-            self::assertSame('https://old.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame('https://old.example.test/events',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
 
             $this->pdo->exec('UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP WHERE is_revocation=1');
             $this->service->configureConnection($this->pdo,$new,7);
-            self::assertSame('https://new.example.test/api/internal/project-alpha/portal-v2',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame('https://new.example.test/events',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
         });
     }
 
@@ -491,34 +465,18 @@ SQL);
         self::assertSame(0,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_client_provisioning_backfill')->fetchColumn());
     }
 
-    public function testCronReadinessUsesMatchingReceiverOverrideWithoutRawSigningSecret(): void
+    public function testCronReadinessUsesStoredExternalOperationsConnectionWithoutPortalEnvironment(): void
     {
-        $previousReceiver = getenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL');
-        try {
-            putenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL=https://portal.example.test');
-            $this->withPortalCapabilities([
-                'generic_operations'=>['portal'=>['keyId'=>'portal-cron-v1','current'=>str_repeat('p',32)]],
-            ], function (): void {
-                $this->pdo->exec('DELETE FROM portal_integration_profiles');
-                $this->prepareHistoricalBackfill();
-                self::assertTrue($this->service->status($this->pdo, 'generic_operations')['ready']);
-                $this->pdo->exec("INSERT INTO clients VALUES(20,'client-cron','Cron Fixture','cron@example.test',NULL,'consumer',0,NULL,'v1')");
-
-                // Cron relies on encrypted stored credentials, not web's raw secret.
-                putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON');
-                putenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL');
-                self::assertFalse($this->service->status($this->pdo, 'generic_operations')['ready']);
-                self::assertFalse($this->service->reconcileHistoricalBatch($this->pdo, 'generic_operations')['ready']);
-
-                putenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL=https://portal.example.test');
-                self::assertTrue($this->service->status($this->pdo, 'generic_operations')['ready']);
-                $summary = $this->service->reconcileHistoricalBatch($this->pdo, 'generic_operations', 1);
-                self::assertTrue($summary['ready']);
-                self::assertSame(1, $summary['completed']);
-            });
-        } finally {
-            $previousReceiver === false ? putenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL') : putenv('EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL='.$previousReceiver);
-        }
+        $this->withPortalCapabilities([],function():void{
+            $this->pdo->exec('DELETE FROM portal_integration_profiles');
+            $this->prepareHistoricalBackfill();
+            putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON');
+            self::assertTrue($this->service->status($this->pdo, 'generic_operations')['ready']);
+            $this->pdo->exec("INSERT INTO clients VALUES(20,'client-cron','Cron Fixture','cron@example.test',NULL,'consumer',0,NULL,'v1')");
+            $summary = $this->service->reconcileHistoricalBatch($this->pdo, 'generic_operations', 1);
+            self::assertTrue($summary['ready']);
+            self::assertSame(1, $summary['completed']);
+        });
     }
 
     public function testHistoricalBackfillIsBoundedResumableAndIdempotent(): void
@@ -673,7 +631,7 @@ SQL);
     }
 
     /** @return array<string,mixed> */
-    private function connection(string$key,string$url,bool$enabled=true):array{return['enabled'=>$enabled?1:0,'configured_enabled'=>$enabled,'application_key'=>$key,'label'=>'Operations','webhook_url'=>$url,'access_client_id'=>'access-id','access_client_secret'=>'access-secret','timeout_seconds'=>15,'max_attempts'=>12];}
+    private function connection(string$key,string$url,bool$enabled=true):array{return['enabled'=>$enabled?1:0,'configured_enabled'=>$enabled,'application_key'=>$key,'label'=>'Operations','webhook_url'=>$url,'access_client_id'=>'access-id','access_client_secret'=>'access-secret','hmac_secret'=>str_repeat('h',32),'timeout_seconds'=>15,'max_attempts'=>12];}
     private function activateWorkspace(int$profileId):void{$this->pdo->exec("INSERT INTO organizations VALUES(90,'org-rotation','Rotation Org');INSERT INTO clients VALUES(91,'client-rotation','Rotation Person','rotation@example.test',90,'consumer',0,NULL,'v1')");$this->pdo->beginTransaction();$this->service->ensureScopes($this->pdo,[['root_type'=>'organization','root_public_id'=>'org-rotation']],7,$this->pdo->query("SELECT * FROM portal_integration_profiles WHERE id={$profileId}")->fetch(PDO::FETCH_ASSOC));$this->pdo->commit();$workspace=(string)$this->pdo->query("SELECT public_id FROM portal_v2_workspaces WHERE root_public_id='org-rotation'")->fetchColumn();$this->pdo->prepare('INSERT INTO portal_projection_state VALUES(?,?,?,?,?)')->execute([$profileId,$workspace,'generation-1',1,str_repeat('f',64)]);}
     /** @param array<string,mixed> $capabilities */
     private function withPortalCapabilities(array$capabilities,callable$test):void{$previousEncryption=getenv('APP_ENCRYPTION_KEY');$previousCapabilities=getenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON');putenv('APP_ENCRYPTION_KEY=portal-provisioning-lifecycle-test-key');putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.json_encode($capabilities,JSON_THROW_ON_ERROR));try{$test();}finally{$previousEncryption===false?putenv('APP_ENCRYPTION_KEY'):putenv('APP_ENCRYPTION_KEY='.$previousEncryption);$previousCapabilities===false?putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON'):putenv('PORTAL_INTEGRATION_HMAC_SECRETS_JSON='.$previousCapabilities);}}

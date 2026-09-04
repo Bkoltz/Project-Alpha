@@ -98,22 +98,22 @@ if (!empty($config['enabled'])) {
 </div>
 
 <div class="settings-card" id="client-portal-provisioning">
-  <div class="settings-section-heading"><h3>Client portal provisioning</h3><p>Project Alpha publishes eligible client identities and organization structure through a separately signed projection. A healthy Operations sync does not by itself activate this producer. A verified sign-in and an explicit delivery grant are still required before a person can see files.</p></div>
+  <div class="settings-section-heading"><h3>Client portal provisioning</h3><p>Project Alpha publishes eligible client identities and organization structure as signed events through this External Operations connection. Operations routes those events to its client portal internally. A verified sign-in and an explicit delivery grant are still required before a person can see files.</p></div>
   <?php if($portalStatusError):?>
     <div class="settings-alert settings-alert-danger" role="alert">Client portal provisioning status could not be loaded. Apply the current database migrations, then reload this page.</div>
   <?php else:?>
     <?php $portalCounts=(array)$portalStatus['counts'];$portalPreflight=(array)($portalStatus['preflight']??[]);$portalIssues=(array)($portalPreflight['issues']??[]);?>
     <?php if(!empty($portalStatus['transition_message'])):?><div class="settings-alert settings-alert-warning" role="status"><?=$h($portalStatus['transition_message'])?></div><?php endif;?>
     <div class="settings-form-grid">
-      <div><span class="label">Operations signed events</span><strong><?=!empty($portalPreflight['operations_delivery_ready'])?'Ready':'Paused'?></strong></div>
-      <div><span class="label">Client portal signed projection</span><strong><?=!empty($portalStatus['ready'])?'Ready':'Paused'?></strong></div>
+      <div><span class="label">External Operations connection</span><strong><?=!empty($portalPreflight['operations_delivery_ready'])?'Ready':'Paused'?></strong></div>
+      <div><span class="label">Client portal event routing</span><strong><?=!empty($portalStatus['ready'])?'Ready':'Paused'?></strong></div>
       <div><span class="label">Active workspaces</span><strong><?=(int)($portalCounts['active_workspaces']??0)?></strong></div>
       <div><span class="label">Eligible contacts</span><strong><?=(int)($portalCounts['eligible']??0)?></strong></div>
       <div><span class="label">Needs review</span><strong><?=(int)($portalCounts['review_required']??0)?></strong></div>
       <div><span class="label">Revoked</span><strong><?=(int)($portalCounts['revoked']??0)?></strong></div>
       <div><span class="label">Queued / failed</span><strong><?=(int)($portalCounts['pending']??0)?> / <?=(int)($portalCounts['failed']??0)?></strong></div>
     </div>
-    <p><strong>API-key pull synchronization is separate.</strong> It can remain healthy while either signed-event path is paused.</p>
+    <p><strong>One outbound connection.</strong> Portal records and ordinary Operations updates use the signed event URL and credentials configured above. API-key pull reconciliation remains a receiver-driven recovery path.</p>
     <?php if($portalIssues):?>
       <div class="settings-alert settings-alert-warning" role="status"><strong>Portal producer still needs:</strong> <?=$h(implode(', ',$portalIssues))?>.</div>
     <?php endif;?>

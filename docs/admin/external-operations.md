@@ -144,38 +144,28 @@ roots, eligible contacts, and records requiring review. After deployment or a
 configuration change, use **Reconcile client portal**. It is bounded to 1,000
 roots per run and is safe to repeat.
 
-The status card deliberately reports **Operations signed events** and the
-**Client portal signed projection** separately. API-key pull reconciliation is
-a third, receiver-driven path and can remain healthy while either signed path
-is paused. A healthy Operations sync therefore does not prove that portal
-workspaces or login eligibility are being projected.
+The status card reports the one **External Operations connection** and whether
+client portal events are ready on that connection. API-key pull reconciliation
+is a receiver-driven recovery path, not another outbound destination.
 
-Before enabling reconciliation, the portal preflight checks the enabled
-external connection, derived receiver origin, service authentication,
-deployment-managed portal signing key ID and secret, saved producer contract,
-delivery switch, outbound runtime, and authoritative hooks. The page reports
-only fixed prerequisite names and boolean state; it never displays a route,
-key ID, token, or secret value. Project Alpha cannot inspect the connected
-application's verification secret, so the administrator must separately verify
-that the receiver has the matching portal key ID and secret. Do not treat the
-producer's **Ready** state as receiver-side verification.
+Before reconciliation, the portal preflight checks the enabled External
+Operations connection, its exact signed event URL, service authentication,
+HMAC secret, saved producer state, delivery switch, outbound runtime, and
+authoritative hooks. The page reports only fixed prerequisite names and boolean
+state; it never displays a URL, token, or secret value. There is no separate
+Project Alpha-to-portal connection or signing capability.
 
-The portal receiver origin is derived from the saved signed-event URL (or the
-server-only `EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL` override) and always uses
-`/api/internal/project-alpha/portal-v2`. It reuses the connection's Access
-service token. Projection signing remains a separate capability credential: an
-existing encrypted profile credential is retained. A first deployment must
-provide a `portal` entry for the application key in
-`PORTAL_INTEGRATION_HMAC_SECRETS_JSON`, with `current` and `keyId` (or
-`currentKeyId`), and configure the receiver with that same key ID and secret.
-The legacy server-only `EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_KEY_ID` and
-`EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_SECRET` variables remain accepted for
-deployment compatibility. These values are intentionally not copied from the
-business-event HMAC secret and are never exposed as form fields.
+Each portal outbox record retains its ordering, retry, revocation, and
+dead-letter state. At delivery time it is wrapped as an External Operations
+event with event type `portal.projection`, a strict `projection_kind`, and the
+unchanged inner projection. The complete outer body is signed using the same
+`timestamp + "." + raw_request_body` contract as other events and posted to the
+exact saved signed event URL. Operations authenticates it once and routes the
+inner record to the client portal internally.
 
 Disabling the visible connection, changing its application key, or changing
-the signed-event origin first retires the bound portal profile and queues its
-workspace tombstones against the old immutable route. Portal delivery and the
+the signed-event URL first retires the bound portal state and queues its
+workspace tombstones. Portal delivery and the
 global outbound worker stay enabled until every revocation is acknowledged.
 Project Alpha will not activate a replacement producer or send client data to
 the new origin during that drain. After the queue reaches zero, save the visible
@@ -222,9 +212,7 @@ If a revocation exhausts its delivery attempts, the simplified synchronization
 status exposes an audited retry action. It resets only failed revocations and
 keeps their original receiver/key contract; it never suppresses a tombstone or
 allows the replacement connection to activate early.
-The same unresolved-revocation barrier applies to signing-key rotation, so the
-old verification key cannot disappear before a retried tombstone is accepted.
-Re-enabling the same connection also waits for those revocations; ordinary
+Re-enabling the same connection waits for those revocations; ordinary
 saves of an already-active unchanged connection never administratively resolve
 historical dead-lettered events.
 

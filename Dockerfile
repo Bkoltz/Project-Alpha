@@ -178,7 +178,6 @@ WORKDIR /var/www
 
 COPY --from=vendor /app/vendor /var/www/vendor
 COPY ./src/ /var/www/src/
-COPY ./bin/portal-readiness.php /var/www/bin/portal-readiness.php
 COPY ./database/migrations/ /var/www/database/migrations/
 COPY ./database/baseline.sql /usr/local/share/app-migrations/baseline.sql
 COPY ./docker/migrate.sh /usr/local/bin/migrate.sh
