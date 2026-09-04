@@ -117,7 +117,11 @@ final class PortalServiceAssignmentManagerTest extends TestCase
     public function testProjectionFailureRollsBackTheAuthoritativeAssignment(): void
     {
         $pdo = $this->database();
-        $pdo->exec("UPDATE portal_integration_profiles SET portal_route='https://ops.example/not-a-portal-route' WHERE id=1");
+        // The route is now the generic External Operations event endpoint, so
+        // it has no portal-specific suffix to validate. A malformed shared
+        // endpoint must still fail inside the manager transaction and roll the
+        // authoritative assignment back atomically.
+        $pdo->exec("UPDATE portal_integration_profiles SET portal_route='not-a-valid-url' WHERE id=1");
         try {
             (new PortalServiceAssignmentManager())->create($pdo, 'organization', 1, 1, null, null, 7);
             self::fail('Expected the invalid deliverable projection contract to reject the atomic mutation.');

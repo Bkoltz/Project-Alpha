@@ -61,6 +61,27 @@ shows only client-portal health and one idempotent reconcile/repair action. The
 ordinary organization and client pages contain the relevant portal-login
 revoke/restore action.
 
+Historical clients do not require that repair button. Once the complete signed
+producer preflight is ready, `reconcile_client_portal.php` automatically discovers
+unprocessed organization and standalone roots every minute, at most 25 roots per
+run. Each root, its eligibility, relationships, projection outbox records, and
+completion marker commit atomically. Restarts resume unfinished roots; repeated
+runs do not duplicate workspaces, principals, or published snapshots. Producer
+application-key/receiver changes invalidate the old completion fingerprint.
+This job uses the portal producer gates, like the outbox sender, rather than the
+unrelated automatic-invoice `cron_enabled` preference. It sends no email.
+
+Progress is recorded in `portal_client_provisioning_backfill`,
+`portal_integration_audit`, and the `portal_client_provisioning_backfill` entry in
+`cron_job_runs`. A failed root rolls back without blocking the rest. It retries
+after 1, 2, 4, and 8 minutes, stopping after five attempts. Logs include counts;
+root records include only the stable `storage_failure`/`projection_failure`
+category and a diagnostic hash, not raw customer data or credentials. Terminal
+failures keep cron health failed until repaired. After correcting the cause,
+the existing audited reconcile/repair action also clears its backfill failure
+by marking successfully reconciled roots complete. Never remove access-control
+or eligibility rows to retry: those preserve manual revocations.
+
 Project Alpha automatically publishes login eligibility for an active human
 contact only when it has one valid canonical email that is unique among active
 client records. Missing, invalid, or duplicate email, an unclassified standalone
@@ -123,27 +144,37 @@ roots, eligible contacts, and records requiring review. After deployment or a
 configuration change, use **Reconcile client portal**. It is bounded to 1,000
 roots per run and is safe to repeat.
 
-The portal receiver origin is derived from the saved signed-event URL (or the
-server-only `EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL` override) and always uses
-`/api/internal/project-alpha/portal-v2`. It reuses the connection's Access
-service token. Projection signing remains a separate capability credential: an
-existing encrypted profile credential is retained. A first deployment must
-provide a `portal` entry for the application key in
-`PORTAL_INTEGRATION_HMAC_SECRETS_JSON`, with `current` and `keyId` (or
-`currentKeyId`), and configure the receiver with that same key ID and secret.
-The legacy server-only `EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_KEY_ID` and
-`EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_SECRET` variables remain accepted for
-deployment compatibility. These values are intentionally not copied from the
-business-event HMAC secret and are never exposed as form fields.
+The status card reports the one **External Operations connection** and whether
+client portal events are ready on that connection. API-key pull reconciliation
+is a receiver-driven recovery path, not another outbound destination.
 
-Disabling the visible connection, changing its application key, or changing
-the signed-event origin first retires the bound portal profile and queues its
-workspace tombstones against the old immutable route. Portal delivery and the
-global outbound worker stay enabled until every revocation is acknowledged.
-Project Alpha will not activate a replacement producer or send client data to
-the new origin during that drain. After the queue reaches zero, save the visible
-connection again to reuse the same bound profile with the new contract. This
-staged rotation guarantees that only one portal producer can be active.
+Before reconciliation, the portal preflight checks the enabled External
+Operations connection, its exact signed event URL, service authentication,
+HMAC secret, saved producer state, delivery switch, outbound runtime, and
+authoritative hooks. The page reports only fixed prerequisite names and boolean
+state; it never displays a URL, token, or secret value. There is no separate
+Project Alpha-to-portal connection or signing capability.
+
+Each portal outbox record retains its ordering, retry, revocation, and
+dead-letter state. At delivery time it is wrapped as an External Operations
+event with event type `portal.projection`, a strict `projection_kind`, and the
+unchanged inner projection. The complete outer body is signed using the same
+`timestamp + "." + raw_request_body` contract as other events and posted to the
+exact saved signed event URL. Operations authenticates it once and routes the
+inner record to the client portal internally.
+
+To rotate the receiver contract, first disable the visible connection without
+changing its URL, application key, or credentials. That retires the bound portal
+state and queues its workspace tombstones. Re-enable the unchanged connection
+long enough to drain those records to the original receiver. Project Alpha
+blocks changes to the signed-event URL, application key, Access service token,
+or HMAC secret while any deliverable portal outbox row remains unresolved,
+including a dead-lettered revocation. Dead-lettered normal events are resolved
+through the existing retirement audit step and are never replayed against the
+replacement contract. Only after the queue reaches zero may an administrator
+save the replacement contract and reconcile its complete snapshot. This staged
+rotation prevents old client data or revocations from being signed for, or sent
+to, a replacement receiver.
 After every revocation is acknowledged, any older dead-lettered non-revocation
 events are administratively resolved before the replacement is activated. The
 original dead-letter timestamp and error remain available for audit; revocation
@@ -171,13 +202,21 @@ connection rotation queues a new complete snapshot against the replacement
 contract. Leave the option clear until migrations 0080 and 0081 are applied and
 the receiver capability is verified.
 
+The optional contact-assignment producer also uses this same profile, route,
+workspace allowlist, credentials, and portal outbox. **Publish scoped contact
+roles to the client portal** is disabled by default and requires portal and
+relation projection. It publishes only explicit department and project contact
+assignments; it never creates login or content access. Enabling or disabling it
+queues a complete replacement portal generation. Primary billing ownership and
+invoice-email delivery remain independent. Leave it clear until migration 0082
+and the receiver's schema-v4 capability are deployed. See
+[Portal contact-assignment projection v4](../architecture/portal-contact-assignment-projection-v4.md).
+
 If a revocation exhausts its delivery attempts, the simplified synchronization
 status exposes an audited retry action. It resets only failed revocations and
 keeps their original receiver/key contract; it never suppresses a tombstone or
 allows the replacement connection to activate early.
-The same unresolved-revocation barrier applies to signing-key rotation, so the
-old verification key cannot disappear before a retried tombstone is accepted.
-Re-enabling the same connection also waits for those revocations; ordinary
+Re-enabling the same connection waits for those revocations; ordinary
 saves of an already-active unchanged connection never administratively resolve
 historical dead-lettered events.
 

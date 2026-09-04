@@ -72,45 +72,20 @@ production image tags, port, service settings, and named volumes directly.
 Environment-specific copies belong to the deployment host, not the repository.
 
 The optional External Operations module is disabled by default. Deployments
-that use it configure it from the administrator-only **Custom integrations**
-settings page. The portal producer also needs a deployment-managed signing
-capability. The tracked Compose file exposes empty placeholders for its optional
-receiver-origin override and signing values; it never contains a credential.
+that use it configure the one connection from the administrator-only **Custom
+integrations** settings page. Ordinary Operations updates, portal workspace
+and membership records, service assignments, contact roles, and revocations
+all use the same signed event URL, Access service identity, application key,
+and HMAC secret. Project Alpha does not require a second portal URL, signing
+secret, Compose override, or connection profile.
 
-The canonical Compose definition keeps those values explicitly empty. Override
-them on the deployment host without editing the tracked file. Put the values in
-the ignored root `.env` file:
-
-```dotenv
-EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL=https://portal.example.com
-PORTAL_INTEGRATION_HMAC_SECRETS_JSON={"external_application":{"portal":{"keyId":"portal-rotation-id","current":"replace-with-a-random-secret-of-at-least-32-characters"}}}
-```
-
-Then create the ignored `docker-compose.override.yml` on that host:
-
-```yaml
-services:
-  web:
-    environment:
-      EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL: "${EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL:?set in the untracked .env file}"
-      PORTAL_INTEGRATION_HMAC_SECRETS_JSON: "${PORTAL_INTEGRATION_HMAC_SECRETS_JSON:?set in the untracked .env file}"
-```
-
-Compose loads this override automatically. Confirm the merged service has both
-keys without printing their values, then start the web service. Give both local
-files the narrowest host permissions supported by the deployment and never
-paste their contents into tracked Compose YAML, logs, support messages, or the
-repository. The legacy
-`EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_KEY_ID` and
-`EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_SECRET` variables remain compatible, but
-do not configure both representations. When using the legacy pair, add both
-variables to the ignored override instead of the JSON map. Rotation requires a new key ID and new
-secret; the saved previous credential remains available only for the bounded
-receiver overlap. These variables are read by the web service when the
-administrator saves the connection. Encrypted delivery credentials are stored
-in the database, so the cron and worker services do not need the raw portal
-secret. Keep the visible connection and producer toggle off until the receiver
-has passed preflight. See [External Operations](external-operations.html).
+The saved credentials are encrypted with the persisted application encryption
+key and are loaded by both event senders. Portal records are wrapped in the
+normal signed-event envelope with event type `portal.projection`; Operations
+routes the validated inner projection to its client portal. Keep the visible
+connection disabled until its Operations receiver contract is deployed. Do not
+paste its credentials or expanded Compose configuration into diagnostics. See
+[External Operations](external-operations.html).
 
 ## Administrator Recovery
 

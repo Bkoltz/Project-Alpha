@@ -42,13 +42,9 @@ services:
       # Optional. Defaults to the origin hostname.
       WEBAUTHN_RP_ID: ""
       AUTOPAY_BETA_ENABLED: "false"
-      # Optional client-portal producer settings. Keep empty until the receiver
-      # Access policy and matching signing capability have passed preflight.
-      EXTERNAL_OPS_CLIENT_PORTAL_BASE_URL: ""
+      # Optional inbound portal adapter credentials. Outbound portal events use
+      # the External Operations connection saved in administrator settings.
       PORTAL_INTEGRATION_HMAC_SECRETS_JSON: ""
-      # Backward-compatible alternative to the scoped JSON map above.
-      EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_KEY_ID: ""
-      EXTERNAL_OPS_CLIENT_PORTAL_SIGNING_SECRET: ""
       # Optional. Match the cron value exactly and retain it for restores.
       BACKUP_ENCRYPTION_KEY: ""
       TRUSTED_PROXIES: "172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8"

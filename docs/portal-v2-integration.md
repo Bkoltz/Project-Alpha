@@ -27,6 +27,7 @@ The command endpoints have separate exact-string environment opt-ins:
 `APP_PORTAL_DRAFT_QUOTES_ENABLED=true`. Projection delivery is controlled by
 the selected profile's `enabled`, `portal_projection_enabled`,
 `relation_projection_enabled`, `catalog_projection_enabled`,
+`contact_assignment_projection_enabled`,
 `service_assignment_projection_enabled`, and `delivery_enabled` columns plus
 the runtime `portal_outbound_delivery_enabled` and
 `portal_authoritative_hooks_enabled` application settings. Migration 0066 also
@@ -58,7 +59,7 @@ Pricing is planning guidance only. Fixed `each`/`project` services use exact min
 
 ## Projection and recovery
 
-Portal snapshot pages are capped at 100 records, 100 pages, and 2,000 records. Service Library pages are capped at 50 items, 100 pages, and 500 total items. All pages in a generation share the same monotonic per-profile source sequence, unique generation ID, hash, and counts; `snapshot.activate` follows every page. Relations/lifecycles require schema v3 and an explicit profile flag. Project `completed_at` is set on the first completed transition, retained across repeated completed updates, and cleared only by a later reopen.
+Portal snapshot pages are capped at 100 records, 100 pages, and 2,000 records. Service Library pages are capped at 50 items, 100 pages, and 500 total items. All pages in a generation share the same monotonic per-profile source sequence, unique generation ID, hash, and counts; `snapshot.activate` follows every page. Relations/lifecycles require schema v3 and an explicit profile flag. Contact assignments require schema v4 and a second default-off profile capability; their records participate in the same page limits, hash, and counts. Project `completed_at` is set on the first completed transition, retained across repeated completed updates, and cleared only by a later reopen.
 
 Source versions are deterministic hashes of client-visible content. Renames, reparenting, deactivation, lifecycle changes, and Service Library question changes therefore cannot reuse a prior source version. Complete snapshots are the recovery mechanism after a gap or interrupted generation. Receiver activation must be atomic and must not expose partial pages.
 
@@ -73,6 +74,14 @@ Queued revocations are durable control-plane records, not evidence of network de
 Profile key/route changes and every projection outbox enqueue serialize on the same `portal_integration_profiles` row lock inside their transaction. This prevents a concurrent producer from inserting an old-contract delivery between the pending-outbox check and a contract rotation. Producers that wait behind a disable reload the locked profile and fail closed instead of publishing with stale flags or routes.
 
 Ordinary organization, department, client/contact, project create/update/reparent/status/delete, onboarding-merge, and department-contact assignment paths call the scoped mutation reconciler inside the authoritative database transaction. After the first complete snapshot establishes a checkpoint, resource state is diffed and strict ordered upsert/tombstone events are appended; Service Library edits do the same for catalog items. Manual complete snapshots remain the bounded recovery mechanism. Reparent and delete paths lock the authoritative client/project row before reading the old scope, then reconcile that locked old scope with the actual post-mutation scope; multi-row paths acquire locks in numeric ID order. The reconciler operates only on those organization/standalone-client roots, persists relation upserts/tombstones, and fans out only through active profile/workspace allowlist rows. Any relation, checkpoint, audit, or outbox failure aborts the authoritative transaction. No global reconciliation or implicit profile fanout is performed.
+
+Schema v4 publishes scoped contact roles only from explicit department-contact
+and project-client associations. It never infers a role from project ownership,
+email, eligibility, identities, entitlements, public links, or invoice recipient
+rows. Assignment topology additions/removals use replacement generations; role
+or billing-flag updates on an existing assignment may use events. Primary
+billing ownership does not imply invoice-email delivery. See
+[Portal contact-assignment projection v4](architecture/portal-contact-assignment-projection-v4.md).
 
 Manager appointment/offboarding, its audit record, recovery state, and projection events share one transaction. Removing the final `member.manage` authority for an exact profile/workspace/scope persists `recovery_required`; the staff UI lists that scope until a replacement manager is appointed. A primary contact or display link never clears this state.
 

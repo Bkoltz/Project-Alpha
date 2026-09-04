@@ -26,7 +26,7 @@ final class PortalProjectionOutboxSender
         for($index=0;$index<$limit;$index++){
             if(microtime(true)>=$deadline)break;
             $claim=$this->claimNext($pdo);if($claim===null)break;$summary['processed']++;
-            try{$response=$this->sendClaim($claim,$transport);$status=(int)($response['status']??0);if($status>=200&&$status<300){$this->finish($pdo,$claim,true,$status,null,false);$summary['delivered']++;continue;}
+            try{$response=$this->sendClaim($pdo,$claim,$transport);$status=(int)($response['status']??0);if($status>=200&&$status<300){$this->finish($pdo,$claim,true,$status,null,false);$summary['delivered']++;continue;}
                 $code=$status>=300&&$status<400?'redirect_rejected':($status===429?'http_429':($status>=400&&$status<500?'http_4xx':($status>=500?'http_5xx':'transport_failed')));$dead=$this->shouldDeadLetter($claim,$status);$this->finish($pdo,$claim,false,$status,$code,$dead);$dead?$summary['dead_lettered']++:$summary['failed']++;
             }catch(Throwable$error){$code=$this->safeErrorCode($error);$dead=((int)$claim['attempts']+1)>=(int)$claim['delivery_max_attempts'];$this->finish($pdo,$claim,false,0,$code,$dead);$dead?$summary['dead_lettered']++:$summary['failed']++;}
         }return$summary;
@@ -41,13 +41,20 @@ final class PortalProjectionOutboxSender
     }
 
     /** @param array<string,mixed> $claim @return array{status:int,body?:string,error?:string} */
-    private function sendClaim(array $claim,callable $transport):array
+    private function sendClaim(PDO $pdo,array $claim,callable $transport):array
     {
-        $route=(string)($claim['destination_url']??'');if($route==='')$route=(string)($claim['route_type']==='catalog'?($claim['catalog_route']??''):($claim['portal_route']??''));$parts=PortalProjectionDeliveryConfigService::validateDestination($route);
-        $keyId=(string)($claim['signing_key_id']??'');if($keyId==='')$keyId=(string)($claim['delivery_key_id']??'');$config=new PortalProjectionDeliveryConfigService();$credentials=$config->credentials($claim);$secret='';if($keyId!==''&&hash_equals((string)($claim['delivery_key_id']??''),$keyId))$secret=$credentials['currentSecret'];elseif($keyId!==''&&hash_equals((string)($claim['delivery_previous_key_id']??''),$keyId)&&!empty($claim['delivery_previous_valid_until'])&&(string)$claim['delivery_previous_valid_until']>self::dbNow())$secret=$credentials['previousSecret'];if($secret===''||strlen($secret)<32)throw new RuntimeException('signing_key_unavailable');
-        $body=(string)$claim['payload_json'];$timestamp=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.v\Z');$target=(string)($parts['path']??'/');$deliveryId=(string)$claim['delivery_id'];$digest=hash('sha256',$body);$canonical=$timestamp."\nPOST\n".$target."\n".$keyId."\n".$deliveryId."\n".$body;$signature=hash_hmac('sha256',$canonical,$secret);
-        $headers=['Content-Type: application/json','X-Portal-Integration-Application-Key: '.(string)$claim['application_key'],'X-Portal-Integration-Timestamp: '.$timestamp,'X-Portal-Integration-Body-SHA256: '.$digest,'X-Portal-Integration-Key-Id: '.$keyId,'X-Portal-Integration-Delivery-Id: '.$deliveryId,'X-Portal-Integration-Signature: sha256='.$signature];foreach($credentials['authHeaders']as$name=>$value)$headers[]=$name.': '.$value;
-        return$transport($route,$headers,$body,max(2,min(30,(int)$claim['delivery_timeout_seconds'])));
+        $config=(new ExternalOpsConfigService())->load($pdo);
+        $issues=ExternalOpsConfigService::deliveryIssues($config);
+        if(empty($config['configured_enabled'])||$issues!==[])throw new RuntimeException('external-operations-delivery-unavailable');
+        if(!hash_equals((string)$config['application_key'],(string)$claim['application_key']))throw new RuntimeException('external-operations-application-mismatch');
+        $route=(string)$config['webhook_url'];PortalProjectionDeliveryConfigService::validateDestination($route);
+        $projection=json_decode((string)$claim['payload_json'],true,64,JSON_THROW_ON_ERROR);if(!is_array($projection))throw new RuntimeException('portal-projection-envelope-invalid');
+        $projectionKind=(string)($claim['route_type']??'');if(!in_array($projectionKind,['portal','catalog','service_assignments'],true))throw new RuntimeException('portal-projection-kind-invalid');
+        $deliveryId=(string)$claim['delivery_id'];$occurredAt=(string)($projection['occurredAt']??(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.u\Z'));
+        $event=['event_id'=>$deliveryId,'event_type'=>'portal.projection','occurred_at'=>$occurredAt,'schema_version'=>1,'application_key'=>(string)$config['application_key'],'projection_kind'=>$projectionKind,'projection'=>$projection];
+        $body=json_encode($event,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);$timestamp=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');$signature=hash_hmac('sha256',$timestamp.'.'.$body,(string)$config['hmac_secret']);
+        $headers=['Content-Type: application/json','CF-Access-Client-Id: '.(string)$config['access_client_id'],'CF-Access-Client-Secret: '.(string)$config['access_client_secret'],'X-PA-Event-ID: '.$deliveryId,'X-PA-Timestamp: '.$timestamp,'X-PA-Signature: sha256='.$signature];
+        return$transport($route,$headers,$body,max(2,min(30,(int)$config['timeout_seconds'])));
     }
 
     /** @param array<string,mixed> $claim */
@@ -61,7 +68,7 @@ final class PortalProjectionOutboxSender
     private function shouldDeadLetter(array $claim,int $status):bool{return((int)$claim['attempts']+1)>=(int)$claim['delivery_max_attempts']||($status>=400&&$status<500&&$status!==408&&$status!==409&&$status!==425&&$status!==429);}
     /** @param array<string,mixed> $profile @param array<string,mixed> $row */
     private function profileAllows(array$profile,array$row):bool{if(empty($profile['delivery_enabled']))return false;if(!empty($row['is_revocation']))return true;if(empty($profile['enabled']))return false;return match($row['route_type']??''){'catalog'=>!empty($profile['catalog_projection_enabled']),'service_assignments'=>!empty($profile['service_assignment_projection_enabled']),'portal'=>!empty($profile['portal_projection_enabled']),default=>false};}
-    private function safeErrorCode(Throwable $error):string{$message=strtolower($error->getMessage());foreach(['dns_no_public_address','redirect_rejected','signing_key_unavailable','portal-delivery-credentials-unavailable','portal-delivery-credentials-unreadable','curl_unavailable']as$code)if(str_contains($message,$code))return$code;return'transport_failed';}
+    private function safeErrorCode(Throwable $error):string{$message=strtolower($error->getMessage());foreach(['dns_no_public_address','redirect_rejected','external-operations-delivery-unavailable','external-operations-application-mismatch','portal-projection-envelope-invalid','portal-projection-kind-invalid','curl_unavailable']as$code)if(str_contains($message,$code))return$code;return'transport_failed';}
 
     /** @return array{status:int,body:string,error:string} */
     public function curlTransport(string $url,array $headers,string $body,int $timeout):array

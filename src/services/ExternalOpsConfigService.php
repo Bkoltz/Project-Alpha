@@ -159,6 +159,13 @@ final class ExternalOpsConfigService
             if ($ownsTransaction) {
                 $pdo->beginTransaction();
             }
+            $this->assertPortalContractCanRotate($pdo, $current, [
+                'application_key' => $applicationKey,
+                'webhook_url' => $webhookUrl,
+                'access_client_id' => $credentials['access_client_id'],
+                'access_client_secret' => $credentials['access_client_secret'],
+                'hmac_secret' => $credentials['hmac_secret'],
+            ]);
             $saveSql = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
                 ? 'INSERT INTO app_config (organization_id,config_key,config_value) VALUES (0,?,?)
                    ON CONFLICT(organization_id,config_key) DO UPDATE SET config_value=excluded.config_value'
@@ -179,6 +186,48 @@ final class ExternalOpsConfigService
         }
 
         return $this->load($pdo);
+    }
+
+    /**
+     * Portal records deliberately share this transport. Lock the projection
+     * profiles and refuse to mutate its addressing or authentication while an
+     * old-contract row remains unresolved; otherwise the sender could sign an
+     * old grant or revocation with replacement credentials and deliver it to a
+     * replacement receiver. Secrets are compared only in memory and are never
+     * copied into the projection outbox.
+     *
+     * @param array<string,mixed> $current
+     * @param array<string,string> $replacement
+     */
+    private function assertPortalContractCanRotate(PDO $pdo, array $current, array $replacement): void
+    {
+        $fields = ['application_key', 'webhook_url', 'access_client_id', 'access_client_secret', 'hmac_secret'];
+        $established = false;
+        $changed = false;
+        foreach ($fields as $field) {
+            $before = (string)($current[$field] ?? '');
+            $after = (string)($replacement[$field] ?? '');
+            $established = $established || $before !== '';
+            $changed = $changed || !hash_equals($before, $after);
+        }
+        if (!$established || !$changed) {
+            return;
+        }
+
+        $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+        // Projection producers lock their profile contract before enqueueing,
+        // so taking the same locks closes the zero-pending/new-row race.
+        $pdo->query('SELECT id FROM portal_integration_profiles ORDER BY id' . $lock)->fetchAll(PDO::FETCH_COLUMN);
+        $pending = $pdo->query(
+            'SELECT id FROM portal_projection_outbox
+             WHERE delivered_at IS NULL AND (dead_lettered_at IS NULL OR is_revocation=1)
+             ORDER BY id' . $lock
+        )->fetchColumn();
+        if ($pending !== false) {
+            throw new DomainException(
+                'Deliver or explicitly resolve every pending client portal projection before changing the External Operations URL, application key, or delivery credentials.'
+            );
+        }
     }
 
     /**

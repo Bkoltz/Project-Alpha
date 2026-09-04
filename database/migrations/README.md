@@ -54,3 +54,16 @@ signed delivery credentials, and durable projection outbox. It does not infer
 assignments from catalog visibility, billing records, portal eligibility, or
 workspace membership. Migration `0081_portal_service_assignment_management_permission.sql`
 adds the separate staff permission used to administer those assignments.
+
+Migration `0082_portal_contact_assignment_projection.sql` adds the schema-v4
+contact-assignment producer capability to the same External Operations profile.
+It defaults off, requires both portal and relation projection, and publishes
+only explicit department-contact and project-client assignments. It does not
+create identities, login eligibility, memberships, entitlements, delivery
+grants, billing recipients, or notification recipients.
+
+Migration `0083_portal_client_provisioning_backfill.sql` adds durable,
+profile-scoped progress for the automatic historical client-portal
+reconciliation. The cron job remains inert until the unified portal producer
+preflight is ready, processes a bounded batch, retries transient failures, and
+does not send invitations or override administrator revocations.

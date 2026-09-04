@@ -382,14 +382,12 @@ final class PortalServiceAssignmentProjectionService
 
     private function serviceAssignmentRoute(string $portalRoute): string
     {
-        PortalProjectionDeliveryConfigService::validateDestination($portalRoute);
-        $parts = parse_url($portalRoute);
-        $path = (string)($parts['path'] ?? '');
-        if (preg_match('~/api/internal/project-alpha(?:/sources/[^/]{1,256})?/portal-v2$~D', $path) !== 1) {
+        try {
+            PortalProjectionDeliveryConfigService::validateDestination($portalRoute);
+        } catch (DomainException) {
             throw new DomainException('service-assignment-route-invalid');
         }
-        $path = substr($path, 0, -strlen('portal-v2')) . 'service-assignments-v1';
-        return 'https://' . (string)$parts['host'] . (isset($parts['port']) ? ':' . (int)$parts['port'] : '') . $path;
+        return $portalRoute;
     }
 
     private function enqueue(PDO $pdo, array $profile, int $sequence, string $kind, array $payload, bool $revocation=false): void
