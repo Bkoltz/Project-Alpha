@@ -48,7 +48,7 @@ final class ManagedDeliveryIntegrationTest extends TestCase
         self::assertStringContainsString('integration_profile_id BIGINT UNSIGNED NULL', $migration);
         self::assertStringContainsString("'managed_delivery_intent_url','managed_delivery_profile_id'", $migration);
         self::assertStringNotContainsString('UPDATE managed_delivery_intent_outbox SET destination_url', $migration);
-        self::assertStringContainsString('legacy_transport_retired_manual_retry_required', $migration);
+        self::assertStringContainsString('legacy_transport_retired_manual_remediation_required', $migration);
     }
 
     public function testPreflightUsesOneStrictExternalOperationsEnvelopeWhileToggleIsOff(): void
@@ -166,7 +166,31 @@ final class ManagedDeliveryIntegrationTest extends TestCase
         self::assertStringNotContainsString('ManagedDeliveryIntentSigner::headers', (string)file_get_contents(dirname(__DIR__,2).'/src/services/ManagedDeliveryIntentSender.php'));
     }
 
-    public function testExplicitLegacyRevocationRetryRebindsBeforeDispatch(): void
+    public function testLegacyAcceptedReceiptCannotBeRevokedThroughCurrentReceiver(): void
+    {
+        $pdo=$this->database();
+        $provisionId='12121212-1212-4212-8212-121212121212';
+        $revokeId='23232323-2323-4232-8232-232323232323';
+        $scope=str_repeat('a',32);$audience=str_repeat('b',32);
+        $provision='{"schemaVersion":1,"applicationKey":"legacy-app","deliveryId":"'.$provisionId.'","occurredAt":"2026-09-04T12:00:00.000Z","scope":{"type":"project","publicId":"'.$scope.'"},"audience":{"type":"principal","publicId":"'.$audience.'"},"accessMode":"portal","expiresAt":null,"label":null,"notify":true}';
+        $hash=$this->legacyHash(1,'legacy-app','https://legacy.example/api/internal/project-alpha/delivery-intents','legacy-v1',[],str_repeat('l',32));
+        $pdo->prepare("INSERT INTO managed_delivery_intent_outbox(delivery_id,transport_mode,integration_profile_id,destination_url,pinned_application_key,signing_key_id,signing_contract_hash,delivery_timeout_seconds,delivery_max_attempts,actor_user_id,scope_type,scope_public_id,audience_type,audience_public_id,access_mode,request_fingerprint,payload_json,delivered_at,receipt_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            ->execute([$provisionId,'legacy_profile',1,'https://legacy.example/api/internal/project-alpha/delivery-intents','legacy-app','legacy-v1',$hash,3,2,7,'project',$scope,'principal',$audience,'portal',hash('sha256',$provision),$provision,'2026-09-04 12:00:01.000000','legacy_receipt']);
+
+        try {
+            (new ManagedDeliveryService())->queueRevocation($pdo,$provisionId,$revokeId,7);
+            self::fail('A legacy receipt must not be sent to the current receiver.');
+        } catch (\DomainException $error) {
+            self::assertStringContainsString('original delivery system',$error->getMessage());
+        }
+        self::assertSame(0,(int)$pdo->query("SELECT COUNT(*) FROM managed_delivery_intent_outbox WHERE delivery_id='{$revokeId}'")->fetchColumn());
+        $historical=$pdo->query("SELECT transport_mode,receipt_id,revoked_at FROM managed_delivery_intent_outbox WHERE delivery_id='{$provisionId}'")->fetch(PDO::FETCH_ASSOC);
+        self::assertSame('legacy_profile',$historical['transport_mode']);
+        self::assertSame('legacy_receipt',$historical['receipt_id']);
+        self::assertNull($historical['revoked_at']);
+    }
+
+    public function testExplicitLegacyRevocationRetryRemainsBlockedWithoutMutation(): void
     {
         $pdo=$this->database();
         $provisionId='12121212-1212-4212-8212-121212121212';
@@ -177,25 +201,22 @@ final class ManagedDeliveryIntegrationTest extends TestCase
         $hash=$this->legacyHash(1,'legacy-app','https://legacy.example/api/internal/project-alpha/delivery-intents','legacy-v1',[],str_repeat('l',32));
         $insert=$pdo->prepare("INSERT INTO managed_delivery_intent_outbox(delivery_id,intent_type,target_delivery_id,transport_mode,integration_profile_id,destination_url,pinned_application_key,signing_key_id,signing_contract_hash,delivery_timeout_seconds,delivery_max_attempts,actor_user_id,scope_type,scope_public_id,audience_type,audience_public_id,access_mode,request_fingerprint,payload_json,delivered_at,dead_lettered_at,receipt_id,last_error_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         $insert->execute([$provisionId,'provision',null,'legacy_profile',1,'https://legacy.example/api/internal/project-alpha/delivery-intents','legacy-app','legacy-v1',$hash,3,2,7,'project',$scope,'principal',$audience,'portal',hash('sha256',$provision),$provision,'2026-09-04 12:00:01.000000',null,'legacy_receipt',null]);
-        $insert->execute([$revokeId,'revoke',$provisionId,'legacy_profile',1,'https://legacy.example/api/internal/project-alpha/delivery-intents','legacy-app','legacy-v1',$hash,3,2,7,'project',$scope,'principal',$audience,'portal',hash('sha256',$revoke),$revoke,null,'2026-09-04 12:02:00.000000',null,'legacy_transport_retired_manual_retry_required']);
+        $insert->execute([$revokeId,'revoke',$provisionId,'legacy_profile',1,'https://legacy.example/api/internal/project-alpha/delivery-intents','legacy-app','legacy-v1',$hash,3,2,7,'project',$scope,'principal',$audience,'portal',hash('sha256',$revoke),$revoke,null,'2026-09-04 12:02:00.000000',null,'legacy_transport_retired_manual_remediation_required']);
 
-        (new ManagedDeliveryService())->requeueRevocation($pdo,$revokeId);
-        $row=$pdo->query("SELECT transport_mode,integration_profile_id,destination_url,pinned_application_key,dead_lettered_at,payload_json FROM managed_delivery_intent_outbox WHERE delivery_id='{$revokeId}'")->fetch(PDO::FETCH_ASSOC);
-        self::assertSame('external_ops',$row['transport_mode']);
-        self::assertNull($row['integration_profile_id']);
-        self::assertSame('https://ops.example/v1/project-alpha/events',$row['destination_url']);
-        self::assertSame('project-alpha',$row['pinned_application_key']);
-        self::assertNull($row['dead_lettered_at']);
-        self::assertSame('project-alpha',json_decode($row['payload_json'],true,16,JSON_THROW_ON_ERROR)['applicationKey']);
-
-        $called=false;
-        $result=(new ManagedDeliveryIntentSender())->deliverDeliveryId($pdo,$revokeId,static function(string$url,array$headers,string$body)use(&$called,$revokeId):array{
-            $called=true;$event=json_decode($body,true,16,JSON_THROW_ON_ERROR);
-            self::assertSame('delivery.intent:revoke:'.$revokeId,$event['event_id']);
-            return['status'=>200,'body'=>json_encode(['ok'=>true,'event_id'=>$event['event_id'],'status'=>'completed','result'=>['receiptId'=>'revoke_receipt','status'=>'accepted']],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)];
-        });
-        self::assertTrue($called);
-        self::assertSame(1,$result['accepted']);
+        try {
+            (new ManagedDeliveryService())->requeueRevocation($pdo,$revokeId);
+            self::fail('A legacy revocation must not be rebound to the current receiver.');
+        } catch (\DomainException $error) {
+            self::assertStringContainsString('cannot be rebound automatically',$error->getMessage());
+        }
+        $row=$pdo->query("SELECT transport_mode,integration_profile_id,destination_url,pinned_application_key,dead_lettered_at,last_error_code,payload_json FROM managed_delivery_intent_outbox WHERE delivery_id='{$revokeId}'")->fetch(PDO::FETCH_ASSOC);
+        self::assertSame('legacy_profile',$row['transport_mode']);
+        self::assertSame(1,$row['integration_profile_id']);
+        self::assertSame('https://legacy.example/api/internal/project-alpha/delivery-intents',$row['destination_url']);
+        self::assertSame('legacy-app',$row['pinned_application_key']);
+        self::assertNotNull($row['dead_lettered_at']);
+        self::assertSame('legacy_transport_retired_manual_remediation_required',$row['last_error_code']);
+        self::assertSame('legacy-app',json_decode($row['payload_json'],true,16,JSON_THROW_ON_ERROR)['applicationKey']);
     }
 
     public function testUiKeepsOnlyOptInPolicyBesideSingleExternalOperationsConnection(): void
@@ -208,6 +229,8 @@ final class ManagedDeliveryIntegrationTest extends TestCase
         self::assertStringNotContainsString('name="managed_delivery_profile_id"',$view);
         self::assertStringNotContainsString("'intent_url' =>",$handler);
         self::assertStringNotContainsString("'profile_id' =>",$handler);
+        self::assertStringContainsString('Manual remediation required',$view);
+        self::assertStringContainsString('Use original system',$view);
     }
 
     private function database(bool $managedEnabled=true): PDO

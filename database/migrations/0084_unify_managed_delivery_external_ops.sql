@@ -15,11 +15,12 @@ ALTER TABLE managed_delivery_intent_outbox
 
 -- Never let an unresolved row continue making direct calls to the retired
 -- receiver. Historical accepted receipts remain untouched. An administrator
--- may recreate a failed provision or explicitly retry a failed revocation;
--- either action binds the request to the External Operations contract.
+-- may recreate a failed provision as a new request. Legacy accepted receipts
+-- and revocations require manual remediation in the original delivery system;
+-- they are never rebound to the current External Operations contract.
 UPDATE managed_delivery_intent_outbox
 SET dead_lettered_at=COALESCE(dead_lettered_at,CURRENT_TIMESTAMP(6)),
-    last_error_code='legacy_transport_retired_manual_retry_required',
+    last_error_code='legacy_transport_retired_manual_remediation_required',
     claim_token=NULL,
     claimed_at=NULL
 WHERE transport_mode='legacy_profile'

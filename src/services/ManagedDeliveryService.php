@@ -126,10 +126,12 @@ final class ManagedDeliveryService
     /** @param array<string,mixed> $original @return array{transportMode:string,profileId:?int,url:string,applicationKey:string,keyId:string,secret:string,authHeaders:array<string,string>,contractHash:string,timeout:int,maxAttempts:int} */
     public function revocationContract(PDO $pdo, array $original): array
     {
+        if (($original['transport_mode'] ?? self::TRANSPORT_LEGACY_PROFILE) !== self::TRANSPORT_EXTERNAL_OPS) {
+            throw new DomainException('This historical delivery used a retired receiver contract. Revoke it in the original delivery system and record the resolution manually; Project Alpha will not send its receipt to the current External Operations receiver.');
+        }
         $contract = $this->deliveryContract($pdo, false);
-        if (($original['transport_mode'] ?? self::TRANSPORT_LEGACY_PROFILE) === self::TRANSPORT_EXTERNAL_OPS
-            && (!hash_equals((string)$original['destination_url'], $contract['url'])
-                || !hash_equals((string)$original['pinned_application_key'], $contract['applicationKey']))) {
+        if (!hash_equals((string)$original['destination_url'], $contract['url'])
+            || !hash_equals((string)$original['pinned_application_key'], $contract['applicationKey'])) {
             throw new DomainException('The accepted delivery receiver changed before revocation. Restore the original External Operations connection first.');
         }
         return $contract;
@@ -263,25 +265,7 @@ final class ManagedDeliveryService
             $original->execute([$targetDeliveryId]);
             if (!$original->fetchColumn()) throw new DomainException('The failed revocation is no longer eligible for retry.');
             if (($failedIntent['transport_mode'] ?? self::TRANSPORT_LEGACY_PROFILE) !== self::TRANSPORT_EXTERNAL_OPS) {
-                $contract = $this->deliveryContract($pdo, false);
-                $payload = json_decode((string)$failedIntent['payload_json'], true, 16, JSON_THROW_ON_ERROR);
-                if (!is_array($payload)) throw new DomainException('The failed revocation payload is invalid.');
-                $payload['applicationKey'] = $contract['applicationKey'];
-                $body = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-                $pdo->prepare("UPDATE managed_delivery_intent_outbox SET transport_mode='external_ops',integration_profile_id=NULL,destination_url=?,pinned_application_key=?,signing_key_id=?,signing_contract_hash=?,delivery_timeout_seconds=?,delivery_max_attempts=?,request_fingerprint=?,payload_json=? WHERE delivery_id=? AND intent_type='revoke' AND delivered_at IS NULL AND dead_lettered_at IS NOT NULL")
-                    ->execute([$contract['url'],$contract['applicationKey'],$contract['keyId'],$contract['contractHash'],$contract['timeout'],$contract['maxAttempts'],hash('sha256',$body),$body,$deliveryId]);
-                $failedIntent = array_merge($failedIntent, [
-                    'transport_mode'=>self::TRANSPORT_EXTERNAL_OPS,
-                    'integration_profile_id'=>null,
-                    'destination_url'=>$contract['url'],
-                    'pinned_application_key'=>$contract['applicationKey'],
-                    'signing_key_id'=>$contract['keyId'],
-                    'signing_contract_hash'=>$contract['contractHash'],
-                    'delivery_timeout_seconds'=>$contract['timeout'],
-                    'delivery_max_attempts'=>$contract['maxAttempts'],
-                    'request_fingerprint'=>hash('sha256',$body),
-                    'payload_json'=>$body,
-                ]);
+                throw new DomainException('This historical revocation used a retired receiver contract and cannot be rebound automatically. Resolve it in the original delivery system and retain this record for audit.');
             }
             $this->deliveryContractForClaim($pdo, $failedIntent);
             $statement = $pdo->prepare("UPDATE managed_delivery_intent_outbox SET attempts=0,next_attempt_at=CURRENT_TIMESTAMP,claim_token=NULL,claimed_at=NULL,dead_lettered_at=NULL,last_http_status=NULL,last_error_code=NULL WHERE delivery_id=? AND intent_type='revoke' AND delivered_at IS NULL AND dead_lettered_at IS NOT NULL");
