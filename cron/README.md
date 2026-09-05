@@ -76,6 +76,12 @@ roots per run. Future client mutations continue through the authoritative
 mutation hook. Explicit root or client revocations remain authoritative and no
 invitation email is sent.
 
+On upgrades, the same job also adopts an already-enabled and complete External
+Operations connection as the portal producer. Administrators do not need to
+re-enter or re-save its credentials. Disabled or incomplete connections remain
+inert, and a changed receiver must finish the existing retirement/revocation
+drain before the replacement contract can activate.
+
 Database backups are infrastructure protection and do not depend on the automatic-invoice `cron_enabled` setting.
 
 ## Troubleshooting
@@ -88,5 +94,6 @@ Database backups are infrastructure protection and do not depend on the automati
 6. Confirm the deployed cron tag matches the intended branch.
 7. Confirm `/etc/cron.d/project-alpha` includes `/usr/local/bin` in `PATH`; otherwise the official PHP image's executable is not available to cron jobs.
 8. For portal delivery, inspect only the bounded error code and outbox counters in Settings; do not copy encrypted credentials, signed payloads, or receiver authorization headers into tickets.
+9. Confirm migration 0083 is applied. Schema health now treats a missing `portal_client_provisioning_backfill` table as an incomplete upgrade.
 
 Do not paste production logs into a public issue without removing credentials and customer information.

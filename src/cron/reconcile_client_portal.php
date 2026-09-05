@@ -11,14 +11,18 @@ require_once __DIR__.'/../utils/cron_state.php';
 
 $jobName='portal_client_provisioning_backfill';
 try {
+    $service=new PortalClientProvisioningService();
+    $activation=$service->activateConfiguredConnection($pdo);
     $config=(new ExternalOpsConfigService())->load($pdo);
-    $summary=(new PortalClientProvisioningService())->reconcileHistoricalBatch(
+    $summary=$service->reconcileHistoricalBatch(
         $pdo,
         (string)($config['application_key']??''),
         25
     );
     $message=sprintf(
-        'Ready %s; considered %d; completed %d; retrying %d; failed %d; remaining %d',
+        'Activation %s (%s); ready %s; considered %d; completed %d; retrying %d; failed %d; remaining %d',
+        $activation['attempted']?'checked':'unchanged',
+        $activation['transition_state'],
         $summary['ready']?'yes':'no',
         $summary['considered'],
         $summary['completed'],
