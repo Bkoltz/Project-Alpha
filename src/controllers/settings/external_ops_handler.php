@@ -58,10 +58,10 @@ try {
     } elseif ($action === 'reconcile-client-portal') {
         $summary=(new ExternalOpsSyncOrchestrator())->run($pdo,100,50,50,null,null,20);
         $reconciliation=$summary['reconciliation'];$portal=$summary['portal'];
-        $message=sprintf('Client portal sync considered %d roots, completed %d, with %d remaining; %d portal events delivered and %d retrying.',$reconciliation['considered'],$reconciliation['completed'],$reconciliation['remaining'],$portal['delivered'],$portal['failed']);
+        $message=sprintf('Workspace sync considered %d roots, completed %d, with %d remaining; %d workspace events delivered and %d retrying.',$reconciliation['considered'],$reconciliation['completed'],$reconciliation['remaining'],$portal['delivered'],$portal['failed']);
     } elseif ($action === 'retry-client-portal-revocations') {
         $retried=(new PortalClientProvisioningService())->retryFailedRevocations($pdo,(string)$config['application_key'],$actorUserId);
-        $message=sprintf('%d failed client portal revocation(s) were requeued against the unchanged retired receiver contract.',$retried);
+        $message=sprintf('%d failed workspace revocation(s) were requeued against the unchanged retired receiver contract.',$retried);
     } elseif ($action === 'set-client-portal-root') {
         if (!user_can($pdo,$actorUserId,'users.manage',0)) throw new DomainException('User-management permission is required to change client portal login access.');
         $active=(string)($_POST['access_state']??'')==='active';
@@ -166,16 +166,22 @@ try {
     header('Location: ' . $location);
 } catch (Throwable $error) {
     $diagnostic=substr(hash('sha256',get_class($error).':'.$error->getMessage()),0,12);error_log('[external_ops_settings] failed code='.$diagnostic);
+    $publicError = $error instanceof DomainException
+        ? $error->getMessage()
+        : (($error instanceof PDOException && str_starts_with((string)$error->getCode(), '42'))
+            ? 'The integration database schema does not match this Project Alpha release. Apply the current database migrations, then retry. Diagnostic code '.$diagnostic
+            : 'The integration action failed. Diagnostic code '.$diagnostic);
+    error_log('[external_ops_settings] action='.(string)($_POST['action']??'unknown').' class='.get_class($error).' error_code='.(string)$error->getCode().' diagnostic='.$diagnostic);
     $returnTo = trim((string)($_POST['return_to'] ?? ''));
     $failedAction = (string)($_POST['action'] ?? '');
     $clientActions = ['save-portal-workspace','set-portal-workspace-link','save-portal-principal','revoke-portal-principal','save-portal-entitlement','appoint-portal-manager','offboard-portal-manager','save-viewer-share-entitlement'];
     $advancedActions = ['save-portal-profile','save-portal-runtime','save-portal-delivery','send-portal-now','queue-portal-snapshot','queue-catalog-snapshot'];
     $returnTab = in_array($failedAction, $clientActions, true) ? 'client-portal-access' : (in_array($failedAction, $advancedActions, true) ? 'integration-advanced' : 'external-ops');
-    if($returnTo==='client-details'&&!empty($_POST['client_id']))$location='/?page=client/client-details&id='.(int)$_POST['client_id'].'&error='.rawurlencode($error->getMessage());
-    elseif($returnTo==='organization-view'&&!empty($_POST['organization_id']))$location='/?page=organization/organization-view&id='.(int)$_POST['organization_id'].'&error='.rawurlencode($error->getMessage());
+    if($returnTo==='client-details'&&!empty($_POST['client_id']))$location='/?page=client/client-details&id='.(int)$_POST['client_id'].'&error='.rawurlencode($publicError);
+    elseif($returnTo==='organization-view'&&!empty($_POST['organization_id']))$location='/?page=organization/organization-view&id='.(int)$_POST['organization_id'].'&error='.rawurlencode($publicError);
     else $location = $returnTo === 'account-edit' && !empty($_POST['user_id'])
-        ? '/?page=account-edit&id=' . (int)$_POST['user_id'] . '&error=' . rawurlencode($error->getMessage())
-        : '/?page=settings&tab=' . $returnTab . '&saved=0&error=' . rawurlencode($error instanceof DomainException?$error->getMessage():'The integration action failed. Diagnostic code '.$diagnostic);
+        ? '/?page=account-edit&id=' . (int)$_POST['user_id'] . '&error=' . rawurlencode($publicError)
+        : '/?page=settings&tab=' . $returnTab . '&saved=0&error=' . rawurlencode($publicError);
     header('Location: ' . $location);
 }
 exit;

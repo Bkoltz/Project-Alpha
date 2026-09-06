@@ -30,7 +30,7 @@ try {
     $portalStatus = $portalProvisioning->status($pdo, $applicationKey);
 } catch (Throwable $error) {
     $portalStatusError = true;
-    error_log('[custom_integration_settings] Failed to load client portal provisioning status: ' . $error->getMessage());
+    error_log('[custom_integration_settings] Failed to load connected-workspace synchronization status: ' . $error->getMessage());
 }
 
 if (!empty($config['enabled'])) {
@@ -88,25 +88,25 @@ if (!empty($config['enabled'])) {
       <label class="field" style="grid-column:1/-1"><span class="label">HMAC secret</span><input class="input" type="password" name="hmac_secret" minlength="32" autocomplete="new-password" placeholder="<?=!empty($config['hmac_secret'])?'Configured - leave blank to keep':'Same 32+ character secret as the receiver'?>"></label>
       <label class="field"><span class="label">Timeout seconds</span><input class="input" type="number" name="timeout_seconds" min="2" max="30" value="<?=(int)$config['timeout_seconds']?>"></label>
       <label class="field"><span class="label">Maximum attempts</span><input class="input" type="number" name="max_attempts" min="1" max="100" value="<?=(int)$config['max_attempts']?>"></label>
-      <label class="check-row" style="grid-column:1/-1"><input type="checkbox" name="service_assignment_projection_enabled" value="1" <?=!empty($portalStatus['profile']['service_assignment_projection_enabled'])?'checked':''?>> Publish assigned services to the client portal</label>
-      <small style="grid-column:1/-1">Default off. This publishes explicit service availability through the same signed connection. It never grants portal login, workspace membership, file access, billing access, or notifications.</small>
-      <label class="check-row" style="grid-column:1/-1"><input type="checkbox" name="contact_assignment_projection_enabled" value="1" <?=!empty($portalStatus['profile']['contact_assignment_projection_enabled'])?'checked':''?>> Publish scoped contact roles to the client portal</label>
-      <small style="grid-column:1/-1">Default off. This publishes explicit department and project contact roles as informational metadata. It never creates a login, membership, entitlement, file grant, billing authority, or notification recipient.</small>
+      <label class="check-row" style="grid-column:1/-1"><input type="checkbox" name="service_assignment_projection_enabled" value="1" <?=!empty($portalStatus['profile']['service_assignment_projection_enabled'])?'checked':''?>> Publish assigned services to the connected application</label>
+      <small style="grid-column:1/-1">Default off. This publishes explicit service availability through the same signed connection. It never grants sign-in, workspace membership, file access, billing access, or notifications.</small>
+      <label class="check-row" style="grid-column:1/-1"><input type="checkbox" name="contact_assignment_projection_enabled" value="1" <?=!empty($portalStatus['profile']['contact_assignment_projection_enabled'])?'checked':''?>> Publish scoped contact roles to the connected application</label>
+      <small style="grid-column:1/-1">Default off. This publishes explicit department and project contact roles as informational metadata. It never creates a sign-in, membership, entitlement, file grant, billing authority, or notification recipient.</small>
     </div>
     <button class="btn btn-primary">Save integration</button>
   </form>
 </div>
 
-<div class="settings-card" id="client-portal-provisioning">
-  <div class="settings-section-heading"><h3>Client portal provisioning</h3><p>Project Alpha publishes eligible client identities and organization structure as signed events through this External Operations connection. Operations routes those events to its client portal internally. A verified sign-in and an explicit delivery grant are still required before a person can see files.</p></div>
+<div class="settings-card" id="connected-workspace-synchronization">
+  <div class="settings-section-heading"><h3>Connected workspace synchronization</h3><p>Project Alpha publishes eligible client identities and organization structure as signed events through this external application connection. The connected application can use those records to provision its own client-facing workspaces. Sign-in and resource access remain controlled by that application.</p></div>
   <?php if($portalStatusError):?>
-    <div class="settings-alert settings-alert-danger" role="alert">Client portal provisioning status could not be loaded. Apply the current database migrations, then reload this page.</div>
+    <div class="settings-alert settings-alert-danger" role="alert">Connected workspace synchronization status could not be loaded. Apply the current database migrations, then reload this page.</div>
   <?php else:?>
     <?php $portalCounts=(array)$portalStatus['counts'];$portalPreflight=(array)($portalStatus['preflight']??[]);$portalIssues=(array)($portalPreflight['issues']??[]);?>
     <?php if(!empty($portalStatus['transition_message'])):?><div class="settings-alert settings-alert-warning" role="status"><?=$h($portalStatus['transition_message'])?></div><?php endif;?>
     <div class="settings-form-grid">
-      <div><span class="label">External Operations connection</span><strong><?=!empty($portalPreflight['operations_delivery_ready'])?'Ready':'Paused'?></strong></div>
-      <div><span class="label">Client portal event routing</span><strong><?=!empty($portalStatus['ready'])?'Ready':'Paused'?></strong></div>
+      <div><span class="label">External application connection</span><strong><?=!empty($portalPreflight['operations_delivery_ready'])?'Ready':'Paused'?></strong></div>
+      <div><span class="label">Workspace event routing</span><strong><?=!empty($portalStatus['ready'])?'Ready':'Paused'?></strong></div>
       <div><span class="label">Active workspaces</span><strong><?=(int)($portalCounts['active_workspaces']??0)?></strong></div>
       <div><span class="label">Historical roots remaining</span><strong><?=(int)($portalCounts['historical_remaining']??0)?></strong></div>
       <div><span class="label">Eligible contacts</span><strong><?=(int)($portalCounts['eligible']??0)?></strong></div>
@@ -114,18 +114,18 @@ if (!empty($config['enabled'])) {
       <div><span class="label">Revoked</span><strong><?=(int)($portalCounts['revoked']??0)?></strong></div>
       <div><span class="label">Queued / failed</span><strong><?=(int)($portalCounts['pending']??0)?> / <?=(int)($portalCounts['failed']??0)?></strong></div>
     </div>
-    <p><strong>One outbound connection.</strong> Portal records and ordinary Operations updates use the signed event URL and credentials configured above. API-key pull reconciliation remains a receiver-driven recovery path.</p>
+    <p><strong>One outbound connection.</strong> Workspace records and ordinary integration updates use the signed event URL and credentials configured above. API-key pull reconciliation remains a receiver-driven recovery path.</p>
     <?php if($portalIssues):?>
-      <div class="settings-alert settings-alert-warning" role="status"><strong>Portal producer still needs:</strong> <?=$h(implode(', ',$portalIssues))?>.</div>
+      <div class="settings-alert settings-alert-warning" role="status"><strong>Workspace publisher still needs:</strong> <?=$h(implode(', ',$portalIssues))?>.</div>
     <?php endif;?>
     <p style="color:var(--muted);font-size:13px"><?=$h((string)($portalPreflight['receiver_verification']??''))?> Project Alpha reports only its own producer prerequisites and never displays credential values.</p>
     <?php if(!empty($portalStatus['configured'])):?>
       <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Reconcile active organizations and standalone clients now? Invalid, missing, or duplicate emails will require review and no files will be granted.')">
         <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="reconcile-client-portal">
-        <button class="btn btn-primary" <?=empty($portalStatus['ready'])?'disabled aria-disabled="true" title="Complete the portal producer preflight first"':''?>>Reconcile next client portal batch</button>
+        <button class="btn btn-primary" <?=empty($portalStatus['ready'])?'disabled aria-disabled="true" title="Complete the workspace publisher preflight first"':''?>>Synchronize next workspace batch</button>
       </form>
       <?php if((int)($portalCounts['failed_revocations']??0)>0):?>
-        <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Retry failed client portal revocations against the unchanged retired receiver? The replacement connection will remain blocked until every revocation is acknowledged.')">
+        <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Retry failed workspace revocations against the unchanged retired receiver? The replacement connection will remain blocked until every revocation is acknowledged.')">
           <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="retry-client-portal-revocations">
           <button class="btn">Retry failed revocations (<?=(int)$portalCounts['failed_revocations']?>)</button>
         </form>

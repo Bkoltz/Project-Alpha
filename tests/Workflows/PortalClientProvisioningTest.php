@@ -545,7 +545,7 @@ SQL);
                     'enabled'=>1,'portal_projection_enabled'=>1,'portal_route'=>'https://secondary.example.test/portal',
                 ],7);
                 self::fail('A second active portal producer must be rejected.');
-            }catch(\DomainException$error){self::assertStringContainsString('Another client portal producer',$error->getMessage());}
+            }catch(\DomainException$error){self::assertStringContainsString('Another workspace publisher',$error->getMessage());}
             self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1')->fetchColumn());
             self::assertSame(0,(int)$this->pdo->query("SELECT enabled FROM portal_integration_profiles WHERE id={$secondaryId}")->fetchColumn());
         });
