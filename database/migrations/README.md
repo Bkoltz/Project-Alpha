@@ -67,3 +67,11 @@ profile-scoped progress for the automatic historical client-portal
 reconciliation. The cron job remains inert until the unified portal producer
 preflight is ready, processes a bounded batch, retries transient failures, and
 does not send invitations or override administrator revocations.
+
+Migration `0084_unify_managed_delivery_external_ops.sql` routes new managed
+delivery intents through the one existing External Operations connection and
+removes the obsolete URL/profile settings. Existing unresolved rows are paused
+with an explicit manual-remediation status so the retired direct sender cannot
+run. Historical accepted receipts remain intact, but legacy receipts and
+revocations are never rebound to the External Operations contract; an
+administrator must resolve them in the original delivery system.

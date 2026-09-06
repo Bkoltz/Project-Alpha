@@ -228,6 +228,33 @@ final class ExternalOpsConfigService
                 'Deliver or explicitly resolve every pending client portal projection before changing the External Operations URL, application key, or delivery credentials.'
             );
         }
+
+        if ($this->tableExists($pdo, 'managed_delivery_intent_outbox')) {
+            $managed = $pdo->query(
+                "SELECT id FROM managed_delivery_intent_outbox
+                 WHERE transport_mode='external_ops'
+                   AND ((delivered_at IS NULL AND (dead_lettered_at IS NULL OR intent_type='revoke'))
+                     OR (intent_type='provision' AND delivered_at IS NOT NULL AND revoked_at IS NULL))
+                 ORDER BY id LIMIT 1" . $lock
+            )->fetchColumn();
+            if ($managed !== false) {
+                throw new DomainException(
+                    'Deliver or revoke every managed delivery tied to this External Operations contract before changing its URL, application key, or delivery credentials.'
+                );
+            }
+        }
+    }
+
+    private function tableExists(PDO $pdo, string $table): bool
+    {
+        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+            $statement = $pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1");
+            $statement->execute([$table]);
+            return (bool)$statement->fetchColumn();
+        }
+        $statement = $pdo->prepare('SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=? LIMIT 1');
+        $statement->execute([$table]);
+        return (bool)$statement->fetchColumn();
     }
 
     /**
