@@ -17,7 +17,7 @@ final class ExternalOpsOutboxSender
      * @param null|callable(string,list<string>,string,int):array{status:int,body?:string,error?:string} $transport
      * @return array{processed:int,delivered:int,failed:int}
      */
-    public function deliverDue(PDO $pdo, array $config, int $limit = 25, ?callable $transport = null): array
+    public function deliverDue(PDO $pdo, array $config, int $limit = 25, ?callable $transport = null, int $maxRuntimeSeconds = 50): array
     {
         if (empty($config['enabled'])) {
             return ['processed' => 0, 'delivered' => 0, 'failed' => 0];
@@ -33,6 +33,7 @@ final class ExternalOpsOutboxSender
         }
 
         $limit = max(1, min(100, $limit));
+        $deadline = microtime(true) + max(1, min(300, $maxRuntimeSeconds));
         $maxAttempts = max(1, (int)($config['max_attempts'] ?? 12));
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $statement = $pdo->prepare(
@@ -51,6 +52,7 @@ final class ExternalOpsOutboxSender
         $transport ??= [$this, 'curlTransport'];
 
         foreach ($rows as $row) {
+            if (microtime(true) >= $deadline) break;
             $summary['processed']++;
             $body = (string)$row['payload_json'];
             $timestamp = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
@@ -65,11 +67,12 @@ final class ExternalOpsOutboxSender
             ];
 
             try {
+                $remainingSeconds = max(2, (int)ceil($deadline - microtime(true)));
                 $response = $transport(
                     (string)$config['webhook_url'],
                     $headers,
                     $body,
-                    max(2, (int)($config['timeout_seconds'] ?? 15))
+                    min(max(2, (int)($config['timeout_seconds'] ?? 15)), $remainingSeconds)
                 );
                 $status = (int)($response['status'] ?? 0);
                 if ($status >= 200 && $status < 300) {

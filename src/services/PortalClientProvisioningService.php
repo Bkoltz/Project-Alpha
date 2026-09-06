@@ -167,7 +167,7 @@ final class PortalClientProvisioningService
     {
         $profile = $this->boundProfile($pdo);
         if (!$profile && $applicationKey !== '') $profile = $this->profile($pdo, $applicationKey);
-        $counts = ['active_roots'=>0,'revoked_roots'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0,'active_workspaces'=>0,'pending'=>0,'failed'=>0,'failed_revocations'=>0];
+        $counts = ['active_roots'=>0,'revoked_roots'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0,'active_workspaces'=>0,'historical_remaining'=>0,'pending'=>0,'failed'=>0,'failed_revocations'=>0];
         if ($profile) {
             foreach ([
                 'active_roots' => "SELECT COUNT(*) FROM portal_client_access_roots WHERE access_state='active'",
@@ -180,6 +180,7 @@ final class PortalClientProvisioningService
                 'failed' => 'SELECT COUNT(*) FROM portal_projection_outbox WHERE integration_profile_id='.(int)$profile['id'].' AND delivered_at IS NULL AND dead_lettered_at IS NOT NULL',
                 'failed_revocations' => 'SELECT COUNT(*) FROM portal_projection_outbox WHERE integration_profile_id='.(int)$profile['id'].' AND delivered_at IS NULL AND dead_lettered_at IS NOT NULL AND is_revocation=1',
             ] as $key => $sql) $counts[$key] = (int)$pdo->query($sql)->fetchColumn();
+            $counts['historical_remaining'] = $this->historicalRemaining($pdo, $profile);
         }
         $delivery = new PortalProjectionDeliveryConfigService();
         $runtime = $delivery->runtime($pdo);
@@ -291,7 +292,14 @@ final class PortalClientProvisioningService
         if ($pdo->inTransaction()) throw new DomainException('Historical reconciliation owns its transactions.');
         if ($limit < 1 || $limit > 100) throw new DomainException('Historical reconciliation batch size must be between 1 and 100.');
         $summary = ['ready'=>false,'considered'=>0,'completed'=>0,'retrying'=>0,'failed'=>0,'remaining'=>0];
-        if (!$this->status($pdo, $applicationKey)['ready']) return $summary;
+        if (!$this->status($pdo, $applicationKey)['ready']) {
+            $profile = $this->boundProfile($pdo);
+            if (!$profile && $applicationKey !== '') $profile = $this->profile($pdo, $applicationKey);
+            $summary['remaining'] = $profile
+                ? $this->historicalRemaining($pdo, $profile)
+                : (int)$pdo->query('SELECT COUNT(*) FROM ('.$this->scopeQuery().') roots')->fetchColumn();
+            return $summary;
+        }
         $profile = $this->requireReadyProfile($pdo, $applicationKey);
         $profileId = (int)$profile['id'];
         $this->assertOnlyProducer($pdo, $profileId);
@@ -362,9 +370,7 @@ final class PortalClientProvisioningService
                 }
             }
         }
-        $count = $pdo->prepare('SELECT COUNT(*) FROM ('.$this->scopeQuery().') roots LEFT JOIN portal_client_provisioning_backfill b ON b.integration_profile_id=? AND b.root_type=roots.root_type AND b.root_public_id=roots.root_public_id WHERE b.integration_profile_id IS NULL OR b.contract_fingerprint<>? OR b.state<>\'complete\'');
-        $count->execute([$profileId, $fingerprint]);
-        $summary['remaining'] = (int)$count->fetchColumn();
+        $summary['remaining'] = $this->historicalRemaining($pdo, $profile);
         $failed = $pdo->prepare("SELECT COUNT(*) FROM portal_client_provisioning_backfill WHERE integration_profile_id=? AND contract_fingerprint=? AND state='failed'");
         $failed->execute([$profileId,$fingerprint]);
         $summary['failed'] = (int)$failed->fetchColumn();
@@ -394,6 +400,14 @@ final class PortalClientProvisioningService
     private function backfillContractFingerprint(array $profile): string
     {
         return hash('sha256', json_encode([(string)$profile['application_key'],(string)$profile['portal_route']], JSON_THROW_ON_ERROR));
+    }
+
+    /** @param array<string,mixed> $profile */
+    private function historicalRemaining(PDO $pdo, array $profile): int
+    {
+        $count = $pdo->prepare('SELECT COUNT(*) FROM ('.$this->scopeQuery().') roots LEFT JOIN portal_client_provisioning_backfill b ON b.integration_profile_id=? AND b.root_type=roots.root_type AND b.root_public_id=roots.root_public_id WHERE b.integration_profile_id IS NULL OR b.contract_fingerprint<>? OR b.state<>\'complete\'');
+        $count->execute([(int)$profile['id'], $this->backfillContractFingerprint($profile)]);
+        return (int)$count->fetchColumn();
     }
 
     /**
