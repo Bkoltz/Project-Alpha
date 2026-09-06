@@ -98,6 +98,20 @@ final class MigrationLibraryTest extends TestCase
         $this->assertStringContainsString('`semi;colon`', $statements[1]);
     }
 
+    public function testStableClientIdentityMigrationCanReplayAfterTheReleaseBaseline(): void
+    {
+        $migration = (string)file_get_contents(
+            dirname(__DIR__, 2) . '/database/migrations/0085_stable_client_archive_identity.sql'
+        );
+
+        self::assertStringContainsString('information_schema.columns', $migration);
+        self::assertStringContainsString("WHEN 11 THEN 'SELECT 1'", $migration);
+        self::assertStringContainsString('information_schema.statistics', $migration);
+        self::assertStringContainsString('information_schema.table_constraints', $migration);
+        self::assertStringContainsString('partial archived client identity schema', $migration);
+        self::assertGreaterThan(10, count(migration_statements($migration)));
+    }
+
     public function testSchemaHealthRequirementsFollowTheAppliedMigrationVersion(): void
     {
         $tables = migration_required_tables_for_version([
