@@ -314,7 +314,10 @@ final class PortalProjectionDeliveryTest extends TestCase
         self::assertStringNotContainsString('rotation requires both a distinct new key ID and a new secret.', $view);
         self::assertStringContainsString('Changing the signing secret requires a new signing key ID.', $service);
         self::assertStringContainsString('A rotated signing key ID requires a new signing secret.', $service);
-        self::assertStringContainsString('$error instanceof DomainException?$error->getMessage()', $handler);
+        self::assertStringContainsString('$error instanceof DomainException', $handler);
+        self::assertStringContainsString('? $error->getMessage()', $handler);
+        self::assertStringContainsString('$error instanceof PDOException', $handler);
+        self::assertStringContainsString('The integration database schema does not match this Project Alpha release.', $handler);
     }
 
     public function testRevocationWaitsForLiveClaimThenSupersedesExpiredNormalRow(): void
