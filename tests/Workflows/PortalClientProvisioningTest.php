@@ -551,6 +551,29 @@ SQL);
         });
     }
 
+    public function testProfileBooleanWritesUseIntegerExecuteParameters():void
+    {
+        $authority=new PortalAuthorityService();
+        $input=[
+            'application_key'=>'integer_flags','display_label'=>'Integer Flags',
+            'enabled'=>false,'portal_projection_enabled'=>false,'relation_projection_enabled'=>false,
+            'contact_assignment_projection_enabled'=>false,'catalog_projection_enabled'=>false,
+            'service_assignment_projection_enabled'=>false,'pricing_preview_enabled'=>false,'draft_quote_enabled'=>false,
+            'portal_route'=>'','catalog_route'=>'',
+        ];
+
+        $profileId=$authority->saveProfile($this->pdo,$input,0);
+        $input['profile_id']=$profileId;
+        $authority->saveProfile($this->pdo,$input,0);
+
+        self::assertCount(2,$this->pdo->profileWriteParameterTypes);
+        foreach($this->pdo->profileWriteParameterTypes as $types){
+            self::assertCount(16,$types);
+            self::assertSame(array_fill(0,8,'int'),array_slice($types,2,8));
+            self::assertSame('null',$types[14]);
+        }
+    }
+
     public function testFailedRevocationRequiresAuditedRetryAndKeepsOldContractUntilDelivered():void
     {
         $this->withPortalCapabilities(['generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('a',32)]]],function():void{
@@ -832,6 +855,8 @@ SQL);
 final class BackfillRacePDO extends PDO
 {
     public ?\Closure $afterCandidateSelection = null;
+    /** @var list<list<string>> */
+    public array $profileWriteParameterTypes = [];
 }
 
 final class BackfillRaceStatement extends \PDOStatement
@@ -840,6 +865,9 @@ final class BackfillRaceStatement extends \PDOStatement
 
     public function execute(?array $params = null): bool
     {
+        if($params!==null&&(str_starts_with($this->queryString,'INSERT INTO portal_integration_profiles')||str_starts_with($this->queryString,'UPDATE portal_integration_profiles SET application_key='))){
+            $this->connection->profileWriteParameterTypes[]=array_map('get_debug_type',$params);
+        }
         $result=parent::execute($params);
         if (str_starts_with($this->queryString,'SELECT roots.root_type,roots.root_public_id') && $this->connection->afterCandidateSelection) {
             $callback=$this->connection->afterCandidateSelection;

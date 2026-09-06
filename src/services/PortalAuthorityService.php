@@ -20,7 +20,10 @@ final class PortalAuthorityService
         $pricingSource=$this->nullableAscii($input['pricing_source']??null,100);$draftSource=$this->nullableAscii($input['draft_source']??null,100);
         $serviceAssignmentsRequested=array_key_exists('service_assignment_projection_enabled',$input)?!empty($input['service_assignment_projection_enabled']):null;
         $contactAssignmentsRequested=array_key_exists('contact_assignment_projection_enabled',$input)?!empty($input['contact_assignment_projection_enabled']):null;
-        $enabled=!empty($input['enabled']);$portal=!empty($input['portal_projection_enabled']);$relations=!empty($input['relation_projection_enabled']);$contactAssignments=$contactAssignmentsRequested??false;$catalog=!empty($input['catalog_projection_enabled']);$serviceAssignments=$serviceAssignmentsRequested??false;$pricing=!empty($input['pricing_preview_enabled']);$draft=!empty($input['draft_quote_enabled']);
+        // PDO serializes false in execute() parameter arrays as an empty string.
+        // These fields are MySQL integer columns, so normalize every persisted
+        // flag to 0/1 before either the INSERT or UPDATE parameter list is built.
+        $enabled=(int)!empty($input['enabled']);$portal=(int)!empty($input['portal_projection_enabled']);$relations=(int)!empty($input['relation_projection_enabled']);$contactAssignments=(int)($contactAssignmentsRequested??false);$catalog=(int)!empty($input['catalog_projection_enabled']);$serviceAssignments=(int)($serviceAssignmentsRequested??false);$pricing=(int)!empty($input['pricing_preview_enabled']);$draft=(int)!empty($input['draft_quote_enabled']);
         // A disabled profile may retain its capability intent while portal
         // revocations drain. The dependency must hold whenever the producer is
         // active, but clearing it during retirement would silently lose the
@@ -36,8 +39,8 @@ final class PortalAuthorityService
             try {
                 if($owns)$pdo->beginTransaction();
                 $current=PortalProjectionService::lockProfileContract($pdo,$id);
-                if($serviceAssignmentsRequested===null)$serviceAssignments=!empty($current['service_assignment_projection_enabled']);
-                if($contactAssignmentsRequested===null)$contactAssignments=!empty($current['contact_assignment_projection_enabled']);
+                if($serviceAssignmentsRequested===null)$serviceAssignments=(int)!empty($current['service_assignment_projection_enabled']);
+                if($contactAssignmentsRequested===null)$contactAssignments=(int)!empty($current['contact_assignment_projection_enabled']);
                 if($enabled&&$serviceAssignments&&!$portal)throw new DomainException('Service assignment projection requires portal projection.');
                 if($enabled&&$contactAssignments&&(!$portal||!$relations))throw new DomainException('Contact assignment projection requires portal relation projection.');
                 if($enabled&&$portal)$this->assertOnlyPortalProducer($pdo,$id);
