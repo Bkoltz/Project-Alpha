@@ -355,6 +355,16 @@ function migration_required_columns_for_version(array $requiredColumns, int $thr
             'state' => 83, 'attempts' => 83, 'next_attempt_at' => 83,
             'last_error_code' => 83, 'completed_at' => 83,
         ],
+        'archived_clients' => [
+            'public_id' => 85, 'client_type' => 85, 'portal_principal_id' => 85,
+            'portal_manual_state' => 85, 'portal_canonical_email' => 85,
+            'portal_identity_binding_ids_json' => 85,
+            'portal_principal_authorization_version' => 85,
+            'portal_principal_disabled_for_archive' => 85,
+            'portal_principal_was_present' => 85,
+            'portal_entitlement_ids_json' => 85,
+            'portal_affected_workspace_ids_json' => 85,
+        ],
     ];
 
     foreach ($requiredColumns as $table => $columns) {
@@ -457,6 +467,7 @@ function migration_schema_health(PDO $pdo, ?int $throughVersion = null): void
         'organizations' => ['public_id', 'source_version', 'general_email', 'general_phone'],
         'organization_departments' => ['public_id', 'source_version'],
         'clients' => ['public_id', 'source_version', 'organization_id', 'created_by'],
+        'archived_clients' => ['public_id', 'client_type', 'portal_principal_id', 'portal_manual_state', 'portal_canonical_email', 'portal_identity_binding_ids_json', 'portal_principal_authorization_version', 'portal_principal_disabled_for_archive', 'portal_principal_was_present', 'portal_entitlement_ids_json', 'portal_affected_workspace_ids_json'],
         'projects' => ['public_id', 'source_version', 'completed_at', 'organization_id', 'department_id', 'business_unit_id', 'manager_user_id', 'created_by'],
         'portal_principals' => ['public_id', 'email_hint', 'display_name', 'source_version', 'enabled', 'authorization_version', 'revoked_at'],
         'portal_identity_bindings' => ['portal_principal_id', 'issuer', 'subject_hash', 'enabled', 'revoked_at'],

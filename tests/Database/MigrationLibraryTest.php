@@ -98,6 +98,20 @@ final class MigrationLibraryTest extends TestCase
         $this->assertStringContainsString('`semi;colon`', $statements[1]);
     }
 
+    public function testStableClientIdentityMigrationCanReplayAfterTheReleaseBaseline(): void
+    {
+        $migration = (string)file_get_contents(
+            dirname(__DIR__, 2) . '/database/migrations/0085_stable_client_archive_identity.sql'
+        );
+
+        self::assertStringContainsString('information_schema.columns', $migration);
+        self::assertStringContainsString("WHEN 11 THEN 'SELECT 1'", $migration);
+        self::assertStringContainsString('information_schema.statistics', $migration);
+        self::assertStringContainsString('information_schema.table_constraints', $migration);
+        self::assertStringContainsString('partial archived client identity schema', $migration);
+        self::assertGreaterThan(10, count(migration_statements($migration)));
+    }
+
     public function testSchemaHealthRequirementsFollowTheAppliedMigrationVersion(): void
     {
         $tables = migration_required_tables_for_version([
@@ -136,6 +150,7 @@ final class MigrationLibraryTest extends TestCase
             'contract_settlement_terms' => ['organization_id'],
             'portal_integration_profiles' => ['service_assignment_projection_enabled', 'contact_assignment_projection_enabled'],
             'portal_client_provisioning_backfill' => ['integration_profile_id', 'root_type', 'contract_fingerprint'],
+            'archived_clients' => ['public_id', 'client_type', 'portal_principal_id', 'portal_identity_binding_ids_json', 'portal_principal_authorization_version', 'portal_principal_disabled_for_archive', 'portal_principal_was_present', 'portal_entitlement_ids_json', 'portal_affected_workspace_ids_json'],
         ];
         $this->assertSame(
             ['invoices' => ['organization_id']],
@@ -145,18 +160,22 @@ final class MigrationLibraryTest extends TestCase
             ['invoices' => ['organization_id'], 'pricing_adjustment_definitions' => ['organization_id']],
             migration_required_columns_for_version($columns, 72)
         );
-        $through79 = $columns;
+        $pre85 = $columns;
+        unset($pre85['archived_clients']);
+        $through79 = $pre85;
         unset($through79['portal_integration_profiles']);
         unset($through79['portal_client_provisioning_backfill']);
         $this->assertSame($through79, migration_required_columns_for_version($columns, 79));
-        $through81 = $columns;
+        $through81 = $pre85;
         unset($through81['portal_client_provisioning_backfill']);
         $through81['portal_integration_profiles'] = ['service_assignment_projection_enabled'];
         $this->assertSame($through81, migration_required_columns_for_version($columns, 80));
         $this->assertSame($through81, migration_required_columns_for_version($columns, 81));
-        $through82 = $columns;
+        $through82 = $pre85;
         unset($through82['portal_client_provisioning_backfill']);
         $this->assertSame($through82, migration_required_columns_for_version($columns, 82));
-        $this->assertSame($columns, migration_required_columns_for_version($columns, 83));
+        $this->assertSame($pre85, migration_required_columns_for_version($columns, 83));
+        $this->assertSame($pre85, migration_required_columns_for_version($columns, 84));
+        $this->assertSame($columns, migration_required_columns_for_version($columns, 85));
     }
 }

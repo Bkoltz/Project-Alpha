@@ -47,7 +47,8 @@ Local numeric IDs are serialized as strings. Email addresses, names, codes, and
 other editable attributes are never identities.
 
 The existing **v1** snapshot exports the stored `public_id` of organizations,
-clients, and projects as an additive field on each resource row. This is
+clients, and projects as an additive field on each resource row. The v2
+snapshot and upsert projection export that same value in `data.public_id`. This is
 the same source-issued, 32-character lowercase hexadecimal identifier used by
 the portal projection, **not** a hyphenated installation/session UUID. Numeric
 `id` and relationship fields such as `organization_id` and
@@ -60,13 +61,14 @@ a contacts array or change their existing null handling.
 Migration `0062_client_portal_foundation.sql` backfilled these IDs once, makes
 them non-null and unique within each entity table, and assigns IDs when new rows
 are inserted. Snapshot reads do not create or repair IDs. A missing or malformed
-stored ID fails the v1 export rather than publishing a fabricated mapping. Older
+stored ID fails either export rather than publishing a fabricated mapping. Older
 producers without this additive field remain unmapped until upgraded and synced.
 
-**V2 public-ID export is deferred.** Its current payload and fingerprints remain
-unchanged. Adding this field to an already-observed resource requires a versioned
-compatibility transition, not silently replacing the recorded fingerprint. Before
-implementing that transition, protect global event commit ordering: an
+Adding this field changes the v2 content fingerprint of an already-observed
+resource. The contract deliberately reports `sync_state_out_of_date` rather than
+silently replacing that fingerprint; such a deployment requires an explicit
+versioned compatibility transition. Before enabling v2 in production, protect
+global event commit ordering: an
 auto-increment sequence can be allocated before another transaction commits a
 higher sequence, so a consumer checkpointing that higher value could miss the
 earlier transaction's late event. Per-resource locks and a plain `MAX(sequence)`
