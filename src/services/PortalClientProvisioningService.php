@@ -650,7 +650,7 @@ final class PortalClientProvisioningService
                 foreach(self::DEFAULT_CAPABILITIES as$capability)$this->upsertEntitlement($pdo,$principalId,$capability,$scopeType,$scopeId,$actorId);
             }
         }
-        if($status!=='eligible'&&$principalId)$this->revokePrincipal($pdo,$principalId,$actorId);
+        if($status!=='eligible'&&$principalId)$this->revokeClientAssociation($pdo,$principalId,$clientId,(string)$client['public_id'],$actorId);
         $version=PortalSourceVersion::from(['clientPublicId'=>(string)$client['public_id'],'canonicalEmail'=>$status==='eligible'?$email:null,'status'=>$status,'reason'=>$reason,'manualState'=>$manual]);
         $this->saveEligibility($pdo,$clientId,$principalId,$manual,$status,$reason,$email!==''?$email:null,$version,$actorId);
         return$status;
@@ -736,8 +736,31 @@ final class PortalClientProvisioningService
         return $candidate;
     }
 
-    private function activatePrincipal(PDO$pdo,int$id,string$email,string$name,int$actorId):void{$version=PortalSourceVersion::from(['emailHint'=>$email,'displayName'=>$name,'active'=>true]);$pdo->prepare('UPDATE portal_principals SET email_hint=?,display_name=?,source_version=?,enabled=1,revoked_at=NULL,activated_at=COALESCE(activated_at,CURRENT_TIMESTAMP),authorization_version=authorization_version+1,updated_by=? WHERE id=?')->execute([$email,$name,$version,$actorId?:null,$id]);}
+    private function activatePrincipal(PDO$pdo,int$id,string$email,string$name,int$actorId):void
+    {
+        $version=PortalSourceVersion::from(['emailHint'=>$email,'displayName'=>$name,'active'=>true]);
+        // Reconciliation is intentionally idempotent. The authorization fence
+        // advances only when effective identity state changes, not every time a
+        // sibling client in the same workspace is reconciled.
+        $pdo->prepare("UPDATE portal_principals SET
+            authorization_version=CASE WHEN enabled<>1 OR revoked_at IS NOT NULL
+                THEN authorization_version+1 ELSE authorization_version END,
+            email_hint=?,display_name=?,source_version=?,enabled=1,revoked_at=NULL,
+            activated_at=COALESCE(activated_at,CURRENT_TIMESTAMP),updated_by=? WHERE id=?")
+            ->execute([$email,$name,$version,$actorId?:null,$id]);
+    }
     private function revokePrincipal(PDO$pdo,int$id,int$actorId):void{$version=PortalSourceVersion::from(['principalId'=>$id,'active'=>false]);$pdo->prepare('UPDATE portal_principals SET source_version=?,enabled=0,revoked_at=CURRENT_TIMESTAMP,authorization_version=authorization_version+1,updated_by=? WHERE id=? AND (enabled<>0 OR revoked_at IS NULL)')->execute([$version,$actorId?:null,$id]);$pdo->prepare('UPDATE portal_v2_entitlements SET active=0,source_version=?,updated_by=? WHERE portal_principal_id=? AND active<>0')->execute([$version,$actorId?:null,$id]);$pdo->prepare('UPDATE portal_identity_bindings SET enabled=0,revoked_at=CURRENT_TIMESTAMP,updated_by=? WHERE portal_principal_id=? AND enabled<>0')->execute([$actorId?:null,$id]);}
+    private function revokeClientAssociation(PDO$pdo,int$principalId,int$clientId,string$clientPublicId,int$actorId):void
+    {
+        $version=PortalSourceVersion::from(['principalId'=>$principalId,'clientPublicId'=>$clientPublicId,'active'=>false]);
+        $pdo->prepare("UPDATE portal_v2_entitlements SET active=0,source_version=?,updated_by=? WHERE portal_principal_id=? AND scope_type='client' AND scope_public_id=? AND active<>0")
+            ->execute([$version,$actorId?:null,$principalId,$clientPublicId]);
+        $pdo->prepare('DELETE FROM portal_principal_clients WHERE portal_principal_id=? AND client_id=?')
+            ->execute([$principalId,$clientId]);
+        $remaining=$pdo->prepare('SELECT COUNT(*) FROM portal_principal_clients pc JOIN clients c ON c.id=pc.client_id WHERE pc.portal_principal_id=? AND c.archived=0 AND c.deleted_at IS NULL');
+        $remaining->execute([$principalId]);
+        if((int)$remaining->fetchColumn()===0)$this->revokePrincipal($pdo,$principalId,$actorId);
+    }
     private function linkPrincipalClient(PDO$pdo,int$principalId,int$clientId,int$actorId):void{$sql=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='sqlite'?'INSERT OR IGNORE INTO portal_principal_clients(portal_principal_id,client_id,created_by)VALUES(?,?,?)':'INSERT IGNORE INTO portal_principal_clients(portal_principal_id,client_id,created_by)VALUES(?,?,?)';$pdo->prepare($sql)->execute([$principalId,$clientId,$actorId?:null]);}
     private function upsertEntitlement(PDO$pdo,int$principalId,string$capability,string$scopeType,string$scopeId,int$actorId):void{$find=$pdo->prepare("SELECT id FROM portal_v2_entitlements WHERE portal_principal_id=? AND capability=? AND effect='allow' AND scope_type=? AND scope_public_id=?");$find->execute([$principalId,$capability,$scopeType,$scopeId]);$id=$find->fetchColumn();$version=PortalSourceVersion::from(['principalId'=>$principalId,'capability'=>$capability,'effect'=>'allow','scopeType'=>$scopeType,'scopePublicId'=>$scopeId,'active'=>true]);if($id)$pdo->prepare('UPDATE portal_v2_entitlements SET source_version=?,active=1,valid_from=COALESCE(valid_from,CURRENT_TIMESTAMP),expires_at=NULL,updated_by=? WHERE id=?')->execute([$version,$actorId?:null,(int)$id]);else$pdo->prepare("INSERT INTO portal_v2_entitlements(public_id,portal_principal_id,capability,effect,scope_type,scope_public_id,source_version,active,valid_from,created_by,updated_by)VALUES(?,?,?,'allow',?,?,?,1,CURRENT_TIMESTAMP,?,?)")->execute([bin2hex(random_bytes(16)),$principalId,$capability,$scopeType,$scopeId,$version,$actorId?:null,$actorId?:null]);}
 

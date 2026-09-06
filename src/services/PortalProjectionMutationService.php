@@ -24,6 +24,17 @@ final class PortalProjectionMutationService
         $this->afterMutation($pdo,$this->clientScopes($pdo,$clientId));
     }
 
+    /** @param list<string> $workspaceIds */
+    public function queueWorkspaceIds(PDO $pdo, array $workspaceIds): void
+    {
+        $this->requireTransaction($pdo);
+        $ids = array_values(array_unique(array_filter(array_map(
+            static fn(mixed $id): string => trim((string)$id),
+            $workspaceIds
+        ))));
+        $this->queueWorkspaces($pdo, $ids);
+    }
+
     /** @return list<array{root_type:string,root_public_id:string}> */
     public function organizationScopes(PDO$pdo,int$id):array{$s=$pdo->prepare('SELECT public_id FROM organizations WHERE id=?');$s->execute([$id]);$public=(string)($s->fetchColumn()?:'');return$public!==''?[['root_type'=>'organization','root_public_id'=>$public]]:[];}
     /** @return list<array{root_type:string,root_public_id:string}> */

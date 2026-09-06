@@ -75,3 +75,13 @@ with an explicit manual-remediation status so the retired direct sender cannot
 run. Historical accepted receipts remain intact, but legacy receipts and
 revocations are never rebound to the External Operations contract; an
 administrator must resolve them in the original delivery system.
+
+Migration `0085_stable_client_archive_identity.sql` preserves a client's stable
+public ID, client classification, portal principal reference, explicit
+portal-login choice, and the exact active identity bindings in the legacy
+archive table. Historical archive rows remain
+compatible; newly archived clients restore into the same Operations/portal
+identity instead of creating a second source record or an orphan-principal
+conflict. A principal authorization-version fence prevents restore from
+undoing a security change made while the client was archived, and shared
+principals retain access only for their other active client associations.
