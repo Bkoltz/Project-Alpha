@@ -6,12 +6,14 @@ namespace Tests\Workflows;
 
 use App\Services\PortalClientProvisioningService;
 use App\Services\PortalAuthorityService;
+use App\Services\ExternalOpsSyncOrchestrator;
 use PDO;
 use PHPUnit\Framework\TestCase;
 
 require_once dirname(__DIR__,2).'/src/services/PortalSourceVersion.php';
 require_once dirname(__DIR__,2).'/src/services/PortalAuthorityService.php';
 require_once dirname(__DIR__,2).'/src/services/PortalClientProvisioningService.php';
+require_once dirname(__DIR__,2).'/src/services/ExternalOpsSyncOrchestrator.php';
 
 final class PortalClientProvisioningTest extends TestCase
 {
@@ -37,10 +39,11 @@ CREATE TABLE portal_client_access_roots(root_type TEXT,root_public_id TEXT,acces
 CREATE TABLE portal_client_login_eligibility(client_id INTEGER PRIMARY KEY,portal_principal_id INTEGER,manual_state TEXT,eligibility_status TEXT,review_reason TEXT,canonical_email TEXT,source_version TEXT,last_reconciled_at TEXT,created_by INTEGER,updated_by INTEGER);
 CREATE TABLE portal_client_provisioning_backfill(integration_profile_id INTEGER,root_type TEXT,root_public_id TEXT,contract_fingerprint TEXT,state TEXT,attempts INTEGER DEFAULT 0,next_attempt_at TEXT,last_error_code TEXT,completed_at TEXT,PRIMARY KEY(integration_profile_id,root_type,root_public_id));
 CREATE TABLE app_config(organization_id INTEGER,config_key TEXT,config_value TEXT,PRIMARY KEY(organization_id,config_key));
-CREATE TABLE portal_projection_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,delivery_id TEXT,workspace_public_id TEXT,schema_version INTEGER,source_sequence INTEGER,delivery_kind TEXT,route_type TEXT,is_revocation INTEGER DEFAULT 0,destination_url TEXT,signing_key_id TEXT,payload_json TEXT,attempts INTEGER DEFAULT 0,next_attempt_at TEXT,claim_token TEXT,claimed_at TEXT,delivered_at TEXT,dead_lettered_at TEXT,last_http_status INTEGER,last_error_code TEXT);
+CREATE TABLE portal_projection_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,delivery_id TEXT,workspace_public_id TEXT,schema_version INTEGER,source_sequence INTEGER,delivery_kind TEXT,route_type TEXT,is_revocation INTEGER DEFAULT 0,destination_url TEXT,signing_key_id TEXT,payload_json TEXT,attempts INTEGER DEFAULT 0,next_attempt_at TEXT DEFAULT '2000-01-01 00:00:00',claim_token TEXT,claimed_at TEXT,delivered_at TEXT,dead_lettered_at TEXT,last_http_status INTEGER,last_error_code TEXT);
 CREATE TABLE portal_projection_state(integration_profile_id INTEGER,workspace_public_id TEXT,source_generation TEXT,source_sequence INTEGER,last_snapshot_hash TEXT,PRIMARY KEY(integration_profile_id,workspace_public_id));
 CREATE TABLE portal_projection_resource_state(integration_profile_id INTEGER,workspace_public_id TEXT,route_type TEXT,resource_type TEXT,resource_public_id TEXT,source_version TEXT,payload_hash TEXT,record_json TEXT,PRIMARY KEY(integration_profile_id,workspace_public_id,route_type,resource_type,resource_public_id));
 CREATE TABLE portal_integration_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,api_key_id INTEGER,action TEXT,target_type TEXT,target_public_id TEXT,metadata_json TEXT);
+CREATE TABLE integration_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT UNIQUE,integration_key TEXT,event_type TEXT,schema_version INTEGER,payload_json TEXT,occurred_at TEXT,attempts INTEGER DEFAULT 0,next_attempt_at TEXT,delivered_at TEXT,last_error TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE item_library(id INTEGER PRIMARY KEY,portal_public_id TEXT UNIQUE,portal_source_version TEXT,item_name TEXT,portal_summary TEXT,portal_category TEXT,portal_display_order INTEGER,portal_geometry_requirement TEXT,portal_questions_json TEXT,portal_requestable INTEGER,is_active INTEGER,entry_type TEXT);
 CREATE TABLE portal_service_assignments(id INTEGER PRIMARY KEY AUTOINCREMENT,public_id TEXT UNIQUE,subject_type TEXT,subject_public_id TEXT,service_public_id TEXT,active INTEGER,effective_from TEXT,effective_until TEXT,deleted_at TEXT,created_by INTEGER,updated_by INTEGER,created_at TEXT,updated_at TEXT);
 CREATE TABLE portal_service_assignment_projection_state(integration_profile_id INTEGER PRIMARY KEY,source_generation TEXT,source_sequence INTEGER,snapshot_hash TEXT);
@@ -613,8 +616,39 @@ SQL);
         $summary=$this->service->reconcileHistoricalBatch($this->pdo,'generic_operations',1);
         self::assertFalse($summary['ready']);
         self::assertSame(0,$summary['considered']);
+        self::assertSame(1,$summary['remaining'],'Paused delivery must not hide historical work that still remains.');
         self::assertSame(0,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_v2_workspaces')->fetchColumn());
         self::assertSame(0,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_client_provisioning_backfill')->fetchColumn());
+    }
+
+    public function testManualSyncUsesOneConnectionForBoundedReconciliationAndBothOutboxes(): void
+    {
+        $this->withPortalCapabilities([],function():void{
+            $this->prepareHistoricalBackfill();
+            $this->pdo->exec("INSERT INTO clients VALUES(20,'client-a','A Person','a@example.test',NULL,'consumer',0,NULL,'v1');
+                INSERT INTO integration_outbox(event_id,integration_key,event_type,schema_version,payload_json,occurred_at,next_attempt_at) VALUES('ordinary-1','generic_operations','client.changed',1,'{\"event_id\":\"ordinary-1\",\"event_type\":\"client.changed\"}','2026-09-05 00:00:00','2000-01-01 00:00:00')");
+            $eventTypes=[];
+            $capture=static function(string $url,array $headers,string $body,int $timeout)use(&$eventTypes):array{
+                $payload=json_decode($body,true,64,JSON_THROW_ON_ERROR);
+                $eventTypes[]=(string)($payload['event_type']??'');
+                self::assertSame('https://operations.example.test/events',$url);
+                self::assertGreaterThanOrEqual(2,$timeout);
+                return['status'=>204];
+            };
+
+            $summary=(new ExternalOpsSyncOrchestrator())->run($this->pdo,1,10,10,$capture,$capture,20);
+
+            self::assertTrue($summary['ready']);
+            self::assertSame(1,$summary['reconciliation']['considered']);
+            self::assertSame(1,$summary['reconciliation']['completed']);
+            self::assertSame(0,$summary['reconciliation']['remaining']);
+            self::assertSame(1,$summary['ordinary']['delivered']);
+            self::assertGreaterThan(0,$summary['portal']['delivered']);
+            self::assertContains('client.changed',$eventTypes);
+            self::assertContains('portal.projection',$eventTypes);
+            self::assertSame(0,(int)$this->pdo->query('SELECT COUNT(*) FROM integration_outbox WHERE delivered_at IS NULL')->fetchColumn());
+            self::assertSame(0,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_projection_outbox WHERE delivered_at IS NULL')->fetchColumn());
+        });
     }
 
     public function testCronReadinessUsesStoredExternalOperationsConnectionWithoutPortalEnvironment(): void

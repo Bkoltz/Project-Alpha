@@ -147,10 +147,14 @@ GET /api/v1/ops/snapshot?page=1&limit=500
 
 Follow `next_page` while `has_more` is true. The snapshot includes Project Managers, Business Unit-aware Projects, and the multi-worker `task_assignments` collection. It is the recovery authority if an incremental event is delayed or missed.
 
-The integration status card reports queued deliveries, retry errors, client
-roots, eligible contacts, and records requiring review. After deployment or a
-configuration change, use **Reconcile client portal**. It is bounded to 1,000
-roots per run and is safe to repeat.
+The integration status card reports queued ordinary and portal deliveries,
+retry errors, client roots, eligible contacts, records requiring review, and
+the honest count of historical roots that remain. After deployment or a
+configuration change, use **Sync now** or **Reconcile next client portal
+batch**. Both actions use the same External Operations connection, reconcile a
+bounded and restart-safe batch (25 and 100 roots respectively), and then send
+due ordinary and portal events within the request deadline. Repeat either
+action while historical roots remain; scheduled jobs continue the same work.
 
 The status card reports the one **External Operations connection** and whether
 client portal events are ready on that connection. API-key pull reconciliation

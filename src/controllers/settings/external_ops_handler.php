@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Services\ExternalOpsIntegrationService;
-use App\Services\ExternalOpsOutboxSender;
 use App\Services\ExternalOpsConfigService;
 use App\Services\PortalAuthorityService;
 use App\Services\PortalProjectionService;
@@ -11,6 +10,7 @@ use App\Services\PortalProjectionMutationService;
 use App\Services\PortalProjectionDeliveryConfigService;
 use App\Services\PortalProjectionOutboxSender;
 use App\Services\PortalClientProvisioningService;
+use App\Services\ExternalOpsSyncOrchestrator;
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
@@ -56,8 +56,9 @@ try {
             throw $error;
         }
     } elseif ($action === 'reconcile-client-portal') {
-        $summary=(new PortalClientProvisioningService())->reconcileAll($pdo,(string)$config['application_key'],$actorUserId);
-        $message=sprintf('Client portal reconciled: %d roots, %d eligible contacts, %d requiring review, %d revoked.',$summary['roots'],$summary['eligible'],$summary['review_required'],$summary['revoked']);
+        $summary=(new ExternalOpsSyncOrchestrator())->run($pdo,100,50,50,null,null,20);
+        $reconciliation=$summary['reconciliation'];$portal=$summary['portal'];
+        $message=sprintf('Client portal sync considered %d roots, completed %d, with %d remaining; %d portal events delivered and %d retrying.',$reconciliation['considered'],$reconciliation['completed'],$reconciliation['remaining'],$portal['delivered'],$portal['failed']);
     } elseif ($action === 'retry-client-portal-revocations') {
         $retried=(new PortalClientProvisioningService())->retryFailedRevocations($pdo,(string)$config['application_key'],$actorUserId);
         $message=sprintf('%d failed client portal revocation(s) were requeued against the unchanged retired receiver contract.',$retried);
@@ -146,7 +147,9 @@ try {
         if (empty($config['delivery_ready'])) {
             throw new DomainException('Outbound delivery is paused. Complete the required delivery settings or disable it until the receiver is ready.');
         }
-        (new ExternalOpsOutboxSender())->deliverDue($pdo, $config, 50);
+        $summary=(new ExternalOpsSyncOrchestrator())->run($pdo,25,50,50,null,null,20);
+        $reconciliation=$summary['reconciliation'];$ordinary=$summary['ordinary'];$portal=$summary['portal'];
+        $message=sprintf('Synchronization completed a bounded pass: %d historical roots completed, %d remaining; ordinary events %d delivered / %d retrying; portal events %d delivered / %d retrying / %d failed.',$reconciliation['completed'],$reconciliation['remaining'],$ordinary['delivered'],$ordinary['failed'],$portal['delivered'],$portal['failed'],$portal['dead_lettered']);
     } else {
         throw new DomainException('Unknown integration action.');
     }

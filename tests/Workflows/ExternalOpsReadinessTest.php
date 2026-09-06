@@ -172,7 +172,8 @@ final class ExternalOpsReadinessTest extends TestCase
         self::assertStringContainsString('Outbound signed-event delivery is paused.', $view);
         self::assertStringContainsString('continues recording authoritative events', $view);
         self::assertStringContainsString('access administration remain available', $view);
-        self::assertStringContainsString('Send due outbound events', $view);
+        self::assertStringContainsString('Sync now', $view);
+        self::assertStringContainsString('ExternalOpsSyncOrchestrator', $handler);
         self::assertGreaterThan(
             strpos($handler, 'in_array($action'),
             strpos($handler, 'elseif ($action === \'send-now\')')

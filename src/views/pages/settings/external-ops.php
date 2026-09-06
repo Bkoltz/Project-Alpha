@@ -22,7 +22,7 @@ $accessDetail = null;
 $projectSources = [];
 $status = [];
 $directoryError = false;
-$portalStatus = ['configured'=>false,'ready'=>false,'profile'=>null,'counts'=>['active_roots'=>0,'revoked_roots'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0,'active_workspaces'=>0,'pending'=>0,'failed'=>0,'failed_revocations'=>0],'preflight'=>['ready'=>false,'operations_delivery_ready'=>false,'checks'=>[],'issues'=>[],'receiver_verification'=>'']];
+$portalStatus = ['configured'=>false,'ready'=>false,'profile'=>null,'counts'=>['active_roots'=>0,'revoked_roots'=>0,'eligible'=>0,'review_required'=>0,'revoked'=>0,'active_workspaces'=>0,'historical_remaining'=>0,'pending'=>0,'failed'=>0,'failed_revocations'=>0],'preflight'=>['ready'=>false,'operations_delivery_ready'=>false,'checks'=>[],'issues'=>[],'receiver_verification'=>'']];
 $portalStatusError = false;
 
 try {
@@ -108,6 +108,7 @@ if (!empty($config['enabled'])) {
       <div><span class="label">External Operations connection</span><strong><?=!empty($portalPreflight['operations_delivery_ready'])?'Ready':'Paused'?></strong></div>
       <div><span class="label">Client portal event routing</span><strong><?=!empty($portalStatus['ready'])?'Ready':'Paused'?></strong></div>
       <div><span class="label">Active workspaces</span><strong><?=(int)($portalCounts['active_workspaces']??0)?></strong></div>
+      <div><span class="label">Historical roots remaining</span><strong><?=(int)($portalCounts['historical_remaining']??0)?></strong></div>
       <div><span class="label">Eligible contacts</span><strong><?=(int)($portalCounts['eligible']??0)?></strong></div>
       <div><span class="label">Needs review</span><strong><?=(int)($portalCounts['review_required']??0)?></strong></div>
       <div><span class="label">Revoked</span><strong><?=(int)($portalCounts['revoked']??0)?></strong></div>
@@ -121,7 +122,7 @@ if (!empty($config['enabled'])) {
     <?php if(!empty($portalStatus['configured'])):?>
       <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Reconcile active organizations and standalone clients now? Invalid, missing, or duplicate emails will require review and no files will be granted.')">
         <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="reconcile-client-portal">
-        <button class="btn btn-primary" <?=empty($portalStatus['ready'])?'disabled aria-disabled="true" title="Complete the portal producer preflight first"':''?>>Reconcile client portal</button>
+        <button class="btn btn-primary" <?=empty($portalStatus['ready'])?'disabled aria-disabled="true" title="Complete the portal producer preflight first"':''?>>Reconcile next client portal batch</button>
       </form>
       <?php if((int)($portalCounts['failed_revocations']??0)>0):?>
         <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Retry failed client portal revocations against the unchanged retired receiver? The replacement connection will remain blocked until every revocation is acknowledged.')">
@@ -224,4 +225,4 @@ if (!empty($config['enabled'])) {
   </script>
 <?php endif; ?>
 
-<div class="settings-card"><h3>Synchronization status</h3><div class="settings-form-grid"><div><span class="label">Connection</span><strong><?=empty($config['configured_enabled'])?'Disabled':(!empty($config['delivery_ready'])?'Ready':'Paused')?></strong></div><div><span class="label">Pending</span><strong><?=(int)($status['pending']??0)?></strong></div><div><span class="label">Retry errors</span><strong><?=(int)($status['failed']??0)?></strong></div><div><span class="label">Last delivered</span><strong><?=$h($status['last_delivered_at']??'Never')?></strong></div></div><form method="post" action="/?page=settings/external-ops-handler"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="send-now"><button class="btn" <?=empty($config['delivery_ready'])?'disabled aria-disabled="true" title="Outbound delivery is paused"':''?>>Send due outbound events</button></form></div>
+<div class="settings-card"><h3>Synchronization status</h3><div class="settings-form-grid"><div><span class="label">Connection</span><strong><?=empty($config['configured_enabled'])?'Disabled':(!empty($config['delivery_ready'])?'Ready':'Paused')?></strong></div><div><span class="label">Pending ordinary events</span><strong><?=(int)($status['pending']??0)?></strong></div><div><span class="label">Ordinary retry errors</span><strong><?=(int)($status['failed']??0)?></strong></div><div><span class="label">Pending portal events</span><strong><?=(int)(($portalStatus['counts']['pending']??0))?></strong></div><div><span class="label">Last ordinary event delivered</span><strong><?=$h($status['last_delivered_at']??'Never')?></strong></div></div><p>A manual sync activates portal routing from this one connection, reconciles a bounded historical batch, and sends due ordinary and portal events within the request deadline. Repeat it while historical roots remain; scheduled jobs continue safely in the background.</p><form method="post" action="/?page=settings/external-ops-handler"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="send-now"><button class="btn" <?=empty($config['delivery_ready'])?'disabled aria-disabled="true" title="Outbound delivery is paused"':''?>>Sync now</button></form></div>
