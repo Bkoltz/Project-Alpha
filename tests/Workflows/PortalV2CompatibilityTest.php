@@ -121,8 +121,9 @@ final class PortalV2CompatibilityTest extends TestCase
     {
         $root=dirname(__DIR__,2);$page=(string)file_get_contents($root.'/src/views/pages/settings/external-ops.php');$registry=(string)file_get_contents($root.'/src/views/pages/settings/registry.php');$handler=(string)file_get_contents($root.'/src/controllers/settings/external_ops_handler.php');
         self::assertStringContainsString('External application connection',$page);self::assertStringContainsString('Custom-integration access',$page);self::assertStringContainsString('Synchronization status',$page);
-        self::assertStringContainsString('Client portal provisioning',$page);self::assertStringContainsString('reconcile-client-portal',$page);
-        self::assertStringContainsString('External Operations connection',$page);self::assertStringContainsString('Client portal event routing',$page);
+        self::assertStringContainsString('Connected workspace synchronization',$page);self::assertStringContainsString('reconcile-client-portal',$page);
+        self::assertStringContainsString('External application connection',$page);self::assertStringContainsString('Workspace event routing',$page);
+        self::assertStringNotContainsString('Client portal provisioning',$page);self::assertStringNotContainsString('Operations routes',$page);
         self::assertStringContainsString('API-key pull synchronization is separate',$page);self::assertStringContainsString('Project Alpha reports only its own producer prerequisites',$page);
         foreach(['Portal projection runtime','Advanced integration profiles','Workspaces and portal principals','Scoped client access','Profile workspace allowlist','Manager appointment','Projection recovery','viewer.share.create']as$surface)self::assertStringNotContainsString($surface,$page);
         foreach(['name="portal_route"','name="delivery_key_id"','name="delivery_secret"','name="profile_id"','name="workspace_public_id"','name="principal_id"']as$field)self::assertStringNotContainsString($field,$page);

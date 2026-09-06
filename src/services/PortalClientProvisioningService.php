@@ -72,7 +72,7 @@ final class PortalClientProvisioningService
         if (!$existing && $applicationKey !== '') $existing = $this->profile($pdo, $applicationKey);
         if (!$existing) {
             $active = $pdo->query('SELECT * FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1 ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
-            if (count($active) > 1) throw new DomainException('More than one client portal producer is active. Retire the legacy profiles before saving this connection.');
+            if (count($active) > 1) throw new DomainException('More than one workspace publisher is active. Retire the legacy profiles before saving this connection.');
             if (count($active) === 1) $existing = $active[0];
         }
         if ($existing) $this->bindProfile($pdo, (int)$existing['id']);
@@ -198,7 +198,7 @@ final class PortalClientProvisioningService
                 $transition = $undelivered > 0 ? 'retiring' : 'disabled';
                 $transitionMessage = $undelivered > 0
                     ? 'Portal revocations are draining before this connection is fully retired.'
-                    : 'Client portal provisioning is disabled with the external connection.';
+                    : 'Connected workspace synchronization is disabled with the external connection.';
             } elseif ($changed) {
                 $transition = $undelivered > 0 ? 'retiring' : 'replacement_required';
                 $transitionMessage = $undelivered > 0
@@ -208,10 +208,10 @@ final class PortalClientProvisioningService
                     : 'The previous portal contract is retired. Save the connection again to activate its replacement.';
             } elseif (!$ready) {
                 $transition = 'prerequisites_missing';
-                $transitionMessage = 'Client portal events are paused until the External Operations connection is ready.';
+                $transitionMessage = 'Workspace events are paused until the external application connection is ready.';
             }
         } elseif (!empty($config['configured_enabled'])) {
-            $transitionMessage = 'Save the enabled External Operations connection to activate client portal events on that same connection.';
+            $transitionMessage = 'Save the enabled external application connection to activate workspace events on that same connection.';
         }
         return [
             'configured' => (bool)$profile,
@@ -234,7 +234,7 @@ final class PortalClientProvisioningService
     {
         $profile=$this->boundProfile($pdo);
         if(!$profile&&$applicationKey!=='')$profile=$this->profile($pdo,$applicationKey);
-        if(!$profile)throw new DomainException('The client portal connection is not configured.');
+        if(!$profile)throw new DomainException('Connected workspace synchronization is not configured.');
         $owns=!$pdo->inTransaction();
         try{
             if($owns)$pdo->beginTransaction();
@@ -243,7 +243,7 @@ final class PortalClientProvisioningService
             $errors->execute([(int)$profile['id']]);
             $errorCounts=[];$total=0;
             foreach($errors->fetchAll(PDO::FETCH_ASSOC)as$row){$count=(int)$row['error_count'];$total+=$count;$errorCounts[(string)$row['error_code']]=$count;}
-            if($total<1)throw new DomainException('There are no failed client portal revocations to retry.');
+            if($total<1)throw new DomainException('There are no failed workspace revocations to retry.');
             $retry=$pdo->prepare("UPDATE portal_projection_outbox SET attempts=0,next_attempt_at=CURRENT_TIMESTAMP,claim_token=NULL,claimed_at=NULL,dead_lettered_at=NULL,last_http_status=NULL,last_error_code='revocation_retry_requested' WHERE integration_profile_id=? AND delivered_at IS NULL AND dead_lettered_at IS NOT NULL AND is_revocation=1");
             $retry->execute([(int)$profile['id']]);
             $this->audit($pdo,(int)$profile['id'],'portal.client_provisioning.revocations_requeued','profile',(string)$profile['id'],['actor_id'=>$actorId,'retry_count'=>$total,'prior_error_counts'=>$errorCounts]);
@@ -265,7 +265,7 @@ final class PortalClientProvisioningService
         try {
             if ($owns) $pdo->beginTransaction();
             $scopes = $this->allScopes($pdo);
-            if (count($scopes) > 1000) throw new DomainException('Client portal reconciliation is limited to 1000 roots per run.');
+            if (count($scopes) > 1000) throw new DomainException('Workspace synchronization is limited to 1000 roots per run.');
             $summary = $this->ensureScopes($pdo, $scopes, $actorId, $profile);
             (new PortalProjectionMutationService())->afterMutation($pdo, $scopes, true);
             foreach ($scopes as $scope) {
@@ -420,7 +420,7 @@ final class PortalClientProvisioningService
      */
     public function ensureScopes(PDO $pdo, array $scopes, int $actorId = 0, array|false|null $profile = null): array
     {
-        if (!$pdo->inTransaction()) throw new DomainException('Client portal reconciliation requires a transaction.');
+        if (!$pdo->inTransaction()) throw new DomainException('Workspace synchronization requires a transaction.');
         if ($profile === null) {
             $profile = $this->boundProfile($pdo);
         }
@@ -453,7 +453,7 @@ final class PortalClientProvisioningService
 
     public function setRootAccess(PDO $pdo, string $applicationKey, string $rootType, string $rootPublicId, bool $active, int $actorId): void
     {
-        if (!in_array($rootType, ['organization','standalone_client'], true) || $rootPublicId === '') throw new DomainException('Client portal root is invalid.');
+        if (!in_array($rootType, ['organization','standalone_client'], true) || $rootPublicId === '') throw new DomainException('Workspace synchronization root is invalid.');
         $profile = $this->requireReadyProfile($pdo, $applicationKey);
         $owns = !$pdo->inTransaction();
         try {
@@ -474,7 +474,7 @@ final class PortalClientProvisioningService
     {
         $profile = $this->requireReadyProfile($pdo, $applicationKey);
         $scope = (new PortalProjectionMutationService())->clientScopes($pdo, $clientId);
-        if ($scope === []) throw new DomainException('Client portal root was not found.');
+        if ($scope === []) throw new DomainException('Workspace synchronization root was not found.');
         $owns = !$pdo->inTransaction();
         try {
             if ($owns) $pdo->beginTransaction();
@@ -515,7 +515,7 @@ final class PortalClientProvisioningService
     {
         $profile = $this->boundProfile($pdo);
         if (!$profile) $profile = $this->profile($pdo, $applicationKey);
-        if (!$profile || empty($profile['enabled']) || empty($profile['portal_projection_enabled'])) throw new DomainException('Configure the client portal receiver on the external application connection first.');
+        if (!$profile || empty($profile['enabled']) || empty($profile['portal_projection_enabled'])) throw new DomainException('Configure workspace synchronization on the external application connection first.');
         return $profile;
     }
 
@@ -549,7 +549,7 @@ final class PortalClientProvisioningService
             'resolution'=>'replacement_contract_activation',
         ]);
     }
-    private function assertOnlyProducer(PDO $pdo,?int $profileId):void{$sql='SELECT COUNT(*) FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1'.($profileId!==null?' AND id<>?':'');$s=$pdo->prepare($sql);$s->execute($profileId!==null?[$profileId]:[]);if((int)$s->fetchColumn()>0)throw new DomainException('Another client portal producer is active. Retire and drain it before activating this connection.');}
+    private function assertOnlyProducer(PDO $pdo,?int $profileId):void{$sql='SELECT COUNT(*) FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1'.($profileId!==null?' AND id<>?':'');$s=$pdo->prepare($sql);$s->execute($profileId!==null?[$profileId]:[]);if((int)$s->fetchColumn()>0)throw new DomainException('Another workspace publisher is active. Retire and drain it before activating this connection.');}
     private function queueServiceAssignmentSnapshot(PDO $pdo,int $profileId):void
     {
         $owns=!$pdo->inTransaction();
@@ -722,7 +722,7 @@ final class PortalClientProvisioningService
             'operations_delivery_ready' => !empty($config['delivery_ready']),
             'checks' => $checks,
             'issues' => $issues,
-            'receiver_verification' => 'Portal records use this connection’s signed event URL and credentials; Operations routes them internally.',
+            'receiver_verification' => 'Workspace records use this connection’s signed event URL and credentials; the connected application decides how to route them internally.',
         ];
     }
 
