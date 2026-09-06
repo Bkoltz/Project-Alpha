@@ -183,6 +183,158 @@ SQL);
         });
     }
 
+    public function testExistingCompleteConnectionActivatesAutomaticallyOnceAndUsesSystemAttribution(): void
+    {
+        $this->withPortalCapabilities([
+            'generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('p',32)]],
+        ], function (): void {
+            $this->pdo->exec('DELETE FROM portal_integration_profiles');
+            (new \App\Services\ExternalOpsConfigService())->save($this->pdo,[
+                'enabled'=>1,
+                'label'=>'Generic operations',
+                'application_key'=>'generic_operations',
+                'webhook_url'=>'https://operations.example.test/api/integration/events',
+                'access_client_id'=>'service-id',
+                'access_client_secret'=>'service-secret',
+                'hmac_secret'=>str_repeat('o',32),
+                'timeout_seconds'=>15,
+                'max_attempts'=>12,
+            ]);
+
+            $first=$this->service->activateConfiguredConnection($this->pdo);
+            self::assertTrue($first['attempted']);
+            self::assertTrue($first['ready']);
+            self::assertSame('stable',$first['transition_state']);
+            self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles WHERE enabled=1 AND portal_projection_enabled=1')->fetchColumn());
+            self::assertNull($this->pdo->query('SELECT created_by FROM portal_integration_profiles')->fetchColumn()?:null);
+            self::assertNull($this->pdo->query('SELECT updated_by FROM portal_integration_profiles')->fetchColumn()?:null);
+            $auditCount=(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_audit')->fetchColumn();
+
+            $second=$this->service->activateConfiguredConnection($this->pdo);
+            self::assertFalse($second['attempted']);
+            self::assertTrue($second['ready']);
+            self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
+            self::assertSame($auditCount,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_audit')->fetchColumn());
+        });
+    }
+
+    public function testDisabledStoredConnectionDoesNotActivatePortalProducer(): void
+    {
+        $this->withPortalCapabilities([], function (): void {
+            $this->pdo->exec('DELETE FROM portal_integration_profiles');
+            (new \App\Services\ExternalOpsConfigService())->save($this->pdo,[
+                'enabled'=>0,
+                'label'=>'Unconfigured secondary operations',
+                'application_key'=>'secondary_operations',
+                'webhook_url'=>'',
+                'timeout_seconds'=>15,
+                'max_attempts'=>12,
+            ]);
+
+            $result=$this->service->activateConfiguredConnection($this->pdo);
+            self::assertFalse($result['attempted']);
+            self::assertFalse($result['ready']);
+            self::assertSame(0,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
+        });
+    }
+
+    public function testCompleteButDisabledStoredConnectionDoesNotActivatePortalProducer(): void
+    {
+        $this->withPortalCapabilities([], function (): void {
+            $this->pdo->exec('DELETE FROM portal_integration_profiles');
+            (new \App\Services\ExternalOpsConfigService())->save($this->pdo,[
+                'enabled'=>0,
+                'label'=>'Paused operations',
+                'application_key'=>'paused_operations',
+                'webhook_url'=>'https://operations.example.test/api/integration/events',
+                'access_client_id'=>'service-id',
+                'access_client_secret'=>'service-secret',
+                'hmac_secret'=>str_repeat('o',32),
+                'timeout_seconds'=>15,
+                'max_attempts'=>12,
+            ]);
+
+            $result=$this->service->activateConfiguredConnection($this->pdo);
+            self::assertFalse($result['attempted']);
+            self::assertFalse($result['ready']);
+            self::assertSame(0,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
+        });
+    }
+
+    public function testEnabledButIncompleteStoredConnectionDoesNotActivatePortalProducer(): void
+    {
+        $this->withPortalCapabilities([], function (): void {
+            $this->pdo->exec("DELETE FROM portal_integration_profiles;
+                INSERT INTO app_config(organization_id,config_key,config_value) VALUES
+                    (0,'external_ops_enabled','1'),
+                    (0,'external_ops_label','Incomplete operations'),
+                    (0,'external_ops_application_key','incomplete_operations'),
+                    (0,'external_ops_webhook_url','https://operations.example.test/api/integration/events')");
+
+            $result=$this->service->activateConfiguredConnection($this->pdo);
+            self::assertFalse($result['attempted']);
+            self::assertFalse($result['ready']);
+            self::assertSame(0,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
+        });
+    }
+
+    public function testAutomaticActivationPreservesExistingRootAndPersonRevocations(): void
+    {
+        $this->withPortalCapabilities([
+            'generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('p',32)]],
+        ],function():void{
+            $this->prepareHistoricalSchema();
+            (new \App\Services\ExternalOpsConfigService())->save($this->pdo,$this->connection('generic_operations','https://operations.example.test/events')+['hmac_secret'=>str_repeat('o',32)]);
+            $this->pdo->exec("INSERT INTO organizations(id,public_id,name) VALUES(10,'org-a','Organization');
+                INSERT INTO clients VALUES(20,'client-a','A Person','a@example.test',10,'business',0,NULL,'v1'),(21,'client-b','B Person','b@example.test',10,'business',0,NULL,'v1'),(22,'client-c','C Person','c@example.test',NULL,'consumer',0,NULL,'v1');
+                INSERT INTO portal_client_access_roots(root_type,root_public_id,access_state) VALUES('standalone_client','client-c','revoked');
+                INSERT INTO portal_client_login_eligibility(client_id,manual_state,eligibility_status) VALUES(20,'revoked','revoked');");
+
+            $activation=$this->service->activateConfiguredConnection($this->pdo);
+            self::assertTrue($activation['attempted']);
+            self::assertTrue($activation['ready']);
+            self::assertSame(2,$this->service->reconcileHistoricalBatch($this->pdo,'generic_operations',25)['completed']);
+            self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_v2_workspaces')->fetchColumn());
+            self::assertSame(['revoked','eligible','revoked'],$this->pdo->query('SELECT eligibility_status FROM portal_client_login_eligibility ORDER BY client_id')->fetchAll(PDO::FETCH_COLUMN));
+            self::assertSame('revoked',$this->pdo->query("SELECT access_state FROM portal_client_access_roots WHERE root_public_id='client-c'")->fetchColumn());
+        });
+    }
+
+    public function testAutomaticActivationDrainsOldRouteBeforeEnablingChangedRoute(): void
+    {
+        $this->withPortalCapabilities([
+            'generic_operations'=>['portal'=>['keyId'=>'portal-v1','current'=>str_repeat('p',32)]],
+        ],function():void{
+            $old=$this->connection('generic_operations','https://old.example.test/events')+['hmac_secret'=>str_repeat('o',32)];
+            $configured=(new \App\Services\ExternalOpsConfigService())->save($this->pdo,$old);
+            $profileId=(int)$this->service->configureConnection($this->pdo,$configured,7);
+            $this->activateWorkspace($profileId);
+            $this->pdo->exec('UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP');
+
+            $replacement=$this->connection('generic_operations','https://replacement.example.test/events')+['hmac_secret'=>str_repeat('o',32)];
+            (new \App\Services\ExternalOpsConfigService())->save($this->pdo,$replacement);
+            $retiring=$this->service->activateConfiguredConnection($this->pdo);
+            self::assertTrue($retiring['attempted']);
+            self::assertFalse($retiring['ready']);
+            self::assertSame('retiring',$retiring['transition_state']);
+            self::assertSame(0,(int)$this->pdo->query("SELECT enabled FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertGreaterThan(0,(int)$this->pdo->query("SELECT COUNT(*) FROM portal_projection_outbox WHERE integration_profile_id={$profileId} AND is_revocation=1 AND delivered_at IS NULL")->fetchColumn());
+
+            $stillRetiring=$this->service->activateConfiguredConnection($this->pdo);
+            self::assertTrue($stillRetiring['attempted']);
+            self::assertFalse($stillRetiring['ready']);
+            self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
+
+            $this->pdo->exec('UPDATE portal_projection_outbox SET delivered_at=CURRENT_TIMESTAMP');
+            $activated=$this->service->activateConfiguredConnection($this->pdo);
+            self::assertTrue($activated['attempted']);
+            self::assertTrue($activated['ready']);
+            self::assertSame('stable',$activated['transition_state']);
+            self::assertSame('https://replacement.example.test/events',$this->pdo->query("SELECT portal_route FROM portal_integration_profiles WHERE id={$profileId}")->fetchColumn());
+            self::assertSame(1,(int)$this->pdo->query('SELECT COUNT(*) FROM portal_integration_profiles')->fetchColumn());
+        });
+    }
+
     public function testSingleConnectionUsesExactSignedEventUrlAndExistingCredentials(): void
     {
         $previousEncryption=getenv('APP_ENCRYPTION_KEY');
@@ -519,7 +671,7 @@ SQL);
         });
     }
 
-    private function prepareHistoricalBackfill(): void
+    private function prepareHistoricalSchema(): void
     {
         $this->pdo->exec("ALTER TABLE organizations ADD COLUMN source_version TEXT DEFAULT '1';
             CREATE TABLE organization_departments(id INTEGER PRIMARY KEY,public_id TEXT,organization_id INTEGER,name TEXT,source_version TEXT);
@@ -527,6 +679,11 @@ SQL);
             CREATE TABLE projects(id INTEGER PRIMARY KEY,public_id TEXT,name TEXT,organization_id INTEGER,department_id INTEGER,client_id INTEGER,status TEXT,source_version TEXT,completed_at TEXT);
             CREATE TABLE portal_v2_contacts(id INTEGER PRIMARY KEY AUTOINCREMENT,public_id TEXT DEFAULT (lower(hex(randomblob(16)))),client_id INTEGER UNIQUE,display_name TEXT,source_version TEXT,active INTEGER);
             CREATE TABLE portal_v2_relations(id INTEGER PRIMARY KEY AUTOINCREMENT,public_id TEXT DEFAULT (lower(hex(randomblob(16)))),relation_type TEXT,from_type TEXT,from_public_id TEXT,to_type TEXT,to_public_id TEXT,source_version TEXT,active INTEGER,UNIQUE(relation_type,from_type,from_public_id,to_type,to_public_id));");
+    }
+
+    private function prepareHistoricalBackfill(): void
+    {
+        $this->prepareHistoricalSchema();
         $config=(new \App\Services\ExternalOpsConfigService())->save($this->pdo,$this->connection('generic_operations','https://operations.example.test/events')+['hmac_secret'=>str_repeat('o',32)]);
         $this->service->configureConnection($this->pdo,$config,7);
     }

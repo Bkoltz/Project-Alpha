@@ -71,6 +71,14 @@ application-key/receiver changes invalidate the old completion fingerprint.
 This job uses the portal producer gates, like the outbox sender, rather than the
 unrelated automatic-invoice `cron_enabled` preference. It sends no email.
 
+An existing deployment also does not require a one-time settings save after an
+upgrade. When the stored External Operations connection is enabled, complete,
+and decryptable, the reconciliation job idempotently binds that same connection
+as the portal producer before processing historical roots. It does not invent a
+second endpoint, activate an unconfigured instance, or bypass the established
+retire-and-drain rules for a changed receiver. Scheduled system activation is
+recorded without falsely attributing it to an administrator.
+
 Progress is recorded in `portal_client_provisioning_backfill`,
 `portal_integration_audit`, and the `portal_client_provisioning_backfill` entry in
 `cron_job_runs`. A failed root rolls back without blocking the rest. It retries

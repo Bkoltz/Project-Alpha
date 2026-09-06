@@ -22,6 +22,41 @@ final class PortalClientProvisioningService
     private const BOUND_PROFILE_KEY = 'external_ops_client_portal_profile_id';
 
     /**
+     * Upgrade an already-enabled External Operations connection into the
+     * unified portal producer without requiring an administrator to re-save
+     * unchanged secrets after a Project Alpha upgrade.
+     *
+     * Disabled and incomplete connections are strict no-ops. The existing
+     * retirement/drain state machine remains authoritative for changed routes,
+     * so this cannot send old-contract revocations to a replacement receiver.
+     *
+     * @return array{attempted:bool,ready:bool,transition_state:string}
+     */
+    public function activateConfiguredConnection(PDO $pdo): array
+    {
+        $config = (new ExternalOpsConfigService())->load($pdo);
+        $applicationKey = (string)($config['application_key'] ?? '');
+        $before = $this->status($pdo, $applicationKey);
+        if (!empty($before['ready'])
+            || empty($config['configured_enabled'])
+            || ExternalOpsConfigService::deliveryIssues($config) !== []) {
+            return [
+                'attempted' => false,
+                'ready' => !empty($before['ready']),
+                'transition_state' => (string)($before['transition_state'] ?? 'unpaired'),
+            ];
+        }
+
+        $this->configureConnection($pdo, $config, 0);
+        $after = $this->status($pdo, $applicationKey);
+        return [
+            'attempted' => true,
+            'ready' => !empty($after['ready']),
+            'transition_state' => (string)($after['transition_state'] ?? 'unpaired'),
+        ];
+    }
+
+    /**
      * Keep the portal producer on the one administrator-managed External
      * Operations connection. Portal records use the same signed-event URL,
      * Access service identity, and HMAC secret as every other outbound event.
@@ -103,7 +138,7 @@ final class PortalClientProvisioningService
             ->execute([
                 max(2, min(30, (int)($externalConfig['timeout_seconds'] ?? 15))),
                 max(1, min(50, (int)($externalConfig['max_attempts'] ?? 12))),
-                $actorId,
+                $actorId > 0 ? $actorId : null,
                 $profileId,
             ]);
         (new PortalProjectionDeliveryConfigService())->saveRuntime($pdo, [

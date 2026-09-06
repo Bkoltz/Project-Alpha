@@ -123,12 +123,19 @@ final class MigrationLibraryTest extends TestCase
         $this->assertContains('portal_service_assignment_projection_receipts', migration_required_tables_for_version([
             'portal_service_assignment_projection_receipts',
         ], 80));
+        $this->assertSame([], migration_required_tables_for_version([
+            'portal_client_provisioning_backfill',
+        ], 82));
+        $this->assertContains('portal_client_provisioning_backfill', migration_required_tables_for_version([
+            'portal_client_provisioning_backfill',
+        ], 83));
 
         $columns = [
             'invoices' => ['organization_id', 'generation_key'],
             'pricing_adjustment_definitions' => ['organization_id', 'scope_type'],
             'contract_settlement_terms' => ['organization_id'],
             'portal_integration_profiles' => ['service_assignment_projection_enabled', 'contact_assignment_projection_enabled'],
+            'portal_client_provisioning_backfill' => ['integration_profile_id', 'root_type', 'contract_fingerprint'],
         ];
         $this->assertSame(
             ['invoices' => ['organization_id']],
@@ -140,11 +147,16 @@ final class MigrationLibraryTest extends TestCase
         );
         $through79 = $columns;
         unset($through79['portal_integration_profiles']);
+        unset($through79['portal_client_provisioning_backfill']);
         $this->assertSame($through79, migration_required_columns_for_version($columns, 79));
         $through81 = $columns;
+        unset($through81['portal_client_provisioning_backfill']);
         $through81['portal_integration_profiles'] = ['service_assignment_projection_enabled'];
         $this->assertSame($through81, migration_required_columns_for_version($columns, 80));
         $this->assertSame($through81, migration_required_columns_for_version($columns, 81));
-        $this->assertSame($columns, migration_required_columns_for_version($columns, 82));
+        $through82 = $columns;
+        unset($through82['portal_client_provisioning_backfill']);
+        $this->assertSame($through82, migration_required_columns_for_version($columns, 82));
+        $this->assertSame($columns, migration_required_columns_for_version($columns, 83));
     }
 }
